@@ -47,8 +47,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// app.use(auditMiddleware);
+// ─── Module routes ──────────────────────────────────────────────────────────
+app.use('/api/auth',       require('./modules/auth/auth.routes'));
+app.use('/api/hr',         require('./modules/hr/hr.routes'));
+app.use('/api/leave',      require('./modules/leave/leave.routes'));
+app.use('/api/patient',    require('./modules/patient/patient.routes'));
+app.use('/api/system',     require('./modules/system/system.routes'));
 
-// app.use('/api/auth', require('./routes/auth'));
+// (Earlier complex modules)
+app.use('/api/attendance', require('./modules/attendance/attendance.routes'));
+app.use('/api/salary',     require('./modules/salary/salary.routes'));
+app.use('/api/pharmacy',   require('./modules/pharmacy/pharmacy.routes'));
+
+// ─── Global error handler (must be last) ────────────────────────────────────
+app.use(require('./middleware/errorHandler'));
 
 module.exports = app;

@@ -1,0 +1,161 @@
+/**
+ * attendance.controller.js
+ * HTTP layer for the Attendance module.
+ * All heavy logic lives in attendance.service.js.
+ */
+
+const svc = require('./attendance.service');
+const asyncHandler = require('../../middleware/asyncHandler');
+const { success, created, paginated, fail } = require('../../utils/response');
+
+/* ─────────────────────────────────────────────
+   DAILY SUMMARIES
+───────────────────────────────────────────── */
+
+/** GET /api/attendance?fromDate=&toDate=&employeeId=&departmentId=&page=&limit= */
+const listSummaries = asyncHandler(async (req, res) => {
+  const { fromDate, toDate, employeeId, departmentId, page = 1, limit = 50 } = req.query;
+  if (!fromDate || !toDate) {
+    return res.status(400).json(fail('fromDate and toDate are required'));
+  }
+  const result = await svc.listDailySummaries({
+    fromDate, toDate,
+    employeeId: employeeId ? Number(employeeId) : null,
+    departmentId: departmentId ? Number(departmentId) : null,
+    page: Number(page), limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+/** GET /api/attendance/:employeeId/:date */
+const getSummary = asyncHandler(async (req, res) => {
+  const { employeeId, date } = req.params;
+  const row = await svc.getDailySummary(Number(employeeId), date);
+  if (!row) return res.status(404).json(fail('No attendance record found for this employee on this date'));
+  return res.json(success(row));
+});
+
+/* ─────────────────────────────────────────────
+   PROCESSING ENGINE
+───────────────────────────────────────────── */
+
+/** POST /api/attendance/process  { date: 'YYYY-MM-DD' } */
+const processDay = asyncHandler(async (req, res) => {
+  const { date } = req.body;
+  if (!date) return res.status(400).json(fail('date is required (YYYY-MM-DD)'));
+  const result = await svc.processDailyAttendance(date);
+  return res.json(success(result, `Processed attendance for ${date}`));
+});
+
+/* ─────────────────────────────────────────────
+   PUNCH IMPORT (eTimeTracker)
+───────────────────────────────────────────── */
+
+/**
+ * POST /api/attendance/punches/import
+ * Body: { punches: [{ employee_id, punch_time, device_id?, punch_type? }] }
+ */
+const importPunches = asyncHandler(async (req, res) => {
+  const { punches } = req.body;
+  if (!Array.isArray(punches)) return res.status(400).json(fail('punches must be an array'));
+  const result = await svc.importPunches(punches);
+  return res.status(201).json(created(result, `${result.imported} punches imported`));
+});
+
+/* ─────────────────────────────────────────────
+   ADMIN MANUAL MARK
+───────────────────────────────────────────── */
+
+/**
+ * POST /api/attendance/mark
+ * Body: { employee_id, date, status }
+ */
+const manualMark = asyncHandler(async (req, res) => {
+  const { employee_id, date, status } = req.body;
+  if (!employee_id || !date || !status) {
+    return res.status(400).json(fail('employee_id, date and status are required'));
+  }
+  const markedBy = req.user?.id ?? null; // Set by auth middleware when ready
+  await svc.markAttendanceManually(Number(employee_id), date, status, markedBy);
+  return res.json(success(null, 'Attendance marked manually'));
+});
+
+/* ─────────────────────────────────────────────
+   BIOMETRIC WINDOWS
+───────────────────────────────────────────── */
+
+/** GET /api/attendance/biometric-windows?page=&limit= */
+const listBiometricWindows = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 30 } = req.query;
+  const result = await svc.listBiometricWindows(Number(page), Number(limit));
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+/**
+ * POST /api/attendance/biometric-windows
+ * Body: { window_date, extended_start, extended_end, role_id?, reason? }
+ */
+const createBiometricWindow = asyncHandler(async (req, res) => {
+  const id = await svc.createBiometricWindow(req.body, req.user?.id ?? null);
+  return res.status(201).json(created({ id }, 'Biometric window created'));
+});
+
+/* ─────────────────────────────────────────────
+   CORRECTION REQUESTS
+───────────────────────────────────────────── */
+
+/** GET /api/attendance/corrections?status=&employeeId=&page=&limit= */
+const listCorrections = asyncHandler(async (req, res) => {
+  const { status, employeeId, page = 1, limit = 30 } = req.query;
+  const result = await svc.listCorrectionRequests({
+    status: status || null,
+    employeeId: employeeId ? Number(employeeId) : null,
+    page: Number(page), limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+/**
+ * POST /api/attendance/corrections
+ * Body: { employee_id, attendance_date, requested_first_in?, requested_last_out?, reason }
+ */
+const createCorrection = asyncHandler(async (req, res) => {
+  const id = await svc.submitCorrectionRequest(req.body);
+  return res.status(201).json(created({ id }, 'Correction request submitted'));
+});
+
+/**
+ * PATCH /api/attendance/corrections/:id/review
+ * Body: { status: 'approved'|'rejected', reviewer_notes? }
+ */
+const reviewCorrection = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  await svc.reviewCorrectionRequest(Number(id), req.body, req.user?.id ?? null);
+  return res.json(success(null, 'Correction request reviewed'));
+});
+
+/* ─────────────────────────────────────────────
+   BUFFER SUMMARY
+───────────────────────────────────────────── */
+
+/** GET /api/attendance/buffer?month=&year=&departmentId= */
+const getBufferSummary = asyncHandler(async (req, res) => {
+  const { month, year, departmentId } = req.query;
+  if (!month || !year) return res.status(400).json(fail('month and year are required'));
+  const rows = await svc.getBufferSummary(Number(month), Number(year), departmentId ? Number(departmentId) : null);
+  return res.json(success(rows));
+});
+
+module.exports = {
+  listSummaries,
+  getSummary,
+  processDay,
+  importPunches,
+  manualMark,
+  listBiometricWindows,
+  createBiometricWindow,
+  listCorrections,
+  createCorrection,
+  reviewCorrection,
+  getBufferSummary,
+};
