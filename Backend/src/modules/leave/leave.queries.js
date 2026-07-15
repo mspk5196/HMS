@@ -88,7 +88,7 @@ const listLeaveRequests = async ({ employeeId, status, page = 1, limit = 50 }) =
   if (status) { filters.push('lr.status = ?'); params.push(status); }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT lr.*, e.full_name, e.employee_code, lt.name AS leave_type_name, 
             ap.username AS approved_by_name
      FROM leave_requests lr

@@ -119,7 +119,7 @@ const listNightShiftRates = async (shiftId) => {
 
 const listPayrollRuns = async (page = 1, limit = 12) => {
   const offset = (page - 1) * limit;
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT pr.*, u.username AS created_by_name, c.username AS confirmed_by_name
      FROM payroll_runs pr
      LEFT JOIN users u ON u.id = pr.created_by
@@ -169,7 +169,7 @@ const confirmPayrollRun = async (id, confirmedBy) => {
 
 const getPayrollItems = async (runId, page = 1, limit = 100) => {
   const offset = (page - 1) * limit;
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT pi.*, e.full_name, e.employee_code,
             d.name AS department_name, des.name AS designation_name
      FROM payroll_items pi
@@ -275,7 +275,7 @@ const listFines = async ({ employeeId, status, month, year, page = 1, limit = 30
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT f.*, e.full_name, e.employee_code, ft.name AS fine_type_name,
             u.username AS imposed_by_name, w.username AS waived_by_name
      FROM fines f
@@ -326,7 +326,7 @@ const listOvertimeEntries = async ({ employeeId, runId, page = 1, limit = 50 }) 
   if (employeeId) { filters.push('oe.employee_id = ?'); params.push(employeeId); }
   if (runId) { filters.push('oe.payroll_run_id = ?'); params.push(runId); }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT oe.*, e.full_name FROM overtime_entries oe
      JOIN employees e ON e.id = oe.employee_id
      ${where}

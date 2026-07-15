@@ -3,16 +3,24 @@ const { AppError } = require('../../utils/errors');
 const db = require('../../config/db');
 
 const registerPatient = async (data) => {
-  if (!data.name || !data.mobile || !data.age || !data.gender) {
+  const name = data.full_name || data.name;
+  const mobile = data.mobile_number || data.mobile;
+  const age = data.age_years || data.age;
+  const gender = data.gender;
+  
+  if (!name || !mobile || !age || !gender) {
     throw new AppError('name, mobile, age, gender are required', 400);
   }
   
-  // Basic UHID generator
-  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-  const r = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  const uhid = `UHID${dateStr}${r}`;
-  
-  return q.createPatient({ ...data, uhid });
+  return q.createPatient({
+    full_name: name,
+    mobile_number: mobile,
+    age_years: Number(age),
+    gender,
+    address: data.address || null,
+    blood_group: data.blood_group || null,
+    notes: data.notes || null
+  });
 };
 
 const bookAppointment = async (data, bookedBy) => {
@@ -21,7 +29,7 @@ const bookAppointment = async (data, bookedBy) => {
   }
   
   // Auto-generate token number for the doctor on that date
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT COALESCE(MAX(token_number), 0) + 1 AS next_token 
      FROM appointments 
      WHERE doctor_id = ? AND appointment_date = ?`,

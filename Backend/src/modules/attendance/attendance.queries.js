@@ -57,7 +57,7 @@ const getBiometricWindow = async (windowDate, roleId) => {
 /** List all biometric windows (admin view, paginated). */
 const listBiometricWindows = async (page = 1, limit = 30) => {
   const offset = (page - 1) * limit;
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT abw.*, r.name AS role_name, u.username AS created_by_name
      FROM attendance_biometric_windows abw
      LEFT JOIN roles r ON r.id = abw.role_id
@@ -114,7 +114,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
 
   const where = filters.join(' AND ');
 
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT ads.*, e.full_name, e.employee_code, d.name AS department_name, s.name AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
@@ -255,7 +255,7 @@ const listCorrectionRequests = async ({ status, employeeId, page = 1, limit = 30
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT acr.*, e.full_name, e.employee_code,
             u.username AS reviewed_by_name
      FROM attendance_correction_requests acr

@@ -1,0 +1,244 @@
+/* HR Attendance Page Styles */
+
+.attendance-container {
+  padding: 20px;
+  max-width: 100%;
+  background: var(--page);
+}
+
+.attendance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.attendance-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.attendance-filters {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-item label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-md);
+}
+
+.filter-item input,
+.filter-item select {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.attendance-calendar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.attendance-calendar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--line-lt);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.attendance-calendar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.attendance-stats {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  flex-wrap: wrap;
+}
+
+.attendance-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.attendance-stat-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.attendance-stat-dot.present {
+  background: var(--success);
+}
+
+.attendance-stat-dot.absent {
+  background: var(--danger);
+}
+
+.attendance-stat-dot.holiday {
+  background: var(--info);
+}
+
+.attendance-stat-dot.halfday {
+  background: var(--warning);
+}
+
+.attendance-stat-label {
+  font-size: 12px;
+  color: var(--text-md);
+}
+
+.attendance-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.attendance-table-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.attendance-table-wrapper {
+  overflow-x: auto;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.attendance-table thead {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 2px solid var(--line);
+}
+
+.attendance-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-md);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.attendance-table tbody tr {
+  border-bottom: 1px solid var(--line-lt);
+  transition: background 0.15s;
+}
+
+.attendance-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.attendance-table tbody td {
+  padding: 12px 16px;
+  color: var(--text);
+}
+
+.attendance-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.attendance-badge.present {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.attendance-badge.absent {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.attendance-badge.holiday {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.attendance-badge.halfday {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.attendance-badge.leave {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-md);
+}
+
+.attendance-time {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-md);
+}
+
+.attendance-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-lt);
+  font-size: 12px;
+  color: var(--text-md);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 768px) {
+  .attendance-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .attendance-filters {
+    flex-direction: column;
+  }
+
+  .filter-item {
+    width: 100%;
+  }
+
+  .attendance-stats {
+    gap: 12px;
+  }
+}

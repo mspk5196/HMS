@@ -20,7 +20,7 @@ const listMedicines = async ({ search, page = 1, limit = 50 }) => {
     params.push(s, s, s);
   }
 
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT m.*, mc.name AS category_name
      FROM medicines m
      LEFT JOIN medicine_categories mc ON mc.id = m.category_id
@@ -122,7 +122,7 @@ const listAllBatches = async ({ medicineId, lowStock, expiringSoon, page = 1, li
   }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const [rows] = await db.execute(
+  const [rows] = await db.query(
     `SELECT mb.*, m.name AS medicine_name, m.generic_name, m.barcode, m.reorder_level
      FROM medicine_batches mb
      JOIN medicines m ON m.id = mb.medicine_id
@@ -191,8 +191,8 @@ const listBills = async ({ patientId, appointmentId, admissionId, page = 1, limi
   if (admissionId) { filters.push('pb.admission_id = ?'); params.push(admissionId); }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const [rows] = await db.execute(
-    `SELECT pb.*, p.name AS patient_name, p.mobile AS patient_mobile,
+  const [rows] = await db.query(
+    `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
             u.username AS billed_by_name
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id
@@ -210,7 +210,7 @@ const listBills = async ({ patientId, appointmentId, admissionId, page = 1, limi
 
 const getBill = async (id) => {
   const [rows] = await db.execute(
-    `SELECT pb.*, p.name AS patient_name, p.mobile AS patient_mobile,
+    `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
             u.username AS billed_by_name
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id

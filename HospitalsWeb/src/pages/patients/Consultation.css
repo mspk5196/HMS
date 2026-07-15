@@ -1,0 +1,262 @@
+/* Patient Consultation Page Styles */
+
+.consultation-container {
+  padding: 20px;
+  max-width: 100%;
+  background: var(--page);
+}
+
+.consultation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.consultation-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.consultation-filters {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.consultation-table-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.consultation-table-wrapper {
+  overflow-x: auto;
+}
+
+.consultation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.consultation-table thead {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 2px solid var(--line);
+}
+
+.consultation-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-md);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.consultation-table tbody tr {
+  border-bottom: 1px solid var(--line-lt);
+  transition: background 0.15s;
+}
+
+.consultation-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.consultation-table tbody td {
+  padding: 12px 16px;
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.consultation-date {
+  font-weight: 600;
+  color: var(--text);
+  font-family: monospace;
+}
+
+.consultation-patient {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.consultation-doctor {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.consultation-department {
+  font-size: 11px;
+  color: var(--text-md);
+}
+
+.consultation-type-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.consultation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.consultation-action-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-md);
+  transition: all 0.2s;
+}
+
+.consultation-action-btn:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.consultation-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.consultation-detail-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--line-lt);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.consultation-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.consultation-detail-body {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.consultation-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.consultation-detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-md);
+  font-weight: 600;
+}
+
+.consultation-detail-value {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.consultation-notes {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-lt);
+  border-radius: 2px;
+}
+
+.consultation-notes-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.consultation-notes-text {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.consultation-prescription {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--warning-bg);
+  border-radius: 2px;
+}
+
+.consultation-prescription-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.consultation-prescription-items {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.consultation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-lt);
+  font-size: 12px;
+  color: var(--text-md);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 768px) {
+  .consultation-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .consultation-detail-body {
+    grid-template-columns: 1fr;
+  }
+
+  .consultation-notes,
+  .consultation-prescription {
+    grid-column: 1;
+  }
+}

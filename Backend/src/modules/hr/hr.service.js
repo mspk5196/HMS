@@ -25,9 +25,25 @@ const updateShift = async (id, data) => {
   await q.updateShift(id, data);
 };
 
+const createDepartment = async (data) => {
+  if (!data.name) throw new AppError('Department name is required', 400);
+  return q.createDepartment(data);
+};
+
+const createDesignation = async (data) => {
+  if (!data.name) throw new AppError('Designation name is required', 400);
+  return q.createDesignation(data);
+};
+
+const createRole = async (data) => {
+  if (!data.name) throw new AppError('Role name is required', 400);
+  return q.createRole(data);
+};
+
 module.exports = {
   createEmployee, updateEmployee,
   createShift, updateShift,
+  createDepartment, createDesignation, createRole,
   // Pass-through
   listEmployees: q.listEmployees,
   getEmployee: q.getEmployee,

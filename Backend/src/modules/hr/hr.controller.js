@@ -56,8 +56,39 @@ const updateShift = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Shift updated'));
 });
 
+const createDepartment = asyncHandler(async (req, res) => {
+  const id = await svc.createDepartment(req.body);
+  return res.status(201).json(created({ id }, 'Department created'));
+});
+
+const createDesignation = asyncHandler(async (req, res) => {
+  const id = await svc.createDesignation(req.body);
+  return res.status(201).json(created({ id }, 'Designation created'));
+});
+
+const createRole = asyncHandler(async (req, res) => {
+  const id = await svc.createRole(req.body);
+  return res.status(201).json(created({ id }, 'Role created'));
+});
+
+const rosterSvc = require('./roster.service');
+
+const getRoster = asyncHandler(async (req, res) => {
+  const { month, year, departmentId } = req.query;
+  const data = await rosterSvc.getRoster(Number(month), Number(year), departmentId ? Number(departmentId) : null);
+  return res.json(success(data));
+});
+
+const saveRosterDay = asyncHandler(async (req, res) => {
+  await rosterSvc.saveRosterDay(req.body);
+  return res.json(success(null, 'Roster updated'));
+});
+
 module.exports = {
   listEmployees, getEmployee, createEmployee, updateEmployee,
-  listDepartments, listDesignations, listRoles,
+  listDepartments, createDepartment,
+  listDesignations, createDesignation,
+  listRoles, createRole,
   listShifts, createShift, updateShift,
+  getRoster, saveRosterDay,
 };
