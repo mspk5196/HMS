@@ -16,20 +16,20 @@ function fmtDate(d) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'pending':  return <span className="badge badge-warning-light text-warning border border-warning/20">Pending</span>;
-    case 'approved': return <span className="badge badge-success-light text-success border border-success/20">Approved</span>;
-    case 'rejected': return <span className="badge badge-danger-light text-danger border border-danger/20">Rejected</span>;
+    case 'pending':  return <span className="badge badge-warning-light">Pending</span>;
+    case 'approved': return <span className="badge badge-success-light">Approved</span>;
+    case 'rejected': return <span className="badge badge-danger-light">Rejected</span>;
     default:         return <span className="badge">{status}</span>;
   }
 }
 
 function leaveTypeBadge(type) {
   const lower = (type || '').toLowerCase();
-  if (lower.includes('sick'))    return <span className="badge bg-danger/10 text-danger border-none">{type}</span>;
-  if (lower.includes('casual'))  return <span className="badge bg-warning/10 text-warning border-none">{type}</span>;
-  if (lower.includes('annual'))  return <span className="badge bg-primary/10 text-primary border-none">{type}</span>;
-  if (lower.includes('maternity')) return <span className="badge bg-purple-100 text-purple-600 border-none">{type}</span>;
-  return <span className="badge bg-gray-100 text-gray-600 border-none">{type}</span>;
+  if (lower.includes('sick'))    return <span className="badge badge-danger-light">{type}</span>;
+  if (lower.includes('casual'))  return <span className="badge badge-warning-light">{type}</span>;
+  if (lower.includes('annual'))  return <span className="badge badge-primary-light">{type}</span>;
+  if (lower.includes('maternity')) return <span className="badge badge-purple-light">{type}</span>;
+  return <span className="badge badge-gray-light">{type}</span>;
 }
 
 function daysDiff(start, end) {
@@ -75,7 +75,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
     <div className="modal-overlay">
       <div className="modal-box" style={{ width: 480 }}>
         <div className="modal-header">
-          <h2 className="text-sm font-bold">Add Leave Request</h2>
+          <h2 className="modal-title">Add Leave Request</h2>
           <button className="modal-close-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -94,7 +94,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
                 {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="modal-grid">
               <div>
                 <label className="field-label">Start Date *</label>
                 <input className="field" type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} />
@@ -108,7 +108,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
               <label className="field-label">Reason</label>
               <textarea className="field h-20 resize-none" placeholder="Reason for leave..." value={form.reason} onChange={e => set('reason', e.target.value)} />
             </div>
-            {err && <p className="text-danger text-xs">{err}</p>}
+            {err && <p className="modal-error">{err}</p>}
           </div>
           <div className="modal-footer">
             <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
@@ -189,7 +189,7 @@ export function Leave() {
   }));
 
   return (
-    <div className="page-container leave-page">
+    <div className="leave-page hr-overview-page">
       <NewRequestModal open={showModal} onClose={() => setShowModal(false)} onSaved={load} />
       <PageHeader 
         breadcrumbs={[
@@ -226,7 +226,7 @@ export function Leave() {
               <div className="stat-sub">Awaiting approval</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <Clock size={16} className="text-[#f97316]" />
+              <Clock size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -237,7 +237,7 @@ export function Leave() {
               <div className="stat-sub">Approved & active</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <FileMinus size={16} className="text-[#f97316]" />
+              <FileMinus size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -246,11 +246,11 @@ export function Leave() {
               <div className="stat-label">Approved This Month</div>
               <div className="stat-value">{stats.approved_month}</div>
               <div className="stat-sub">
-                <span className="text-emerald-600 font-bold flex items-center gap-0.5">Approved <span className="text-slate-500 font-normal">in {new Date().toLocaleString('en-GB', { month: 'short' })}</span></span>
+                <span className="stat-trend-up">Approved <span className="stat-trend-text">in {new Date().toLocaleString('en-GB', { month: 'short' })}</span></span>
               </div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <CalendarCheck size={16} className="text-[#3b82f6]" />
+              <CalendarCheck size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -261,7 +261,7 @@ export function Leave() {
               <div className="stat-sub">Across all staff this month</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <BarChart2 size={16} className="text-[#3b82f6]" />
+              <BarChart2 size={16} className="icon-blue" />
             </div>
           </Card>
         </div>
@@ -346,11 +346,12 @@ export function Leave() {
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             {/* Leave Types Breakdown */}
             <Card>
-              <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Types — {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</h3>
-              <div className="leave-panel-stack">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Types — {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</h3>
+                <div className="leave-panel-stack">
                 {leaveBreakdown.length === 0 && <p className="leave-empty">No leave types configured</p>}
                 {leaveBreakdown.map(lt => (
                   <div key={lt.name}>
@@ -366,6 +367,7 @@ export function Leave() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
@@ -373,9 +375,10 @@ export function Leave() {
             <Card>
               <div className="card-header-flex">
                 <h3 className="section-title">On Leave Today</h3>
-                <span className="badge-soft-danger">{onLeaveToday.length} absent</span>
+                <span className="badge badge-soft-danger">{onLeaveToday.length} absent</span>
               </div>
-              <div className="leave-panel-stack">
+              <div className="ui-card-content" style={{ paddingTop: 0 }}>
+                <div className="leave-panel-stack">
                 {onLeaveToday.length === 0 && <p className="leave-empty">No one on leave today</p>}
                 {onLeaveToday.slice(0, 5).map((r, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -390,13 +393,15 @@ export function Leave() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
             {/* Leave Policy */}
             <Card>
-              <h3 className="section-title">Leave Policy Summary</h3>
-              <div className="leave-panel-stack">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Policy Summary</h3>
+                <div className="leave-panel-stack">
                 {leavePolicy.length === 0 && <p className="leave-empty">No policies configured</p>}
                 {leavePolicy.map((lt, i) => (
                   <div key={lt.id} className={`flex justify-between ${i < leavePolicy.length - 1 ? 'border-b border-gray-50 pb-2' : 'pb-2'}`}>
@@ -406,6 +411,7 @@ export function Leave() {
                     </span>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
           </div>

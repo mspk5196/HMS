@@ -14,10 +14,10 @@ const SHIFT_ABBR = { 'M': 'M', 'E': 'E', 'N': 'N', 'WO': 'WO' };
 
 function renderShift(shift) {
   switch (shift) {
-    case 'M': return <span className="shift-cell text-primary bg-primary/10">M</span>;
-    case 'E': return <span className="shift-cell text-warning bg-warning/10">E</span>;
-    case 'N': return <span className="shift-cell text-gray-500 bg-gray-100">N</span>;
-    case 'WO': return <span className="shift-cell text-danger font-medium">WO</span>;
+    case 'M': return <span className="shift-cell shift-morning">M</span>;
+    case 'E': return <span className="shift-cell shift-evening">E</span>;
+    case 'N': return <span className="shift-cell shift-night">N</span>;
+    case 'WO': return <span className="shift-cell shift-wo">WO</span>;
     default: return <span className="shift-cell"></span>;
   }
 }
@@ -35,11 +35,11 @@ function getShiftCode(shiftName) {
 function shiftBadge(shiftName) {
   const code = getShiftCode(shiftName);
   switch (code) {
-    case 'M': return <span className="badge bg-primary/10 text-primary border-none">{shiftName || 'Morning'}</span>;
-    case 'E': return <span className="badge bg-warning/10 text-warning border-none">{shiftName || 'Evening'}</span>;
-    case 'N': return <span className="badge bg-gray-100 text-gray-500 border-none">{shiftName || 'Night'}</span>;
-    case 'WO': return <span className="badge bg-danger/10 text-danger border-none">Week Off</span>;
-    default:  return <span className="badge bg-gray-100 text-gray-600 border-none">{shiftName}</span>;
+    case 'M': return <span className="badge badge-primary-light">{shiftName || 'Morning'}</span>;
+    case 'E': return <span className="badge badge-warning-light">{shiftName || 'Evening'}</span>;
+    case 'N': return <span className="badge badge-gray-light">{shiftName || 'Night'}</span>;
+    case 'WO': return <span className="badge badge-danger-light">Week Off</span>;
+    default:  return <span className="badge badge-gray-light">{shiftName}</span>;
   }
 }
 
@@ -112,7 +112,7 @@ export function Roster() {
   }));
 
   return (
-    <div className="page-container roster-page">
+    <div className="roster-page hr-overview-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -150,7 +150,7 @@ export function Roster() {
               <div className="stat-sub">For {monthLabel}</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Users size={16} className="text-[#3b82f6]" />
+              <Users size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -161,7 +161,7 @@ export function Roster() {
               <div className="stat-sub">Across all depts</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Sun size={16} className="text-[#3b82f6]" />
+              <Sun size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -172,7 +172,7 @@ export function Roster() {
               <div className="stat-sub">Across all depts</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Moon size={16} className="text-[#3b82f6]" />
+              <Moon size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -183,14 +183,14 @@ export function Roster() {
               <div className="stat-sub">For selected period</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <Coffee size={16} className="text-[#f97316]" />
+              <Coffee size={16} className="icon-orange" />
             </div>
           </Card>
         </div>
 
         {/* Legend & Filter */}
         <Card className="mb-6">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+          <div className="ui-card-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
             <div className="roster-legend-items">
               <span className="section-title" style={{ fontSize: 13, marginBottom: 0 }}>Legend</span>
               {shifts.length > 0 ? shifts.map(s => (
@@ -224,8 +224,10 @@ export function Roster() {
 
         {/* Monthly Roster Table */}
         <Card className="mb-6 overflow-hidden">
-          <h3 className="section-title">Monthly Roster — {monthLabel}</h3>
-          {loading && <p className="text-center text-[var(--text-md)] py-8">Loading roster…</p>}
+          <div className="card-header-flex">
+            <h3 className="section-title" style={{ margin: 0 }}>Monthly Roster — {monthLabel}</h3>
+          </div>
+          {loading && <p className="roster-loading">Loading roster…</p>}
           {!loading && rosterEmployees.length === 0 && (
             <p className="roster-empty">No roster data for this period. Please publish roster first.</p>
           )}
@@ -233,21 +235,21 @@ export function Roster() {
             <div className="overflow-x-auto roster-scroll-container">
               <table className="roster-table">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left font-semibold py-2 px-3 sticky left-0 bg-white z-10 w-48 min-w-[192px]">Employee</th>
-                    {days.map((day, idx) => {
-                      const dow = (firstDow + idx) % 7;
+                  <tr className="roster-th-row">
+                    <th className="roster-th roster-th-sticky">Employee</th>
+                    {daysList.map(d => {
+                      const day = d.getDate();
                       return (
-                        <th key={day} className="text-center font-normal px-1 pb-2 w-7 min-w-[28px]">
-                          <div className="font-semibold text-gray-900">{day}</div>
-                          <div className="roster-muted">{DOW_LABELS[dow]}</div>
+                        <th key={day} className="roster-th-day">
+                          <div className="roster-th-day-num">{day}</div>
+                          <div>{d.toLocaleString('en-US', { weekday: 'short' }).charAt(0)}</div>
                         </th>
-                      );
+                      )
                     })}
-                    <th className="text-center font-semibold px-2 w-8 text-primary">M</th>
-                    <th className="text-center font-semibold px-2 w-8 text-warning">E</th>
-                    <th className="text-center font-semibold px-2 w-8 text-gray-500">N</th>
-                    <th className="text-center font-semibold px-2 w-8 text-danger">WO</th>
+                    <th className="roster-th-total color-primary">M</th>
+                    <th className="roster-th-total color-warning">E</th>
+                    <th className="roster-th-total color-gray">N</th>
+                    <th className="roster-th-total color-danger">WO</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,8 +261,8 @@ export function Roster() {
                       if (counts[code] !== undefined) counts[code]++;
                     });
                     return (
-                      <tr key={emp.employee_id || ri} className="border-b border-gray-50 hover:bg-gray-50/50">
-                        <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-gray-50">
+                      <tr key={emp.employee_id || ri} className="roster-td-row">
+                        <td className="roster-td roster-td-sticky">
                           <div className="roster-employee-cell">
                             <img
                               src={`https://i.pravatar.cc/150?u=roster_${emp.employee_id}`}
@@ -274,14 +276,14 @@ export function Roster() {
                           </div>
                         </td>
                         {days.map(d => (
-                          <td key={d} className="text-center px-0.5">
+                          <td key={d} className="roster-td-day">
                             {renderShift(empRoster[d] || '')}
                           </td>
                         ))}
-                        <td className="text-center font-semibold text-primary">{counts.M}</td>
-                        <td className="text-center font-semibold text-warning">{counts.E}</td>
-                        <td className="text-center font-semibold text-gray-500">{counts.N}</td>
-                        <td className="text-center font-semibold text-danger">{counts.WO}</td>
+                        <td className="roster-td-total color-primary">{counts.M}</td>
+                        <td className="roster-td-total color-warning">{counts.E}</td>
+                        <td className="roster-td-total color-gray">{counts.N}</td>
+                        <td className="roster-td-total color-danger">{counts.WO}</td>
                       </tr>
                     );
                   })}
@@ -293,13 +295,13 @@ export function Roster() {
 
         {/* Shifts Config Table */}
         <Card>
-          <div className="card-header-flex mb-4">
-            <h3 className="font-bold text-lg">Configured Shifts</h3>
+          <div className="card-header-flex">
+            <h3 className="section-title" style={{ margin: 0 }}>Configured Shifts</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="ui-card-content">
+            <table className="roster-shift-table">
               <thead>
-                <tr className="text-left text-[var(--text-md)] border-b pb-2">
+                <tr className="roster-shift-th-row">
                   <th className="pb-3 font-semibold">Shift Name</th>
                   <th className="pb-3 font-semibold">Code</th>
                   <th className="pb-3 font-semibold">Start Time</th>
@@ -310,16 +312,16 @@ export function Roster() {
               </thead>
               <tbody>
                 {shifts.length === 0 && (
-                  <tr><td colSpan={6} className="py-8 text-center text-[var(--text-md)]">No shifts configured.</td></tr>
+                  <tr><td colSpan={6} className="roster-shift-empty">No shifts configured.</td></tr>
                 )}
                 {shifts.map((s, i) => (
-                  <tr key={s.id || i} className="border-b border-gray-100">
-                    <td className="py-3 font-semibold text-gray-900">{s.name}</td>
+                  <tr key={s.id || i} className="roster-shift-row">
+                    <td className="roster-shift-name">{s.name}</td>
                     <td>{shiftBadge(s.name)}</td>
                     <td className="font-medium">{s.start_time || '—'}</td>
                     <td className="font-medium">{s.end_time || '—'}</td>
-                    <td className="text-[var(--text-md)]">{s.grace_minutes ? `${s.grace_minutes} min` : '—'}</td>
-                    <td className="text-[var(--text-md)]">{s.shift_type || s.type || 'Regular'}</td>
+                    <td className="roster-shift-muted">{s.grace_minutes ? `${s.grace_minutes} min` : '—'}</td>
+                    <td className="roster-shift-muted">{s.shift_type || s.type || 'Regular'}</td>
                   </tr>
                 ))}
               </tbody>

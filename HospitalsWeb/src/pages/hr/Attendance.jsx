@@ -24,10 +24,10 @@ function fmtTime(t) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'present': return <span className="badge badge-success-light border border-success/20">Present</span>;
-    case 'absent':  return <span className="badge badge-danger-light border border-danger/20 text-danger">Absent</span>;
-    case 'late':    return <span className="badge badge-warning-light border border-warning/20 text-warning">Late</span>;
-    case 'half_day': return <span className="badge bg-orange-50 border border-orange-200 text-orange-600">Half Day</span>;
+    case 'present': return <span className="badge badge-success-light">Present</span>;
+    case 'absent':  return <span className="badge badge-danger-light">Absent</span>;
+    case 'late':    return <span className="badge badge-warning-light">Late</span>;
+    case 'half_day': return <span className="badge badge-half-day">Half Day</span>;
     default:        return <span className="badge">{status}</span>;
   }
 }
@@ -232,7 +232,7 @@ export function Attendance() {
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             {/* Late Arrivals */}
             <Card>
               <div className="card-header-flex">

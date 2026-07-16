@@ -17,11 +17,11 @@ function fmtDate(d) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'pending':   return <span className="badge badge-warning-light border border-warning/20 text-warning">Pending</span>;
-    case 'approved':  return <span className="badge badge-success-light border border-success/20">Approved</span>;
-    case 'deducted':  return <span className="badge bg-transparent border border-success text-success">Deducted</span>;
-    case 'waived':    return <span className="badge badge-danger-light border border-danger/20 text-danger">Waived</span>;
-    case 'cancelled': return <span className="badge bg-gray-100 text-gray-500 border border-gray-200">Cancelled</span>;
+    case 'pending':   return <span className="badge badge-warning-light">Pending</span>;
+    case 'approved':  return <span className="badge badge-success-light">Approved</span>;
+    case 'deducted':  return <span className="badge badge-deducted">Deducted</span>;
+    case 'waived':    return <span className="badge badge-danger-light">Waived</span>;
+    case 'cancelled': return <span className="badge badge-cancelled">Cancelled</span>;
     default:          return <span className="badge">{status}</span>;
   }
 }
@@ -120,7 +120,7 @@ export function Fine() {
   }, {});
 
   return (
-    <div className="page-container fine-page">
+    <div className="fine-page hr-overview-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -156,7 +156,7 @@ export function Fine() {
               <div className="stat-sub">Awaiting approval</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <AlertCircle size={16} className="text-[#f97316]" />
+              <AlertCircle size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -167,7 +167,7 @@ export function Fine() {
               <div className="stat-sub">{new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <AlertOctagon size={16} className="text-[#f97316]" />
+              <AlertOctagon size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -178,7 +178,7 @@ export function Fine() {
               <div className="stat-sub">From active payroll</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <MinusCircle size={16} className="text-[#f97316]" />
+              <MinusCircle size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -189,7 +189,7 @@ export function Fine() {
               <div className="stat-sub">Across all months</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Banknote size={16} className="text-[#3b82f6]" />
+              <Banknote size={16} className="icon-blue" />
             </div>
           </Card>
         </div>
@@ -244,7 +244,7 @@ export function Fine() {
                         <td className="fine-muted">{f.payroll_month ? new Date(f.payroll_month + '-01').toLocaleString('en-GB', { month: 'long' }) + ' Payroll' : 'Current Payroll'}</td>
                         <td>{statusBadge(f.status)}</td>
                         <td>
-                          <div className="flex gap-2">
+                          <div className="fine-action-btns">
                             {f.status === 'pending' && (
                               <>
                                 <Button variant="outline" size="sm" className="fine-action-btn fine-action-btn-outline" onClick={() => handleApprove(f.id)}>Approve</Button>
@@ -267,10 +267,11 @@ export function Fine() {
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             <Card id="fine-form-section">
-              <h3 className="section-title">Issue New Fine</h3>
-              <form onSubmit={handleSubmit} className="fine-card-stack" style={{ marginTop: 16 }}>
+              <div className="ui-card-content">
+                <h3 className="section-title">Issue New Fine</h3>
+                <form onSubmit={handleSubmit} className="fine-card-stack" style={{ marginTop: 16 }}>
                 <div>
                   <label className="fine-muted">Employee</label>
                   <div className="relative">
@@ -343,18 +344,20 @@ export function Fine() {
                   />
                 </div>
 
-                {err && <p className="text-danger text-xs">{err}</p>}
+                {err && <p className="modal-error">{err}</p>}
 
                 <Button variant="primary" className="fine-action-btn fine-action-btn-primary" disabled={submitLoading}>
                   {submitLoading ? 'Submitting…' : 'Submit Fine'}
                 </Button>
               </form>
+              </div>
             </Card>
 
             {/* Fine by Reason */}
             <Card>
-              <h3 className="section-title">Fine by Reason ({new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })})</h3>
-              <div className="fine-card-stack">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Fine by Reason ({new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })})</h3>
+                <div className="fine-card-stack">
                 {Object.entries(byReason).length === 0 && (
                   <p className="fine-empty">No fines recorded</p>
                 )}
@@ -367,6 +370,7 @@ export function Fine() {
                     <div className="fine-name" style={{ color: '#dc2626' }}>₹{data.amount.toLocaleString('en-IN')}</div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
           </div>

@@ -354,10 +354,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
+  padding: 24px 24px 16px;
   border-bottom: 1px solid #f1f5f9;
 }
+
+.payroll-page .ui-card-content {
+  padding: 24px;
+}
+
 
 /* Interactive Sidebar Actions List */
 .payroll-page .payroll-action-list {
@@ -383,13 +387,20 @@
   transform: translateX(4px);
 }
 
-/* Grid setup */
 .payroll-page .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 24px;
   align-items: start;
 }
+
+.payroll-page .main-column,
+.payroll-page .side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 
 @media (max-width: 1280px) {
   .payroll-page .dashboard-grid {
@@ -417,3 +428,7 @@
     flex-wrap: wrap;
   }
 }
+
+/* Payroll Page Additions */
+.badge-success-solid { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.payroll-locked { text-align: center; color: #16a34a; font-size: 14px; font-weight: 700; padding: 8px 0; }

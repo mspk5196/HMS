@@ -9,25 +9,25 @@ export const Input = forwardRef(function Input({
   ...props
 }, ref) {
   return (
-    <div className={`${containerClassName}`}>
+    <div className={`ui-input-container ${containerClassName}`}>
       {label && (
-        <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#767c83] mb-1">
+        <label className="ui-input-label">
           {label}
         </label>
       )}
-      <div className="relative">
+      <div className="ui-input-wrapper">
         {Icon && (
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#767c83] pointer-events-none">
+          <span className="ui-input-icon">
             <Icon size={14} />
           </span>
         )}
         <input
           ref={ref}
-          className={`field ${Icon ? 'pl-8' : ''} ${error ? 'border-red-400' : ''} ${className}`}
+          className={`field ${Icon ? 'ui-input-with-icon' : ''} ${error ? 'ui-input-error-field' : ''} ${className}`}
           {...props}
         />
       </div>
-      {error && <p className="text-[11px] text-red-500 mt-1">{error}</p>}
+      {error && <p className="ui-input-error">{error}</p>}
     </div>
   );
 });

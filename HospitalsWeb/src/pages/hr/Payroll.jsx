@@ -23,10 +23,10 @@ function fmtINRFull(val) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'draft':     return <span className="badge badge-warning-light border border-warning/20 text-warning">Draft</span>;
-    case 'calculated': return <span className="badge bg-primary/10 text-primary border border-primary/20">Calculated</span>;
-    case 'locked':    return <span className="badge badge-success-light border border-success/20">Approved</span>;
-    case 'paid':      return <span className="badge bg-green-100 text-green-700 border border-green-200">Paid</span>;
+    case 'draft':     return <span className="badge badge-warning-light">Draft</span>;
+    case 'calculated': return <span className="badge badge-primary-light">Calculated</span>;
+    case 'locked':    return <span className="badge badge-success-light">Approved</span>;
+    case 'paid':      return <span className="badge badge-success-solid">Paid</span>;
     default:          return <span className="badge">{status}</span>;
   }
 }
@@ -126,7 +126,7 @@ export function Payroll() {
   };
 
   return (
-    <div className="page-container payroll-page">
+    <div className="payroll-page hr-overview-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -176,7 +176,7 @@ export function Payroll() {
               <div className="stat-sub">{items.length} employees</div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Banknote size={16} className="text-[#3b82f6]" />
+              <Banknote size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -187,7 +187,7 @@ export function Payroll() {
               <div className="stat-sub">PF, ESI & fines</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <MinusCircle size={16} className="text-[#f97316]" />
+              <MinusCircle size={16} className="icon-orange" />
             </div>
           </Card>
 
@@ -196,11 +196,11 @@ export function Payroll() {
               <div className="stat-label">Net Payout</div>
               <div className="stat-value">{fmtINR(stats.net)}</div>
               <div className="stat-sub">
-                <span className="text-emerald-600 font-bold flex items-center gap-0.5">Calculated <span className="text-slate-500 font-normal">this period</span></span>
+                <span className="stat-trend-up">Calculated <span className="stat-trend-text">this period</span></span>
               </div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Wallet size={16} className="text-[#3b82f6]" />
+              <Wallet size={16} className="icon-blue" />
             </div>
           </Card>
 
@@ -211,7 +211,7 @@ export function Payroll() {
               <div className="stat-sub">Requires calculation check</div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <Clock size={16} className="text-[#f97316]" />
+              <Clock size={16} className="icon-orange" />
             </div>
           </Card>
         </div>
@@ -292,11 +292,12 @@ export function Payroll() {
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             {/* Payroll Status */}
             <Card>
-              <h3 className="section-title" style={{ marginBottom: 20 }}>Payroll Status</h3>
-              <div className="payroll-panel-stack">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Payroll Status</h3>
+                <div className="payroll-panel-stack">
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                     <span className="payroll-name">Approved & Ready</span>
@@ -333,15 +334,17 @@ export function Payroll() {
                   </Button>
                 )}
                 {activeRun && (activeRun.status === 'locked' || activeRun.status === 'paid') && (
-                  <div className="text-center" style={{ color: '#16a34a', fontSize: 14, fontWeight: 700, padding: '8px 0' }}>✓ Payroll Locked</div>
+                  <div className="payroll-locked">✓ Payroll Locked</div>
                 )}
+                </div>
               </div>
             </Card>
 
             {/* Payout by Department */}
             <Card>
-              <h3 className="section-title" style={{ marginBottom: 20 }}>Payout by Department</h3>
-              <div className="payroll-panel-stack">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Payout by Department</h3>
+                <div className="payroll-panel-stack">
                 {Object.entries(deptBreakdown).length === 0 && (
                   <p className="payroll-empty">No data available</p>
                 )}
@@ -354,13 +357,15 @@ export function Payroll() {
                     <div className="payroll-name">{fmtINR(data.net)}</div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
             {/* Payslip Actions */}
             <Card>
-              <h3 className="section-title" style={{ marginBottom: 16 }}>Payslip Actions</h3>
-              <div className="payroll-action-list">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 16 }}>Payslip Actions</h3>
+                <div className="payroll-action-list">
                 <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline" style={{ width: '100%', justifyContent: 'flex-start' }}>
                   <Mail size={15} style={{ color: '#24428b', flexShrink: 0 }} /> Email Payslips to All
                 </Button>
@@ -370,6 +375,7 @@ export function Payroll() {
                 <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline" style={{ width: '100%', justifyContent: 'flex-start' }}>
                   <Landmark size={15} style={{ color: '#24428b', flexShrink: 0 }} /> Submit to Bank
                 </Button>
+                </div>
               </div>
             </Card>
           </div>

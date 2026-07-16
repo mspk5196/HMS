@@ -217,12 +217,12 @@ function AddEmployeeModal({ open, onClose, onSaved }) {
     <div className="modal-overlay">
       <div className="modal-box" style={{ width: 560 }}>
         <div className="modal-header">
-          <h2 className="text-sm font-bold text-slate-800">Add New Employee</h2>
+          <h2 className="modal-title">Add New Employee</h2>
           <button className="modal-close-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="modal-body modal-form-body">
+            <div className="modal-grid">
               <div>
                 <label className="field-label">Full Name *</label>
                 <input className="field" required value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Full name" />
@@ -277,7 +277,7 @@ function AddEmployeeModal({ open, onClose, onSaved }) {
                 <input className="field" type="number" value={form.basic_salary} onChange={e => set('basic_salary', e.target.value)} placeholder="0" />
               </div>
             </div>
-            {err && <p className="text-danger text-xs">{err}</p>}
+            {err && <p className="modal-error">{err}</p>}
           </div>
           <div className="modal-footer">
             <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
@@ -373,8 +373,8 @@ export function Employees() {
       
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 bg-slate-900/90 backdrop-blur text-white px-5 py-3.5 rounded-xl shadow-2xl z-50 text-sm flex items-center gap-2.5 border border-slate-700/50 animate-bounce">
-          <Check size={16} className="text-emerald-400" />
+        <div className="hr-toast">
+          <Check size={16} className="hr-toast-icon" />
           <span className="font-medium">{toastMsg}</span>
         </div>
       )}
@@ -413,14 +413,14 @@ export function Employees() {
               <div className="stat-label">Total Employees</div>
               <div className="stat-value">94</div>
               <div className="stat-sub">
-                <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                <span className="stat-trend-up">
                   <TrendingUp size={11} />+2
                 </span>
                 <span>85 present today</span>
               </div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Users size={16} className="text-[#3b82f6]" />
+              <Users size={16} className="icon-blue" />
             </div>
           </div>
 
@@ -433,7 +433,7 @@ export function Employees() {
               </div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
-              <FileMinus size={16} className="text-[#f97316]" />
+              <FileMinus size={16} className="icon-orange" />
             </div>
           </div>
 
@@ -442,14 +442,14 @@ export function Employees() {
               <div className="stat-label">Attendance Today</div>
               <div className="stat-value">86</div>
               <div className="stat-sub">
-                <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                <span className="stat-trend-up">
                   <TrendingUp size={11} />91.5%
                 </span>
                 <span>Attendance rate</span>
               </div>
             </div>
             <div className="stat-icon-wrapper green-bg">
-              <Clock size={16} className="text-[#22c55e]" />
+              <Clock size={16} className="icon-green" />
             </div>
           </div>
 
@@ -462,7 +462,7 @@ export function Employees() {
               </div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
-              <Banknote size={16} className="text-[#3b82f6]" />
+              <Banknote size={16} className="icon-blue" />
             </div>
           </div>
         </div>
@@ -506,7 +506,7 @@ export function Employees() {
           </div>
 
           {/* Right Column: Dynamic Profile & Sections */}
-          <div className="flex flex-col gap-5">
+          <div className="emp-detail-container">
             {/* Employee Profile Card */}
             {selectedEmp && (
               <div className="hr-card">
@@ -519,61 +519,61 @@ export function Employees() {
                   </button>
                 </div>
                 <div className="hr-card-body">
-                  <div className="flex gap-5 items-start">
-                    <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                      <div className="w-[72px] h-[72px] rounded-full overflow-hidden border border-slate-200 bg-slate-100">
+                  <div className="emp-detail-header">
+                    <div className="emp-detail-avatar-container">
+                      <div className="emp-detail-avatar">
                         <img src={selectedEmp.avatar} alt={selectedEmp.full_name} className="w-full h-full object-cover" />
                       </div>
                       <span className={`status-badge ${selectedEmp.status}`}>
                         {selectedEmp.status === 'active' ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <div className="flex-1 grid grid-cols-3 gap-x-6 gap-y-4">
+                    <div className="emp-detail-info-grid">
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Department</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{selectedEmp.department_name}</div>
+                        <div className="info-label">Department</div>
+                        <div className="info-value">{selectedEmp.department_name}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Designation</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{selectedEmp.designation_name}</div>
+                        <div className="info-label">Designation</div>
+                        <div className="info-value">{selectedEmp.designation_name}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Joining Date</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{fmtDate(selectedEmp.joining_date)}</div>
+                        <div className="info-label">Joining Date</div>
+                        <div className="info-value">{fmtDate(selectedEmp.joining_date)}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Phone</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{selectedEmp.phone}</div>
+                        <div className="info-label">Phone</div>
+                        <div className="info-value">{selectedEmp.phone}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Salary Basis</div>
-                        <div className="text-[13px] font-semibold text-slate-800">
+                        <div className="info-label">Salary Basis</div>
+                        <div className="info-value">
                           {selectedEmp.salary_type === 'monthly' ? 'Monthly Fixed' : selectedEmp.salary_type}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Fixed Salary</div>
-                        <div className="text-[13px] font-semibold text-slate-800">
+                        <div className="info-label">Fixed Salary</div>
+                        <div className="info-value">
                           ₹{Number(selectedEmp.basic_salary).toLocaleString('en-IN')} / month
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Bank Account</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{selectedEmp.bank_account || '—'}</div>
+                        <div className="info-label">Bank Account</div>
+                        <div className="info-value">{selectedEmp.bank_account || '—'}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">IFSC</div>
-                        <div className="text-[13px] font-semibold text-slate-800">{selectedEmp.ifsc || '—'}</div>
+                        <div className="info-label">IFSC</div>
+                        <div className="info-value">{selectedEmp.ifsc || '—'}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">UAN (PF)</div>
-                        <div className={`text-[13px] font-semibold ${selectedEmp.uan === 'Pending enrolment' ? 'text-amber-500' : 'text-slate-800'}`}>
+                        <div className="info-label">UAN (PF)</div>
+                        <div className={`info-value ${selectedEmp.uan === 'Pending enrolment' ? 'text-amber-500' : 'text-slate-800'}`}>
                           {selectedEmp.uan || 'Pending enrolment'}
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 border-t border-[#f1f5f9]" style={{ margin: '20px -20px 0 -20px', padding: '16px 20px 0 20px' }}>
+                  <div className="emp-detail-actions">
                     <button onClick={handleSaveChanges} className="hr-btn hr-btn-primary hr-btn-md">
                       <Briefcase size={14} />
                       <span>Save changes</span>
@@ -595,7 +595,7 @@ export function Employees() {
             <div className="hr-card">
               <div className="hr-card-header">
                 <h3 className="hr-card-title">Today's Attendance — 15 Jul 2026</h3>
-                <div className="flex items-center gap-2">
+                <div className="tab-group-container">
                   <button onClick={handleSyncBiometric} className="hr-btn hr-btn-outline hr-btn-sm">
                     <RefreshCw size={13} />
                     <span>Sync Biometric</span>
@@ -619,8 +619,8 @@ export function Employees() {
                   <tbody>
                     {attendance.map((r, i) => (
                       <tr key={i}>
-                        <td className="font-semibold text-[13px] text-slate-800">{r.employee_name}</td>
-                        <td className="text-[#3b82f6] font-medium text-[13px]">{r.shift_name}</td>
+                        <td className="info-value">{r.employee_name}</td>
+                        <td className="text-primary font-medium text-[13px]">{r.shift_name}</td>
                         <td className="text-slate-600 text-[13px]">{r.first_punch_in || '—'}</td>
                         <td className="text-slate-600 text-[13px]">{r.last_punch_out || '—'}</td>
                         <td className="text-slate-700 text-[13px]">{fmtMins(r.worked_minutes)}</td>

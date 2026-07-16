@@ -39,7 +39,7 @@ export function PageHeader({ breadcrumbs, searchPlaceholder, searchValue, onSear
           </div>
         )}
         {actions && (
-          <div className="page-actions flex items-center gap-3">
+          <div className="page-header-actions">
             {actions}
           </div>
         )}

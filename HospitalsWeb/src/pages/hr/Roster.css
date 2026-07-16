@@ -403,3 +403,52 @@
     flex-wrap: wrap;
   }
 }
+
+/* Roster Page Additions */
+.shift-morning { color: #2563eb; background: #eff6ff; }
+.shift-evening { color: #d97706; background: #fffbeb; }
+.shift-night { color: #6b7280; background: #f3f4f6; }
+.shift-wo { color: #ef4444; font-weight: 500; }
+
+.roster-loading { text-align: center; color: #64748b; padding: 32px 0; }
+.roster-th-row { border-bottom: 1px solid #e2e8f0; }
+.roster-th { text-align: left; font-weight: 600; padding: 8px 12px; }
+.roster-th-sticky { position: sticky; left: 0; background: #ffffff; z-index: 10; width: 192px; min-width: 192px; }
+.roster-th-day { text-align: center; font-weight: 400; padding: 0 4px 8px; width: 28px; min-width: 28px; }
+.roster-th-day-num { font-weight: 600; color: #111827; }
+.roster-th-total { text-align: center; font-weight: 600; padding: 0 8px; width: 32px; }
+
+.color-primary { color: #2563eb; }
+.color-warning { color: #d97706; }
+.color-gray { color: #6b7280; }
+.color-danger { color: #ef4444; }
+
+.roster-td-row { border-bottom: 1px solid #f8fafc; transition: background 0.15s; }
+.roster-td-row:hover { background: #f8fafc; }
+.roster-td { padding: 8px 12px; }
+.roster-td-sticky { position: sticky; left: 0; background: #ffffff; z-index: 10; border-right: 1px solid #f8fafc; }
+.roster-td-day { text-align: center; padding: 0 2px; }
+.roster-td-total { text-align: center; font-weight: 600; }
+
+.roster-shift-header { margin-bottom: 16px; }
+.roster-shift-title { font-weight: 700; font-size: 18px; margin: 0; }
+.roster-shift-table { width: 100%; font-size: 14px; border-collapse: collapse; }
+.roster-shift-th-row { text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+.roster-shift-th-row th { padding-bottom: 12px; }
+.roster-shift-empty { padding: 32px 0; text-align: center; color: #64748b; }
+.roster-shift-row { border-bottom: 1px solid #f1f5f9; }
+.roster-shift-name { padding: 12px 0; font-weight: 600; color: #111827; }
+.roster-shift-muted { color: #64748b; }
+
+.roster-page .card-header-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.roster-page .ui-card-content {
+  padding: 24px;
+}
+

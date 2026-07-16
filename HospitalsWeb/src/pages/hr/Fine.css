@@ -377,10 +377,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
+  padding: 24px 24px 16px;
   border-bottom: 1px solid #f1f5f9;
 }
+
+.fine-page .ui-card-content {
+  padding: 24px;
+}
+
 
 .fine-page .dashboard-grid {
   display: grid;
@@ -388,6 +392,14 @@
   gap: 24px;
   align-items: start;
 }
+
+.fine-page .main-column,
+.fine-page .side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 
 /* Response Breakpoints */
 @media (max-width: 1280px) {
@@ -414,4 +426,22 @@
   .fine-actions {
     flex-wrap: wrap;
   }
+}
+
+/* Fine Page Additions */
+.attendance-page .badge-deducted {
+  background: transparent;
+  color: #10b981;
+  border: 1px solid #10b981;
+}
+
+.attendance-page .badge-cancelled {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+
+.fine-action-btns {
+  display: flex;
+  gap: 8px;
 }

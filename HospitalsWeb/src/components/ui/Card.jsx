@@ -3,8 +3,7 @@ import React from 'react';
 export function Card({ children, className = '', onClick }) {
   return (
     <div
-      className={`bg-[var(--panel)] border border-[var(--line)] ${onClick ? 'cursor-pointer hover:border-[var(--primary)]' : ''} ${className}`}
-      style={{ borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
+      className={`ui-card ${onClick ? 'ui-card-clickable' : ''} ${className}`}
       onClick={onClick}
     >
       {children}
@@ -14,22 +13,22 @@ export function Card({ children, className = '', onClick }) {
 
 export function CardHeader({ title, subtitle, action, icon, className = '' }) {
   return (
-    <div className={`flex items-center justify-between px-5 py-4 border-b border-[var(--line-lt)] ${className}`}>
-      <div className="flex items-center gap-3">
-        {icon && <span className="text-[var(--mute)] w-4 h-4">{icon}</span>}
-        <div>
-          {title && <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>}
-          {subtitle && <p className="text-xs text-[var(--mute)] mt-0.5">{subtitle}</p>}
+    <div className={`ui-card-header ${className}`}>
+      <div className="ui-card-header-left">
+        {icon && <span className="ui-card-header-icon">{icon}</span>}
+        <div className="ui-card-header-text">
+          {title && <h3 className="ui-card-title">{title}</h3>}
+          {subtitle && <p className="ui-card-subtitle">{subtitle}</p>}
         </div>
       </div>
-      {action && <div>{action}</div>}
+      {action && <div className="ui-card-header-action">{action}</div>}
     </div>
   );
 }
 
 export function CardContent({ children, className = '', noPadding = false }) {
   return (
-    <div className={noPadding ? className : `p-4 ${className}`}>
+    <div className={`ui-card-content ${noPadding ? 'no-padding' : ''} ${className}`}>
       {children}
     </div>
   );

@@ -356,10 +356,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
+  padding: 24px 24px 16px;
   border-bottom: 1px solid #f1f5f9;
 }
+
+.leave-page .ui-card-content {
+  padding: 24px;
+}
+
 
 .leave-page .dashboard-grid {
   display: grid;
@@ -367,6 +371,14 @@
   gap: 24px;
   align-items: start;
 }
+
+.leave-page .main-column,
+.leave-page .side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 
 /* Modal form inputs formatting */
 .modal-box .field-label {
@@ -429,3 +441,9 @@
     flex-wrap: wrap;
   }
 }
+
+/* Leave Page Additions */
+.badge-primary-light { background: #eff6ff; color: #2563eb; }
+.badge-purple-light { background: #f3e8ff; color: #9333ea; }
+.badge-gray-light { background: #f3f4f6; color: #4b5563; }
+.stat-trend-text { font-weight: 400; color: #64748b; }
