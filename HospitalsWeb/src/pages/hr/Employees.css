@@ -1,102 +1,689 @@
+/* ─── HR Employees Page ─────────────────────────────── */
 .hr-overview-page {
-  /* Inherits from page-content */
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #1e293b;
 }
 
-.hr-tabs {
-  display: flex;
-  gap: 8px;
-  background-color: white;
-  padding: 8px;
+/* ─── Stats Grid ───────────────────────────────────── */
+.hr-overview-page .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.hr-overview-page .stat-card {
+  background: #ffffff;
+  border: 1px solid #e8edf2;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  width: fit-content;
+  padding: 20px !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
 }
 
-.hr-tab {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
-  color: var(--text-md);
+.hr-overview-page .stat-card-left {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.stat-label,
+.hr-overview-page .stat-label {
+  font-size: 12.5px;
   font-weight: 500;
-  font-size: 14px;
+  color: #64748b;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+
+.stat-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.stat-icon-wrapper.blue-bg  { background-color: #eff6ff; }
+.stat-icon-wrapper.orange-bg { background-color: #fff7ed; }
+.stat-icon-wrapper.green-bg  { background-color: #f0fdf4; }
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* ─── Tab Bar ──────────────────────────────────────── */
+.hr-tab-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 4px;
+  width: fit-content;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.hr-tab-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 7px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  line-height: 1.4;
 }
 
-.hr-tab:hover {
-  background-color: rgba(36, 66, 139, 0.05);
-  color: var(--primary);
+.hr-tab-btn:hover {
+  color: #1e293b;
+  background: rgba(255,255,255,0.6);
 }
 
-.hr-tab.active {
-  background-color: var(--page); /* Or a light gray depending on exact mockup */
-  color: var(--text-dark);
+.hr-tab-btn.active {
+  background: #ffffff;
+  color: #1e293b;
+  border-color: #e2e8f0;
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04);
 }
 
+/* ─── Dashboard Grid ───────────────────────────────── */
 .hr-dashboard-grid {
   display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 24px;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
-.employee-list {
+/* ─── Employee List Card ───────────────────────────── */
+.emp-list-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.emp-list-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.emp-list-header h3 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.emp-total-badge {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.emp-list-scroll {
+  max-height: 480px;
+  overflow-y: auto;
 }
 
 .emp-list-item {
   display: flex;
   align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-  gap: 12px;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid #f8fafc;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  position: relative;
 }
 
 .emp-list-item:last-child {
   border-bottom: none;
 }
 
+.emp-list-item:hover {
+  background: #f8fafc;
+}
+
+.emp-list-item.selected {
+  background: #eff6ff;
+}
+
+.emp-list-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #3b82f6;
+  border-radius: 0 2px 2px 0;
+}
+
 .emp-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   overflow: hidden;
+  border: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
+  background: #f1f5f9;
 }
 
-/* Shifts Roster Table Pills */
-.roster-table th, .roster-table td {
-  padding: 8px 4px;
+.emp-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-.roster-pill {
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  line-height: 24px;
-  text-align: center;
-  border-radius: 4px;
+.emp-name {
+  font-size: 13px;
   font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.emp-dept {
   font-size: 11px;
+  color: #94a3b8;
+  margin-top: 1px;
+  line-height: 1.3;
 }
 
-.roster-pill.morning {
-  background-color: #E0F2FE; /* Light blue */
-  color: #0369A1;
+.emp-list-footer {
+  border-top: 1px solid #f1f5f9;
+  padding: 10px 16px;
 }
 
-.roster-pill.evening {
-  background-color: #FEF3C7; /* Light yellow */
-  color: #B45309;
+.emp-view-all-btn {
+  width: 100%;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3b82f6;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px 0;
+  transition: color 0.12s;
 }
 
-.roster-pill.night {
-  background-color: #F3F4F6; /* Light gray */
-  color: #374151;
+.emp-view-all-btn:hover {
+  color: #1d4ed8;
 }
 
-.roster-pill.off {
-  background-color: #FEE2E2; /* Light red */
-  color: #B91C1C;
+/* ─── Status Badges ────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.4;
 }
+
+.status-badge.active, .status-badge.present {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge.inactive, .status-badge.absent {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.status-badge.pending {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.status-badge.late {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.status-badge.approved {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge.rejected {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+/* ─── Dashboard Tables ─────────────────────────────── */
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-table th {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dashboard-table td {
+  padding: 13px 12px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+  vertical-align: middle;
+}
+
+/* Compact padding for payroll table to prevent overflow */
+.payroll-table th,
+.payroll-table td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+
+.dashboard-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.dashboard-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+/* ─── Shift Roster Pills ───────────────────────────── */
+.roster-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.roster-pill.m {
+  background-color: #dbeafe;
+  color: #2563eb;
+}
+
+.roster-pill.e {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.roster-pill.n {
+  background-color: #ede9fe;
+  color: #7c3aed;
+}
+
+.roster-pill.wo {
+  background-color: #fee2e2;
+  color: #dc2626;
+  border: 1.5px dashed #fca5a5;
+}
+
+/* ─── Custom Card & Table Styles for HR Overview Page ─── */
+.hr-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+
+.hr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px !important;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.hr-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.hr-card-body {
+  padding: 20px !important;
+}
+
+.hr-card-body-compact {
+  padding: 16px !important;
+}
+
+/* Perfect alignment for table inside cards */
+.hr-card-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.hr-card-table th {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.hr-card-table td {
+  padding: 13px 12px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+  vertical-align: middle;
+}
+
+.hr-card-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.hr-card-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+/* Align first and last columns with 20px card padding */
+.hr-card-table th:first-child,
+.hr-card-table td:first-child {
+  padding-left: 20px !important;
+}
+
+.hr-card-table th:last-child,
+.hr-card-table td:last-child {
+  padding-right: 20px !important;
+}
+
+/* Compact padding for payroll table to prevent overflow */
+.payroll-table th,
+.payroll-table td {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.payroll-table th:first-child,
+.payroll-table td:first-child {
+  padding-left: 20px !important;
+}
+
+.payroll-table th:last-child,
+.payroll-table td:last-child {
+  padding-right: 20px !important;
+}
+
+/* ─── Custom Button Styles for HR Page (Vertical Alignment & Padding Fixes) ─── */
+.hr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1 !important;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+/* Force perfect flex-based vertical alignment on button children */
+.hr-btn svg {
+  display: block !important;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.hr-btn span {
+  display: inline-block !important;
+  line-height: 1 !important;
+}
+
+.hr-btn-primary {
+  background-color: #24428b;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.hr-btn-primary:hover {
+  background-color: #1e3a8a;
+  color: #ffffff;
+}
+
+.hr-btn-outline {
+  background-color: #ffffff;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.hr-btn-outline:hover {
+  background-color: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+/* Sizes with spacious premium paddings */
+.hr-btn-md {
+  height: 34px;
+  padding: 0 18px !important;
+}
+
+.hr-btn-sm {
+  height: 30px;
+  padding: 0 14px !important;
+  font-size: 12px;
+  border-radius: 6px;
+  gap: 5px;
+}
+
+.hr-btn-sm svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ─── Header & Title Styles Custom overrides ─── */
+.hr-overview-page .page-header {
+  padding: 16px 32px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  margin: -24px -32px 24px -32px !important; /* Negative margin to pull it to the edges of the main area */
+}
+
+/* Page Header Left Breadcrumbs */
+.hr-overview-page .page-header-left {
+  font-size: 12px !important;
+  font-weight: 500;
+}
+
+.hr-overview-page .breadcrumb-link {
+  color: #64748b !important;
+}
+
+.hr-overview-page .breadcrumb-separator {
+  color: #94a3b8 !important;
+  margin: 0 6px !important;
+}
+
+.hr-overview-page .breadcrumb-current {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+/* Search Box custom style to match image */
+.hr-overview-page .search-box input {
+  height: 36px !important;
+  border-radius: 8px !important;
+  background-color: #f1f5f9 !important; /* Light grey background */
+  border: 1px solid #e2e8f0 !important;
+  font-size: 13px !important;
+  padding-left: 36px !important;
+  min-width: 240px !important;
+  color: #334155 !important;
+}
+
+.hr-overview-page .search-box input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.hr-overview-page .search-box svg {
+  color: #64748b !important;
+}
+
+/* Title and description */
+.hr-overview-page .hr-title-section {
+  margin-bottom: 24px !important;
+}
+
+.hr-overview-page .hr-title-main {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.5px !important;
+  line-height: 1.2 !important;
+  margin-bottom: 4px !important;
+}
+
+.hr-overview-page .hr-title-desc {
+  font-size: 12.5px !important;
+  color: #64748b !important;
+  margin: 0 !important;
+}
+
+.hr-content-wrapper {
+  padding: 0 0 24px 0 !important;
+}
+
+.leave-requests-container {
+  padding: 20px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.leave-request-item {
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 16px !important;
+  background-color: #f8fafc;
+}
+
+.hr-payroll-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 18px 20px !important;
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+/* Shift Roster Table Grid Structure */
+.hr-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.hr-roster-table th {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-right: 1px solid #e2e8f0 !important;
+  padding: 12px 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  text-transform: none !important;
+}
+
+.hr-roster-table th:last-child {
+  border-right: none !important;
+}
+
+.hr-roster-table td {
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-right: 1px solid #e2e8f0 !important;
+  padding: 10px 8px !important;
+  vertical-align: middle !important;
+  background: #ffffff !important;
+}
+
+.hr-roster-table td:last-child {
+  border-right: none !important;
+}
+
+.hr-roster-table tr:last-child td {
+  border-bottom: none !important;
+}
+
+.hr-roster-table th:first-child,
+.hr-roster-table td:first-child {
+  text-align: left !important;
+  padding-left: 16px !important;
+  min-width: 120px !important;
+}
+
+.hr-roster-legend {
+  display: flex !important;
+  align-items: center !important;
+  gap: 24px !important;
+  padding: 0px 20px 20px 20px !important;
+}
+
+
+
