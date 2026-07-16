@@ -1,260 +1,283 @@
-import { useState, useEffect } from 'react';
-import './Attendance.css';
-import { Button } from '../../components/ui/Button';
+import { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { format } from 'date-fns';
-import { Clock, CheckCircle, XCircle, Activity } from 'lucide-react';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { 
+  UserCheck, UserMinus, Clock, Timer, 
+  Download, RefreshCw, Calendar as CalendarIcon, ChevronDown
+} from 'lucide-react';
+import './Attendance.css';
 
-export const Attendance = () => {
-  const [activeTab, setActiveTab] = useState('daily'); // daily, corrections, buffer
+function fmtMins(mins) {
+  if (!mins || mins <= 0) return '—';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function fmtTime(t) {
+  if (!t) return '—';
+  return t.slice(0, 5);
+}
+
+function statusBadge(status) {
+  switch ((status || '').toLowerCase()) {
+    case 'present': return <span className="badge badge-success-light border border-success/20">Present</span>;
+    case 'absent':  return <span className="badge badge-danger-light border border-danger/20 text-danger">Absent</span>;
+    case 'late':    return <span className="badge badge-warning-light border border-warning/20 text-warning">Late</span>;
+    case 'half_day': return <span className="badge bg-orange-50 border border-orange-200 text-orange-600">Half Day</span>;
+    default:        return <span className="badge">{status}</span>;
+  }
+}
+
+export function Attendance() {
+  const { request, loading } = useApi();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [year, setYear] = useState(new Date().getFullYear());
-  
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { request } = useApi();
+  const [records, setRecords] = useState([]);
+  const [stats, setStats] = useState({ present: 0, absent: 0, late: 0, ot_mins: 0, total: 0 });
+  const [deptFilter, setDeptFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('');
+  const [departments, setDepartments] = useState([]);
+  const [shifts, setShifts] = useState([]);
 
-  const loadData = async () => {
-    setLoading(true);
-    setData([]);
+  const load = useCallback(async () => {
     try {
-      if (activeTab === 'daily') {
-        const res = await request(`/attendance?fromDate=${date}&toDate=${date}&limit=100`);
-        if (res?.success) setData(res.data?.rows || []);
-      } else if (activeTab === 'corrections') {
-        const res = await request(`/attendance/corrections?status=pending&limit=100`);
-        if (res?.success) setData(res.data?.rows || []);
-      } else if (activeTab === 'buffer') {
-        const res = await request(`/attendance/buffer?month=${month}&year=${year}`);
-        if (res?.success) setData(res.data || []);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
+      const params = new URLSearchParams({ date, limit: 200 });
+      if (deptFilter) params.set('department_id', deptFilter);
+      if (shiftFilter) params.set('shift_id', shiftFilter);
+      const res = await request(`/attendance?${params}`);
+      const rows = res?.data?.rows || res?.data || [];
+      setRecords(rows);
+
+      // compute stats from rows
+      const present = rows.filter(r => r.status === 'present').length;
+      const late    = rows.filter(r => r.status === 'late').length;
+      const absent  = rows.filter(r => r.status === 'absent').length;
+      const ot_mins = rows.reduce((sum, r) => sum + (Number(r.overtime_minutes) || 0), 0);
+      setStats({ present: present + late, absent, late, ot_mins, total: rows.length });
+    } catch (_) {}
+  }, [date, deptFilter, shiftFilter]);
 
   useEffect(() => {
-    loadData();
-  }, [activeTab, date, month, year]);
+    request('/hr/departments').then(r => setDepartments(r?.data || [])).catch(() => {});
+    request('/hr/shifts').then(r => setShifts(r?.data || [])).catch(() => {});
+  }, []);
 
-  const handleProcessDay = async () => {
-    setLoading(true);
-    await request(`/attendance/process`, { method: 'POST', body: JSON.stringify({ date }) }).catch(() => {});
-    loadData();
-  };
+  useEffect(() => { load(); }, [load]);
 
-  const handleReviewCorrection = async (id, status) => {
-    await request(`/attendance/corrections/${id}/review`, { method: 'PATCH', body: JSON.stringify({ status }) }).catch(() => {});
-    loadData();
-  };
-
-  const renderDailyTab = () => (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <input 
-            type="date" 
-            className="form-control"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            style={{ width: '140px' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Button onClick={loadData} variant="outline"><Clock className="w-4 h-4 mr-2"/> Sync punches</Button>
-          <Button onClick={handleProcessDay}>Run Engine</Button>
-        </div>
-      </div>
-      
-      <table className="attendance-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Code</th>
-            <th>Shift</th>
-            <th>First In</th>
-            <th>Last Out</th>
-            <th align="right">Worked</th>
-            <th align="right">Late</th>
-            <th align="center">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 && !loading ? (
-            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--mute)' }}>No attendance records found for this date.</td></tr>
-          ) : (
-            data.map(row => (
-              <tr key={row.id}>
-                <td style={{ fontWeight: '500', color: 'var(--text)' }}>{row.full_name}</td>
-                <td style={{ color: 'var(--mute)' }}>{row.employee_code}</td>
-                <td>{row.shift_name || '-'}</td>
-                <td>{row.first_in_time ? format(new Date(row.first_in_time), 'hh:mm a') : '-'}</td>
-                <td>{row.last_out_time ? format(new Date(row.last_out_time), 'hh:mm a') : '-'}</td>
-                <td align="right" style={{ fontWeight: '500' }}>{row.worked_minutes || 0}m</td>
-                <td align="right">
-                  <span style={{ color: row.late_minutes > 0 ? 'var(--danger)' : 'var(--mute)', fontWeight: row.late_minutes > 0 ? '600' : 'normal' }}>
-                    {row.late_minutes || 0}m
-                  </span>
-                </td>
-                <td align="center">
-                  <span style={{
-                    padding: '3px 12px',
-                    borderRadius: '20px',
-                    fontSize: '9px',
-                    fontWeight: '700',
-                    textTransform: 'uppercase',
-                    background: row.status === 'present' ? 'var(--success)' :
-                      row.status === 'absent' || row.status === 'lop' ? 'var(--danger)' :
-                      row.status === 'on_leave' ? 'var(--info)' : 'var(--mute)',
-                    color: 'white'
-                  }}>{row.status}</span>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </>
-  );
-
-  const renderCorrectionsTab = () => (
-    <>
-      <table className="attendance-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Date</th>
-            <th>Requested In</th>
-            <th>Requested Out</th>
-            <th>Reason</th>
-            <th align="center">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 && !loading ? (
-            <tr><td colSpan={6} align="center" style={{ padding: '32px', color: 'var(--mute)' }}>No pending correction requests.</td></tr>
-          ) : (
-            data.map(row => (
-              <tr key={row.id}>
-                <td style={{ fontWeight: '500', color: 'var(--text)' }}>{row.full_name}</td>
-                <td>{format(new Date(row.attendance_date), 'dd MMM yyyy')}</td>
-                <td>{row.requested_first_in ? format(new Date(row.requested_first_in), 'hh:mm a') : '-'}</td>
-                <td>{row.requested_last_out ? format(new Date(row.requested_last_out), 'hh:mm a') : '-'}</td>
-                <td style={{ color: 'var(--mute)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.reason}>{row.reason}</td>
-                <td align="center">
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    <Button size="sm" variant="outline" style={{ color: 'var(--success)', height: '32px', padding: '0 8px' }} onClick={() => handleReviewCorrection(row.id, 'approved')}>
-                      <CheckCircle className="w-4 h-4 mr-1"/> Approve
-                    </Button>
-                    <Button size="sm" variant="outline" style={{ color: 'var(--danger)', height: '32px', padding: '0 8px' }} onClick={() => handleReviewCorrection(row.id, 'rejected')}>
-                      <XCircle className="w-4 h-4 mr-1"/> Reject
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </>
-  );
-
-  const renderBufferTab = () => (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <input 
-          type="month" 
-          className="form-control"
-          value={`${year}-${String(month).padStart(2, '0')}`}
-          onChange={(e) => {
-            const [y, m] = e.target.value.split('-');
-            setYear(Number(y)); setMonth(Number(m));
-          }}
-          style={{ width: '160px' }}
-        />
-      </div>
-      <table className="attendance-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Code</th>
-            <th align="right">Allocated (Mins)</th>
-            <th align="right">Used (Mins)</th>
-            <th align="right">Remaining (Mins)</th>
-            <th align="center">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 && !loading ? (
-            <tr><td colSpan={6} align="center" style={{ padding: '32px', color: 'var(--mute)' }}>No buffer data for this month.</td></tr>
-          ) : (
-            data.map(row => (
-              <tr key={row.id}>
-                <td style={{ fontWeight: '500', color: 'var(--text)' }}>{row.full_name}</td>
-                <td style={{ color: 'var(--mute)' }}>{row.employee_code}</td>
-                <td align="right">{row.buffer_allocated_minutes}</td>
-                <td align="right" style={{ color: 'var(--warning)', fontWeight: '500' }}>{row.buffer_used_minutes}</td>
-                <td align="right" style={{ fontWeight: '700', color: 'var(--success)' }}>{row.buffer_remaining_minutes}</td>
-                <td align="center">
-                  {row.buffer_remaining_minutes === 0 ? (
-                    <span style={{ padding: '2px 8px', borderRadius: '3px', background: 'var(--danger)', color: 'white', fontSize: '9px', fontWeight: '700', textTransform: 'uppercase' }}>Exhausted</span>
-                  ) : (
-                    <span style={{ padding: '2px 8px', borderRadius: '3px', background: 'var(--success)', color: 'white', fontSize: '9px', fontWeight: '700', textTransform: 'uppercase' }}>Active</span>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </>
-  );
+  const displayDate = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="attendance-container">
-      <div className="attendance-header">
-        <div>
-          <h1 className="attendance-title">Attendance Management</h1>
-          <p style={{ fontSize: '12px', color: 'var(--text-md)', margin: '4px 0 0 0' }}>Built from raw biometric punches — recorded and validated</p>
-        </div>
-        <div style={{ display: 'flex', gap: '4px', padding: '4px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
-          <button 
-            style={{ padding: '6px 12px', background: activeTab === 'daily' ? 'var(--primary)' : 'transparent', color: activeTab === 'daily' ? 'white' : 'var(--text-md)', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s' }}
-            onClick={() => setActiveTab('daily')}
-          >
-            Daily Summary
-          </button>
-          <button 
-            style={{ padding: '6px 12px', background: activeTab === 'corrections' ? 'var(--primary)' : 'transparent', color: activeTab === 'corrections' ? 'white' : 'var(--text-md)', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s' }}
-            onClick={() => setActiveTab('corrections')}
-          >
-            Corrections
-          </button>
-          <button 
-            style={{ padding: '6px 12px', background: activeTab === 'buffer' ? 'var(--primary)' : 'transparent', color: activeTab === 'buffer' ? 'white' : 'var(--text-md)', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s' }}
-            onClick={() => setActiveTab('buffer')}
-          >
-            Late Buffer
-          </button>
-        </div>
-      </div>
+    <div className="page-container">
+      <PageHeader 
+        breadcrumbs={[
+          { label: 'HR & Payroll', path: '#' },
+          { label: 'Attendance' }
+        ]}
+        searchPlaceholder="Search employee..."
+        actions={
+          <div className="flex gap-3">
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+            />
+            <Button variant="outline" className="flex items-center gap-2">
+              <Download size={16} /> Export
+            </Button>
+            <Button variant="primary" onClick={load} className="bg-primary flex items-center gap-2">
+              <RefreshCw size={16} /> Sync Biometric
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="attendance-table-card">
-        {loading ? (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--mute)' }}>
-             <div style={{ width: '20px', height: '20px', border: '2px solid var(--line)', borderTop: '2px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }}></div>
-             Loading data...
+      <div className="page-content attendance-page">
+        <div className="page-header-text mb-6">
+          <h1 className="text-2xl font-bold mb-1">Attendance — {displayDate}</h1>
+          <p className="text-[var(--text-md)] text-sm">Live attendance log synced from biometric terminals across all departments.</p>
+        </div>
+
+        <div className="stats-grid mb-6">
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Present Today</div>
+              <div className="stat-icon-wrapper bg-success/10 text-success"><UserCheck size={18} /></div>
+            </div>
+            <div className="stat-value">{stats.present}</div>
+            <div className="stat-sub">of {stats.total} scheduled</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Absent</div>
+              <div className="stat-icon-wrapper bg-danger/10 text-danger"><UserMinus size={18} /></div>
+            </div>
+            <div className="stat-value">{stats.absent}</div>
+            <div className="stat-sub">no-show or absent</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Late Arrivals</div>
+              <div className="stat-icon-wrapper bg-warning/10 text-warning"><Clock size={18} /></div>
+            </div>
+            <div className="stat-value">{stats.late}</div>
+            <div className="stat-sub">arrived after shift start</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Overtime Today</div>
+              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Timer size={18} /></div>
+            </div>
+            <div className="stat-value">{fmtMins(stats.ot_mins)}</div>
+            <div className="stat-sub">across {records.filter(r => (r.overtime_minutes || 0) > 0).length} employees</div>
+          </Card>
+        </div>
+
+        <div className="dashboard-grid">
+          <div className="main-column">
+            <Card className="h-full">
+              <div className="card-header-flex mb-4">
+                <h3 className="font-bold text-lg">Today's Attendance Log</h3>
+                <div className="flex gap-2">
+                  <select
+                    value={deptFilter}
+                    onChange={e => setDeptFilter(e.target.value)}
+                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                  >
+                    <option value="">All Depts</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  <select
+                    value={shiftFilter}
+                    onChange={e => setShiftFilter(e.target.value)}
+                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                  >
+                    <option value="">All Shifts</option>
+                    {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[var(--text-md)] border-b pb-2">
+                      <th className="pb-3 font-semibold w-1/4">Employee</th>
+                      <th className="pb-3 font-semibold">Dept</th>
+                      <th className="pb-3 font-semibold">Shift</th>
+                      <th className="pb-3 font-semibold">In</th>
+                      <th className="pb-3 font-semibold">Out</th>
+                      <th className="pb-3 font-semibold">Worked</th>
+                      <th className="pb-3 font-semibold">Late</th>
+                      <th className="pb-3 font-semibold">OT</th>
+                      <th className="pb-3 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading && (
+                      <tr><td colSpan={9} className="py-12 text-center text-[var(--text-md)]">Loading…</td></tr>
+                    )}
+                    {!loading && records.length === 0 && (
+                      <tr><td colSpan={9} className="py-12 text-center text-[var(--text-md)]">No attendance records for this date.</td></tr>
+                    )}
+                    {records.map((r, i) => {
+                      const isLate = r.status === 'late';
+                      const hasOT = (r.overtime_minutes || 0) > 0;
+                      return (
+                        <tr key={r.id || i} className={`border-b border-gray-100 ${isLate ? 'bg-orange-50/30' : hasOT ? 'bg-green-50/30' : ''}`}>
+                          <td className="py-3">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={`https://i.pravatar.cc/150?u=${r.employee_id}`}
+                                className="w-8 h-8 rounded-full"
+                                alt="avatar"
+                              />
+                              <div>
+                                <div className="font-semibold text-gray-900">{r.employee_name || r.full_name || `EMP${r.employee_id}`}</div>
+                                <div className="text-xs text-[var(--text-md)]">{r.employee_code || `EMP${String(r.employee_id).padStart(3,'0')}`}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-[var(--text-md)]">{r.department_name || r.department || '—'}</td>
+                          <td className="text-primary font-medium">{r.shift_name || r.shift || '—'}</td>
+                          <td className="font-semibold">{fmtTime(r.first_punch_in || r.check_in)}</td>
+                          <td className="font-semibold text-gray-700">{fmtTime(r.last_punch_out || r.check_out)}</td>
+                          <td className="font-medium text-gray-700">{fmtMins(r.worked_minutes)}</td>
+                          <td className={`font-semibold ${(r.late_minutes || 0) > 0 ? 'text-warning' : 'text-[var(--text-md)]'}`}>
+                            {(r.late_minutes || 0) > 0 ? fmtMins(r.late_minutes) : '—'}
+                          </td>
+                          <td className={`font-semibold ${(r.overtime_minutes || 0) > 0 ? 'text-success' : 'text-[var(--text-md)]'}`}>
+                            {(r.overtime_minutes || 0) > 0 ? fmtMins(r.overtime_minutes) : '—'}
+                          </td>
+                          <td>{statusBadge(r.status)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           </div>
-        ) : (
-          <div>
-            {activeTab === 'daily' && renderDailyTab()}
-            {activeTab === 'corrections' && renderCorrectionsTab()}
-            {activeTab === 'buffer' && renderBufferTab()}
+
+          <div className="side-column flex flex-col gap-6">
+            {/* Late Arrivals */}
+            <Card>
+              <div className="card-header-flex mb-4">
+                <h3 className="font-bold">Late Arrivals</h3>
+                <span className="badge badge-warning-light text-warning border border-warning/20">{stats.late} today</span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {records.filter(r => r.status === 'late').slice(0, 5).map((r, i) => (
+                  <div key={i} className="border border-warning/20 rounded-lg p-3 flex gap-3 items-center">
+                    <div className="w-8 h-8 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
+                      <Clock size={16} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-bold text-sm text-gray-900">{r.employee_name || `EMP${r.employee_id}`}</div>
+                      <div className="text-xs text-[var(--text-md)] mt-0.5">{r.department_name || '—'}</div>
+                    </div>
+                    <div className="text-warning font-semibold text-sm">{fmtMins(r.late_minutes)}</div>
+                  </div>
+                ))}
+                {records.filter(r => r.status === 'late').length === 0 && (
+                  <p className="text-sm text-[var(--text-md)] text-center py-4">No late arrivals</p>
+                )}
+              </div>
+            </Card>
+
+            {/* Absent Today */}
+            <Card>
+              <div className="card-header-flex mb-4">
+                <h3 className="font-bold">Absent Today</h3>
+                <span className="badge badge-danger-light text-danger border border-danger/20">{stats.absent} absent</span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {records.filter(r => r.status === 'absent').slice(0, 5).map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 border-b border-gray-50 pb-3">
+                    <img
+                      src={`https://i.pravatar.cc/150?u=abs_${r.employee_id}`}
+                      className="w-9 h-9 rounded-full"
+                      alt="avatar"
+                    />
+                    <div className="flex-1">
+                      <div className="font-bold text-sm text-gray-900">{r.employee_name || `EMP${r.employee_id}`}</div>
+                      <div className="text-xs text-[var(--text-md)]">{r.department_name || '—'} • {r.shift_name || '—'}</div>
+                    </div>
+                  </div>
+                ))}
+                {records.filter(r => r.status === 'absent').length === 0 && (
+                  <p className="text-sm text-[var(--text-md)] text-center py-4">No absences today</p>
+                )}
+              </div>
+            </Card>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
-};
+}

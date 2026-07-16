@@ -2,45 +2,41 @@ import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard, Users, Calendar, Stethoscope, Bed, FileText,
-  Pill, Package, ClipboardList, Clock, Banknote, Building2,
-  LogOut, ChevronDown, ChevronRight, UserCheck
+  Users, CalendarDays, Clock, FileMinus, AlertCircle, Banknote,
+  FolderOpen, Calendar, Stethoscope, Link2, Bed, LogOut,
+  ShieldCheck, Settings
 } from 'lucide-react';
 import './DashboardLayout.css';
 
 /* ── Nav structure ─────────────────────────────────────── */
 const NAV_GROUPS = [
   {
-    label: 'Patient Care',
+    label: 'STAFF & SALARY',
     items: [
-      { name: 'Dashboard',      path: '/',                          icon: LayoutDashboard, end: true },
-      { name: 'Patients',       path: '/patients/records',          icon: Users,            perm: 'patient.view' },
-      { name: 'Appointments',   path: '/patients/appointments',     icon: Calendar,         perm: 'appointment.view' },
-      { name: 'Consultation',   path: '/patients/consultation',     icon: Stethoscope,      perm: 'consultation.view' },
+      { name: 'HR & Employees', path: '/hr/employees', icon: Users, perm: 'hr_employee.view' },
+      { name: 'Shift & Roster', path: '/hr/roster', icon: CalendarDays, perm: 'shift_roster.view' },
+      { name: 'Attendance', path: '/hr/attendance', icon: Clock, perm: 'attendance.view' },
+      { name: 'Leave', path: '/hr/leave', icon: FileMinus, perm: 'hr_employee.view' },
+      { name: 'Fine', path: '/hr/fine', icon: AlertCircle, perm: 'hr_employee.view' },
+      { name: 'Payroll', path: '/hr/payroll', icon: Banknote, perm: 'payroll.view' },
     ],
   },
   {
-    label: 'IPD / Hospital',
+    label: 'PATIENT & HOSPITAL',
     items: [
-      { name: 'Admissions',     path: '/hospital/admissions',       icon: Bed,              perm: 'admission.view' },
-      { name: 'Discharge',      path: '/hospital/discharge',        icon: FileText,         perm: 'discharge.view' },
+      { name: 'Patient Records', path: '/patients/records', icon: FolderOpen, perm: 'patient.view' },
+      { name: 'Appointments', path: '/patients/appointments', icon: Calendar, perm: 'appointment.view' },
+      { name: 'Consultation & Rx', path: '/patients/consultation', icon: Stethoscope, perm: 'consultation.view' },
+      { name: 'Pharmacy', path: '/pharmacy/billing', icon: Link2, perm: 'pharmacy.view' },
+      { name: 'Admission & Beds', path: '/hospital/admissions', icon: Bed, perm: 'admission.view' },
+      { name: 'Discharge', path: '/hospital/discharge', icon: LogOut, perm: 'discharge.view' },
     ],
   },
   {
-    label: 'Pharmacy',
+    label: 'ADMIN',
     items: [
-      { name: 'Billing (POS)',  path: '/pharmacy/billing',          icon: Pill,             perm: 'pharmacy.view' },
-      { name: 'Stock / Inventory', path: '/pharmacy/stock',         icon: Package,          perm: 'pharmacy.view' },
-    ],
-  },
-  {
-    label: 'Human Resources',
-    items: [
-      { name: 'Employees',      path: '/hr/employees',              icon: UserCheck,        perm: 'hr_employee.view' },
-      { name: 'Departments & Roles', path: '/hr/structure',          icon: Building2,        perm: 'hr_employee.view' },
-      { name: 'Duty Roster',    path: '/hr/roster',                 icon: ClipboardList,    perm: 'shift_roster.view' },
-      { name: 'Attendance',     path: '/hr/attendance',             icon: Clock,            perm: 'attendance.view' },
-      { name: 'Payroll',        path: '/hr/payroll',                icon: Banknote,         perm: 'payroll.view' },
+      { name: 'Roles & Permissions', path: '/hr/structure', icon: ShieldCheck, perm: 'hr_employee.view' },
+      { name: 'Settings', path: '/settings', icon: Settings, perm: 'hr_employee.view' },
     ],
   },
 ];

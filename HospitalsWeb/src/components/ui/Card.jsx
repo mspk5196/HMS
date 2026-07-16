@@ -3,8 +3,8 @@ import React from 'react';
 export function Card({ children, className = '', onClick }) {
   return (
     <div
-      className={`bg-white border border-[#c4c9cf] rounded-md ${onClick ? 'cursor-pointer hover:border-[#9ca3af]' : ''} ${className}`}
-      style={{ borderRadius: 6 }}
+      className={`bg-[var(--panel)] border border-[var(--line)] ${onClick ? 'cursor-pointer hover:border-[var(--primary)]' : ''} ${className}`}
+      style={{ borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}
       onClick={onClick}
     >
       {children}
@@ -14,12 +14,12 @@ export function Card({ children, className = '', onClick }) {
 
 export function CardHeader({ title, subtitle, action, icon, className = '' }) {
   return (
-    <div className={`flex items-center justify-between px-4 py-3 border-b border-[#dde1e5] ${className}`}>
-      <div className="flex items-center gap-2">
-        {icon && <span className="text-[#767c83]" style={{ width: 16, height: 16 }}>{icon}</span>}
+    <div className={`flex items-center justify-between px-5 py-4 border-b border-[var(--line-lt)] ${className}`}>
+      <div className="flex items-center gap-3">
+        {icon && <span className="text-[var(--mute)] w-4 h-4">{icon}</span>}
         <div>
-          {title && <h3 className="text-[13px] font-semibold text-[#1e2227]">{title}</h3>}
-          {subtitle && <p className="text-[11px] text-[#767c83] mt-0.5">{subtitle}</p>}
+          {title && <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>}
+          {subtitle && <p className="text-xs text-[var(--mute)] mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {action && <div>{action}</div>}

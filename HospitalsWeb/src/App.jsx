@@ -26,6 +26,8 @@ import { Roster }     from './pages/hr/Roster';
 import { Attendance } from './pages/hr/Attendance';
 import { Payroll }    from './pages/hr/Payroll';
 import { Structure }  from './pages/hr/Structure';
+import { Leave }      from './pages/hr/Leave';
+import { Fine }       from './pages/hr/Fine';
 
 // ── Auth Guard ─────────────────────────────────────────
 const RequireAuth = ({ children }) => {
@@ -73,6 +75,8 @@ export default function App() {
               <Route path="attendance" element={<Attendance />} />
               <Route path="payroll"    element={<Payroll />} />
               <Route path="structure"  element={<Structure />} />
+              <Route path="leave"      element={<Leave />} />
+              <Route path="fine"       element={<Fine />} />
             </Route>
 
             {/* Fallback */}

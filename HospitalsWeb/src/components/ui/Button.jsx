@@ -13,12 +13,12 @@ export function Button({
   const base = 'inline-flex items-center justify-center gap-1.5 font-semibold cursor-pointer border rounded transition-all duration-150 select-none disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variants = {
-    primary:   'bg-[#1e2227] text-white border-[#1e2227] hover:bg-[#2c3340]',
-    secondary: 'bg-[#f0f2f4] text-[#1e2227] border-[#c4c9cf] hover:bg-[#e5e8eb]',
-    outline:   'bg-white text-[#1e2227] border-[#c4c9cf] hover:bg-[#f5f6f7]',
-    danger:    'bg-[#dc2626] text-white border-[#dc2626] hover:bg-[#b91c1c]',
-    success:   'bg-[#059669] text-white border-[#059669] hover:bg-[#047857]',
-    ghost:     'bg-transparent text-[#4a5058] border-transparent hover:bg-[#f0f2f4]',
+    primary:   'bg-[var(--primary)] text-white border-transparent hover:bg-[var(--accent)] shadow-sm',
+    secondary: 'bg-[#f0f2f4] text-[var(--text)] border-[var(--line)] hover:bg-[#e5e8eb]',
+    outline:   'bg-white text-[var(--text)] border-[var(--line)] hover:bg-[#f9fafb]',
+    danger:    'bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]',
+    success:   'bg-[#059669] text-white border-transparent hover:bg-[#047857]',
+    ghost:     'bg-transparent text-[var(--mute)] border-transparent hover:bg-[#f3f4f6]',
   };
 
   const sizes = {
@@ -32,7 +32,7 @@ export function Button({
     <button
       className={`${base} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${fullWidth ? 'w-full' : ''} ${className}`}
       disabled={isLoading || props.disabled}
-      style={{ borderRadius: 5 }}
+      style={{ borderRadius: '8px' }}
       {...props}
     >
       {isLoading ? (

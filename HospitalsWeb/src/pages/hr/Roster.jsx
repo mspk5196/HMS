@@ -1,147 +1,324 @@
-import { useState, useEffect } from 'react';
-import './Roster.css';
-import { Button } from '../../components/ui/Button';
+import { useState, useEffect, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { 
+  Users, Sun, Moon, Coffee, 
+  Calendar, ChevronDown, Wand2, Send,
+  Filter
+} from 'lucide-react';
+import './Roster.css';
 
-export const Roster = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+const SHIFT_ABBR = { 'M': 'M', 'E': 'E', 'N': 'N', 'WO': 'WO' };
+
+function renderShift(shift) {
+  switch (shift) {
+    case 'M': return <span className="shift-cell text-primary bg-primary/10">M</span>;
+    case 'E': return <span className="shift-cell text-warning bg-warning/10">E</span>;
+    case 'N': return <span className="shift-cell text-gray-500 bg-gray-100">N</span>;
+    case 'WO': return <span className="shift-cell text-danger font-medium">WO</span>;
+    default: return <span className="shift-cell"></span>;
+  }
+}
+
+function getShiftCode(shiftName) {
+  if (!shiftName) return '';
+  const n = shiftName.toLowerCase();
+  if (n.includes('morn') || n.includes('day')) return 'M';
+  if (n.includes('even') || n.includes('after')) return 'E';
+  if (n.includes('night')) return 'N';
+  if (n.includes('off') || n.includes('week')) return 'WO';
+  return n.charAt(0).toUpperCase();
+}
+
+function shiftBadge(shiftName) {
+  const code = getShiftCode(shiftName);
+  switch (code) {
+    case 'M': return <span className="badge bg-primary/10 text-primary border-none">{shiftName || 'Morning'}</span>;
+    case 'E': return <span className="badge bg-warning/10 text-warning border-none">{shiftName || 'Evening'}</span>;
+    case 'N': return <span className="badge bg-gray-100 text-gray-500 border-none">{shiftName || 'Night'}</span>;
+    case 'WO': return <span className="badge bg-danger/10 text-danger border-none">Week Off</span>;
+    default:  return <span className="badge bg-gray-100 text-gray-600 border-none">{shiftName}</span>;
+  }
+}
+
+export function Roster() {
+  const { request, loading } = useApi();
+  const [roster, setRoster] = useState([]); // array of { employee, days: [{date, shift_code}] }
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
-  const [rosterData, setRosterData] = useState([]);
-  const { request } = useApi();
+  const [departments, setDepartments] = useState([]);
+  const [deptFilter, setDeptFilter] = useState('');
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  const month = currentDate.getMonth() + 1;
-  const year = currentDate.getFullYear();
-  const daysInMonth = new Date(year, month, 0).getDate();
+  // Compute days in selected month
+  const [year, mon] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, mon, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const firstDow = new Date(year, mon - 1, 1).getDay(); // 0=Sun
+  const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-  const loadData = async () => {
-    const [empRes, shiftRes, rosterRes] = await Promise.all([
-      request('/hr/employees').catch(() => null),
-      request('/hr/shifts').catch(() => null),
-      request(`/hr/roster?month=${month}&year=${year}`).catch(() => null)
-    ]);
-
-    if (empRes?.success) setEmployees(empRes.data?.rows || empRes.data || []);
-    if (shiftRes?.success) setShifts(shiftRes.data?.rows || shiftRes.data || []);
-    if (rosterRes?.success) setRosterData(rosterRes.data || []);
-  };
+  const load = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ month });
+      if (deptFilter) params.set('department_id', deptFilter);
+      const res = await request(`/hr/roster?${params}`);
+      const data = res?.data || [];
+      // Data shape: array of { employee_id, employee_name, department_name, roster: [{date, shift_code, shift_name}] }
+      setRoster(Array.isArray(data) ? data : []);
+    } catch (_) {}
+  }, [month, deptFilter]);
 
   useEffect(() => {
-    loadData();
-  }, [month, year]);
+    request('/hr/departments').then(r => setDepartments(r?.data || [])).catch(() => {});
+    request('/hr/shifts').then(r => setShifts(r?.data || [])).catch(() => {});
+    request('/hr/employees?limit=200').then(r => setEmployees(r?.data?.rows || r?.data || [])).catch(() => {});
+  }, []);
 
-  const handlePrevMonth = () => setCurrentDate(new Date(year, month - 2, 1));
-  const handleNextMonth = () => setCurrentDate(new Date(year, month, 1));
+  useEffect(() => { load(); }, [load]);
 
-  const getShiftForDay = (empId, day) => {
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return rosterData.find(r => r.employee_id === empId && r.shift_date.startsWith(dateStr));
-  };
+  // Stats derived from roster
+  const shiftCounts = roster.reduce((acc, emp) => {
+    (emp.roster || []).forEach(d => {
+      const code = d.shift_code || getShiftCode(d.shift_name);
+      if (code === 'M') acc.morning = (acc.morning || 0) + 1;
+      else if (code === 'E') acc.evening = (acc.evening || 0) + 1;
+      else if (code === 'N') acc.night = (acc.night || 0) + 1;
+      else if (code === 'WO') acc.wo = (acc.wo || 0) + 1;
+    });
+    return acc;
+  }, {});
 
-  const handleCellClick = async (empId, day) => {
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const current = getShiftForDay(empId, day);
-    
-    // Cycle through: [No Shift] -> Shift 1 -> Shift 2 ... -> Week Off -> Night Duty -> [No Shift]
-    let nextPayload = { employee_id: empId, shift_date: dateStr, shift_id: null, is_week_off: false, is_night_duty: false };
-    
-    if (!current) {
-      if (shifts.length > 0) nextPayload.shift_id = shifts[0].id;
-    } else if (current.shift_id) {
-      const idx = shifts.findIndex(s => s.id === current.shift_id);
-      if (idx + 1 < shifts.length) {
-        nextPayload.shift_id = shifts[idx + 1].id;
-      } else {
-        nextPayload.is_week_off = true;
-      }
-    } else if (current.is_week_off) {
-      nextPayload.is_night_duty = true;
-    }
+  const monthLabel = new Date(year, mon - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
-    const res = await request('/hr/roster/day', {
-      method: 'POST',
-      body: JSON.stringify(nextPayload)
-    }).catch(() => null);
-    if (res?.success) loadData();
-  };
+  // Build a lookup for employee roster: empId -> { day -> shift_code }
+  const rosterMap = {};
+  roster.forEach(emp => {
+    rosterMap[emp.employee_id] = {};
+    (emp.roster || []).forEach(d => {
+      const day = new Date(d.date).getDate();
+      rosterMap[emp.employee_id][day] = d.shift_code || getShiftCode(d.shift_name) || '';
+    });
+  });
 
-  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  // Employees with roster data
+  const rosterEmployees = roster.length > 0 ? roster : employees.map(emp => ({
+    employee_id: emp.id,
+    employee_name: emp.full_name,
+    employee_code: emp.employee_code,
+    department_name: emp.department_name || '',
+    roster: [],
+  }));
 
   return (
-    <div className="roster-container">
-      <div className="roster-header">
-        <div>
-          <div className="roster-title">Shift & Roster Management</div>
-          <div className="roster-subtitle">Calendar-style roster — click a cell to set a shift, week-off, or night duty.</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Button variant="outline" onClick={handlePrevMonth}>Prev</Button>
-          <span style={{ fontWeight: '600', fontSize: '12px', color: 'var(--text)', width: '128px', textAlign: 'center' }}>{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
-          <Button variant="outline" onClick={handleNextMonth}>Next</Button>
-        </div>
-      </div>
+    <div className="page-container">
+      <PageHeader 
+        breadcrumbs={[
+          { label: 'HR & Payroll', path: '#' },
+          { label: 'Shift & Roster' }
+        ]}
+        actions={
+          <div className="flex gap-3">
+            <input
+              type="month"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+            />
+            <Button variant="outline" className="flex items-center gap-2">
+              <Wand2 size={16} /> AI Suggest
+            </Button>
+            <Button variant="primary" className="bg-[#1e3a8a] text-white hover:bg-[#1e3a8a]/90 flex items-center gap-2">
+              <Send size={16} /> Publish Roster
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="roster-table-card" style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'white' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="roster-table" style={{ width: '100%', fontSize: '12px', textAlign: 'left', borderCollapse: 'collapse' }}>
-            <thead style={{ fontSize: '10px', color: 'var(--text-md)', background: 'var(--panel)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <tr>
-                <th style={{ padding: '8px 16px', position: 'sticky', left: 0, background: 'var(--panel)', zIndex: 10, width: '160px', borderRight: '1px solid var(--line)', borderBottom: '1px solid var(--line)' }}>Employee</th>
-                {daysArray.map(d => (
-                  <th key={d} style={{ padding: '8px 6px', textAlign: 'center', borderRight: '1px solid var(--line)', borderBottom: '1px solid var(--line)', minWidth: '32px' }}>{d}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {employees.length === 0 ? (
-                 <tr>
-                    <td colSpan={daysInMonth + 1} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--mute)' }}>
-                      No employees found.
-                    </td>
-                 </tr>
-              ) : employees.map(emp => (
-                <tr key={emp.id} style={{ background: 'transparent', borderBottom: '1px solid var(--line)' }}>
-                  <td style={{ padding: '8px 16px', fontWeight: '500', color: 'var(--text)', position: 'sticky', left: 0, background: 'white', zIndex: 9, borderRight: '1px solid var(--line)', width: '160px' }}>
-                    {emp.full_name}
-                  </td>
-                  {daysArray.map(day => {
-                    const cellData = getShiftForDay(emp.id, day);
-                    let label = '-';
-                    let bg = 'color: var(--mute)';
-                    let bgColor = 'transparent';
-                    if (cellData?.is_week_off) { label = 'WO'; bgColor = 'var(--panel)'; bg = 'color: var(--text-md)'; }
-                    else if (cellData?.is_night_duty) { label = 'ND'; bgColor = 'var(--panel)'; bg = 'color: var(--text-md)'; }
-                    else if (cellData?.shift_id) {
-                      label = cellData.shift_name?.substring(0, 1).toUpperCase() || 'S';
-                      bgColor = 'var(--primary)';
-                      bg = 'color: white';
-                    }
-                    
+      <div className="page-content roster-page">
+        <div className="page-header-text mb-6">
+          <h1 className="text-2xl font-bold mb-1">Shift & Roster Management</h1>
+          <p className="text-[var(--text-md)] text-sm">Plan and manage monthly shift rotations for all departments.</p>
+        </div>
+
+        <div className="stats-grid mb-6">
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Total Staff Scheduled</div>
+              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Users size={18} /></div>
+            </div>
+            <div className="stat-value">{rosterEmployees.length}</div>
+            <div className="stat-sub">For {monthLabel}</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Morning Shifts</div>
+              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Sun size={18} /></div>
+            </div>
+            <div className="stat-value">{shiftCounts.morning || 0}</div>
+            <div className="stat-sub">Across all depts</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Night Shifts</div>
+              <div className="stat-icon-wrapper bg-gray-100 text-gray-500"><Moon size={18} /></div>
+            </div>
+            <div className="stat-value">{shiftCounts.night || 0}</div>
+            <div className="stat-sub">Across all depts</div>
+          </Card>
+
+          <Card className="stat-card">
+            <div className="stat-card-header">
+              <div className="stat-label">Week Offs Assigned</div>
+              <div className="stat-icon-wrapper bg-danger/10 text-danger"><Coffee size={18} /></div>
+            </div>
+            <div className="stat-value">{shiftCounts.wo || 0}</div>
+            <div className="stat-sub">This month</div>
+          </Card>
+        </div>
+
+        {/* Legend & Filter */}
+        <Card className="mb-6 flex flex-wrap justify-between items-center py-3">
+          <div className="flex items-center gap-6">
+            <span className="font-semibold text-sm">Legend</span>
+            {shifts.length > 0 ? shifts.map(s => (
+              <div key={s.id} className="flex items-center gap-2 text-sm">
+                <span className="w-6 h-6 flex items-center justify-center rounded bg-primary/10 text-primary font-medium text-xs">
+                  {getShiftCode(s.name)}
+                </span>
+                {s.name} {s.start_time && s.end_time ? `(${s.start_time}–${s.end_time})` : ''}
+              </div>
+            )) : (
+              <>
+                <div className="flex items-center gap-2 text-sm"><span className="w-6 h-6 flex items-center justify-center rounded bg-primary/10 text-primary font-medium text-xs">M</span> Morning (9am–6pm)</div>
+                <div className="flex items-center gap-2 text-sm"><span className="w-6 h-6 flex items-center justify-center rounded bg-warning/10 text-warning font-medium text-xs">E</span> Evening (2pm–10pm)</div>
+                <div className="flex items-center gap-2 text-sm"><span className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 text-gray-500 font-medium text-xs">N</span> Night (10pm–7am)</div>
+                <div className="flex items-center gap-2 text-sm"><span className="text-danger font-medium text-sm w-6 text-center">WO</span> Week Off</div>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Filter size={16} className="text-gray-400" />
+            <span className="text-sm text-gray-600">Department:</span>
+            <select
+              value={deptFilter}
+              onChange={e => setDeptFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-primary bg-white"
+            >
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        </Card>
+
+        {/* Monthly Roster Table */}
+        <Card className="mb-6 overflow-hidden">
+          <h3 className="font-bold text-lg mb-4">Monthly Roster — {monthLabel}</h3>
+          {loading && <p className="text-center text-[var(--text-md)] py-8">Loading roster…</p>}
+          {!loading && rosterEmployees.length === 0 && (
+            <p className="text-center text-[var(--text-md)] py-8">No roster data for this period. Please publish roster first.</p>
+          )}
+          {!loading && rosterEmployees.length > 0 && (
+            <div className="overflow-x-auto roster-scroll-container">
+              <table className="roster-table w-full text-xs">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left font-semibold py-2 px-3 sticky left-0 bg-white z-10 w-48 min-w-[192px]">Employee</th>
+                    {days.map((day, idx) => {
+                      const dow = (firstDow + idx) % 7;
+                      return (
+                        <th key={day} className="text-center font-normal px-1 pb-2 w-7 min-w-[28px]">
+                          <div className="font-semibold text-gray-900">{day}</div>
+                          <div className="text-[10px] text-gray-400">{DOW_LABELS[dow]}</div>
+                        </th>
+                      );
+                    })}
+                    <th className="text-center font-semibold px-2 w-8 text-primary">M</th>
+                    <th className="text-center font-semibold px-2 w-8 text-warning">E</th>
+                    <th className="text-center font-semibold px-2 w-8 text-gray-500">N</th>
+                    <th className="text-center font-semibold px-2 w-8 text-danger">WO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rosterEmployees.map((emp, ri) => {
+                    const empRoster = rosterMap[emp.employee_id] || {};
+                    const counts = { M: 0, E: 0, N: 0, WO: 0 };
+                    days.forEach(d => {
+                      const code = empRoster[d] || '';
+                      if (counts[code] !== undefined) counts[code]++;
+                    });
                     return (
-                      <td 
-                        key={day} 
-                        style={{ padding: '4px', borderRight: '1px solid var(--line)', textAlign: 'center', cursor: 'pointer' }}
-                        onClick={() => handleCellClick(emp.id, day)}
-                      >
-                        <div style={{ width: '100%', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '3px', fontSize: '10px', fontWeight: '700', background: bgColor, ...{ color: bg.replace('color: ', '').trim() } }}>
-                          {label}
-                        </div>
-                      </td>
+                      <tr key={emp.employee_id || ri} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-gray-50">
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`https://i.pravatar.cc/150?u=roster_${emp.employee_id}`}
+                              className="w-7 h-7 rounded-full"
+                              alt="avatar"
+                            />
+                            <div>
+                              <div className="font-semibold text-gray-900 leading-tight">{emp.employee_name || `EMP${emp.employee_id}`}</div>
+                              <div className="text-[10px] text-gray-500">{emp.department_name || '—'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        {days.map(d => (
+                          <td key={d} className="text-center px-0.5">
+                            {renderShift(empRoster[d] || '')}
+                          </td>
+                        ))}
+                        <td className="text-center font-semibold text-primary">{counts.M}</td>
+                        <td className="text-center font-semibold text-warning">{counts.E}</td>
+                        <td className="text-center font-semibold text-gray-500">{counts.N}</td>
+                        <td className="text-center font-semibold text-danger">{counts.WO}</td>
+                      </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        {/* Shifts Config Table */}
+        <Card>
+          <div className="card-header-flex mb-4">
+            <h3 className="font-bold text-lg">Configured Shifts</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[var(--text-md)] border-b pb-2">
+                  <th className="pb-3 font-semibold">Shift Name</th>
+                  <th className="pb-3 font-semibold">Code</th>
+                  <th className="pb-3 font-semibold">Start Time</th>
+                  <th className="pb-3 font-semibold">End Time</th>
+                  <th className="pb-3 font-semibold">Grace Period</th>
+                  <th className="pb-3 font-semibold">Type</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      <div style={{ display: 'inline-flex', gap: '16px', fontSize: '12px', color: 'var(--mute)', background: 'white', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ width: '16px', height: '16px', background: 'var(--primary)', color: 'white', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: '700', marginRight: '8px' }}>S</div> Shift (S)</div>
-        <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ width: '16px', height: '16px', background: 'var(--panel)', color: 'var(--text-md)', border: '1px solid var(--line)', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: '700', marginRight: '8px' }}>WO</div> Week Off (WO)</div>
-        <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ width: '16px', height: '16px', background: 'var(--panel)', color: 'var(--text-md)', border: '1px solid var(--line)', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: '700', marginRight: '8px' }}>ND</div> Night Duty (ND)</div>
+              </thead>
+              <tbody>
+                {shifts.length === 0 && (
+                  <tr><td colSpan={6} className="py-8 text-center text-[var(--text-md)]">No shifts configured.</td></tr>
+                )}
+                {shifts.map((s, i) => (
+                  <tr key={s.id || i} className="border-b border-gray-100">
+                    <td className="py-3 font-semibold text-gray-900">{s.name}</td>
+                    <td>{shiftBadge(s.name)}</td>
+                    <td className="font-medium">{s.start_time || '—'}</td>
+                    <td className="font-medium">{s.end_time || '—'}</td>
+                    <td className="text-[var(--text-md)]">{s.grace_minutes ? `${s.grace_minutes} min` : '—'}</td>
+                    <td className="text-[var(--text-md)]">{s.shift_type || s.type || 'Regular'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
     </div>
   );
-};
+}

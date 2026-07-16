@@ -21,7 +21,7 @@ export function TableBody({ children }) {
 export function TableRow({ children, onClick, className = '' }) {
   return (
     <tr
-      className={`border-b border-[#eef0f2] ${onClick ? 'cursor-pointer hover:bg-[#f8f9fa]' : 'hover:bg-[#fafbfc]'} ${className}`}
+      className={`border-b border-[var(--line-lt)] ${onClick ? 'cursor-pointer hover:bg-[var(--line-lt)]' : 'hover:bg-[#fafbfc]'} ${className}`}
       onClick={onClick}
     >
       {children}
@@ -32,7 +32,7 @@ export function TableRow({ children, onClick, className = '' }) {
 export function TableHead({ children, align = 'left', className = '' }) {
   const alignClass = { left: 'text-left', right: 'text-right', center: 'text-center' }[align] || 'text-left';
   return (
-    <th className={`px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#767c83] bg-[#f8f9fa] border-b border-[#dde1e5] whitespace-nowrap ${alignClass} ${className}`}>
+    <th className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-[var(--mute)] bg-white border-b border-[var(--line)] whitespace-nowrap ${alignClass} ${className}`}>
       {children}
     </th>
   );
@@ -41,7 +41,7 @@ export function TableHead({ children, align = 'left', className = '' }) {
 export function TableCell({ children, align = 'left', className = '', colSpan }) {
   const alignClass = { left: 'text-left', right: 'text-right', center: 'text-center' }[align] || 'text-left';
   return (
-    <td className={`px-3 py-2.5 text-[13px] text-[#1e2227] ${alignClass} ${className}`} colSpan={colSpan}>
+    <td className={`px-4 py-3 text-[13px] text-[var(--text)] ${alignClass} ${className}`} colSpan={colSpan}>
       {children}
     </td>
   );
