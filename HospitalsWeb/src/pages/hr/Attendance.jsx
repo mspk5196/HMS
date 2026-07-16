@@ -70,7 +70,7 @@ export function Attendance() {
   const displayDate = new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="page-container">
+    <div className="attendance-page hr-overview-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -78,77 +78,85 @@ export function Attendance() {
         ]}
         searchPlaceholder="Search employee..."
         actions={
-          <div className="flex gap-3">
+          <div className="attendance-actions">
             <input
               type="date"
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+              className="attendance-date-input"
             />
-            <Button variant="outline" className="flex items-center gap-2">
-              <Download size={16} /> Export
-            </Button>
-            <Button variant="primary" onClick={load} className="bg-primary flex items-center gap-2">
-              <RefreshCw size={16} /> Sync Biometric
-            </Button>
+            <button className="hr-btn hr-btn-outline" style={{ borderRadius: '8px', height: '36px', padding: '0 18px' }}>
+              <Download size={16} /> <span>Export</span>
+            </button>
+            <button onClick={load} className="hr-btn hr-btn-primary" style={{ borderRadius: '8px', height: '36px', padding: '0 18px' }}>
+              <RefreshCw size={16} /> <span>Sync Biometric</span>
+            </button>
           </div>
         }
       />
 
       <div className="page-content attendance-page">
-        <div className="page-header-text mb-6">
-          <h1 className="text-2xl font-bold mb-1">Attendance — {displayDate}</h1>
-          <p className="text-[var(--text-md)] text-sm">Live attendance log synced from biometric terminals across all departments.</p>
+        <div className="hr-title-section">
+          <h1 className="hr-title-main">Attendance — {displayDate}</h1>
+          <p className="hr-title-desc">Live attendance log synced from biometric terminals across all departments.</p>
         </div>
 
         <div className="stats-grid mb-6">
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-present">
+            <div className="stat-card-left">
               <div className="stat-label">Present Today</div>
-              <div className="stat-icon-wrapper bg-success/10 text-success"><UserCheck size={18} /></div>
+              <div className="stat-value">{stats.present}</div>
+              <div className="stat-sub stat-sub-inline"><span>of {stats.total} scheduled</span></div>
             </div>
-            <div className="stat-value">{stats.present}</div>
-            <div className="stat-sub">of {stats.total} scheduled</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <UserCheck size={16} />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-absent">
+            <div className="stat-card-left">
               <div className="stat-label">Absent</div>
-              <div className="stat-icon-wrapper bg-danger/10 text-danger"><UserMinus size={18} /></div>
+              <div className="stat-value">{stats.absent}</div>
+              <div className="stat-sub">Unplanned or on leave</div>
             </div>
-            <div className="stat-value">{stats.absent}</div>
-            <div className="stat-sub">no-show or absent</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <UserMinus size={16} />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-late">
+            <div className="stat-card-left">
               <div className="stat-label">Late Arrivals</div>
-              <div className="stat-icon-wrapper bg-warning/10 text-warning"><Clock size={18} /></div>
+              <div className="stat-value">{stats.late}</div>
+              <div className="stat-sub">Requires delay check</div>
             </div>
-            <div className="stat-value">{stats.late}</div>
-            <div className="stat-sub">arrived after shift start</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <Clock size={16} />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-ot">
+            <div className="stat-card-left">
               <div className="stat-label">Overtime Today</div>
-              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Timer size={18} /></div>
+              <div className="stat-value">{fmtMins(stats.ot_mins)}</div>
+              <div className="stat-sub">Total OT minutes</div>
             </div>
-            <div className="stat-value">{fmtMins(stats.ot_mins)}</div>
-            <div className="stat-sub">across {records.filter(r => (r.overtime_minutes || 0) > 0).length} employees</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <Timer size={16} />
+            </div>
           </Card>
         </div>
 
         <div className="dashboard-grid">
           <div className="main-column">
             <Card className="h-full">
-              <div className="card-header-flex mb-4">
-                <h3 className="font-bold text-lg">Today's Attendance Log</h3>
-                <div className="flex gap-2">
+              <div className="card-header-flex">
+                <h3 className="section-title">Today's Attendance Log</h3>
+                <div className="filter-row">
                   <select
                     value={deptFilter}
                     onChange={e => setDeptFilter(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                    className="filter-select"
                   >
                     <option value="">All Depts</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -156,7 +164,7 @@ export function Attendance() {
                   <select
                     value={shiftFilter}
                     onChange={e => setShiftFilter(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                    className="filter-select"
                   >
                     <option value="">All Shifts</option>
                     {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -164,57 +172,57 @@ export function Attendance() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="attendance-table">
                   <thead>
-                    <tr className="text-left text-[var(--text-md)] border-b pb-2">
-                      <th className="pb-3 font-semibold w-1/4">Employee</th>
-                      <th className="pb-3 font-semibold">Dept</th>
-                      <th className="pb-3 font-semibold">Shift</th>
-                      <th className="pb-3 font-semibold">In</th>
-                      <th className="pb-3 font-semibold">Out</th>
-                      <th className="pb-3 font-semibold">Worked</th>
-                      <th className="pb-3 font-semibold">Late</th>
-                      <th className="pb-3 font-semibold">OT</th>
-                      <th className="pb-3 font-semibold">Status</th>
+                    <tr>
+                      <th className="attendance-th attendance-th-wide">Employee</th>
+                      <th className="attendance-th">Dept</th>
+                      <th className="attendance-th">Shift</th>
+                      <th className="attendance-th">In</th>
+                      <th className="attendance-th">Out</th>
+                      <th className="attendance-th">Worked</th>
+                      <th className="attendance-th">Late</th>
+                      <th className="attendance-th">OT</th>
+                      <th className="attendance-th">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading && (
-                      <tr><td colSpan={9} className="py-12 text-center text-[var(--text-md)]">Loading…</td></tr>
+                      <tr><td colSpan={9} className="attendance-empty">Loading…</td></tr>
                     )}
                     {!loading && records.length === 0 && (
-                      <tr><td colSpan={9} className="py-12 text-center text-[var(--text-md)]">No attendance records for this date.</td></tr>
+                      <tr><td colSpan={9} className="attendance-empty">No attendance records for this date.</td></tr>
                     )}
                     {records.map((r, i) => {
                       const isLate = r.status === 'late';
                       const hasOT = (r.overtime_minutes || 0) > 0;
                       return (
-                        <tr key={r.id || i} className={`border-b border-gray-100 ${isLate ? 'bg-orange-50/30' : hasOT ? 'bg-green-50/30' : ''}`}>
-                          <td className="py-3">
-                            <div className="flex items-center gap-3">
+                        <tr key={r.id || i} className={isLate ? 'attendance-row attendance-row-late' : hasOT ? 'attendance-row attendance-row-overtime' : 'attendance-row'}>
+                          <td className="attendance-td">
+                            <div className="attendance-employee-cell">
                               <img
                                 src={`https://i.pravatar.cc/150?u=${r.employee_id}`}
-                                className="w-8 h-8 rounded-full"
+                                className="attendance-avatar"
                                 alt="avatar"
                               />
                               <div>
-                                <div className="font-semibold text-gray-900">{r.employee_name || r.full_name || `EMP${r.employee_id}`}</div>
-                                <div className="text-xs text-[var(--text-md)]">{r.employee_code || `EMP${String(r.employee_id).padStart(3,'0')}`}</div>
+                                <div className="attendance-employee-name">{r.employee_name || r.full_name || `EMP${r.employee_id}`}</div>
+                                <div className="attendance-employee-code">{r.employee_code || `EMP${String(r.employee_id).padStart(3,'0')}`}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="text-[var(--text-md)]">{r.department_name || r.department || '—'}</td>
-                          <td className="text-primary font-medium">{r.shift_name || r.shift || '—'}</td>
-                          <td className="font-semibold">{fmtTime(r.first_punch_in || r.check_in)}</td>
-                          <td className="font-semibold text-gray-700">{fmtTime(r.last_punch_out || r.check_out)}</td>
-                          <td className="font-medium text-gray-700">{fmtMins(r.worked_minutes)}</td>
-                          <td className={`font-semibold ${(r.late_minutes || 0) > 0 ? 'text-warning' : 'text-[var(--text-md)]'}`}>
+                          <td className="attendance-td attendance-muted">{r.department_name || r.department || '—'}</td>
+                          <td className="attendance-td attendance-shift">{r.shift_name || r.shift || '—'}</td>
+                          <td className="attendance-td attendance-strong">{fmtTime(r.first_punch_in || r.check_in)}</td>
+                          <td className="attendance-td attendance-strong">{fmtTime(r.last_punch_out || r.check_out)}</td>
+                          <td className="attendance-td attendance-normal">{fmtMins(r.worked_minutes)}</td>
+                          <td className={`attendance-td ${(r.late_minutes || 0) > 0 ? 'attendance-late' : 'attendance-muted'}`}>
                             {(r.late_minutes || 0) > 0 ? fmtMins(r.late_minutes) : '—'}
                           </td>
-                          <td className={`font-semibold ${(r.overtime_minutes || 0) > 0 ? 'text-success' : 'text-[var(--text-md)]'}`}>
+                          <td className={`attendance-td ${(r.overtime_minutes || 0) > 0 ? 'attendance-overtime' : 'attendance-muted'}`}>
                             {(r.overtime_minutes || 0) > 0 ? fmtMins(r.overtime_minutes) : '—'}
                           </td>
-                          <td>{statusBadge(r.status)}</td>
+                          <td className="attendance-td">{statusBadge(r.status)}</td>
                         </tr>
                       );
                     })}
@@ -227,51 +235,51 @@ export function Attendance() {
           <div className="side-column flex flex-col gap-6">
             {/* Late Arrivals */}
             <Card>
-              <div className="card-header-flex mb-4">
-                <h3 className="font-bold">Late Arrivals</h3>
-                <span className="badge badge-warning-light text-warning border border-warning/20">{stats.late} today</span>
+              <div className="card-header-flex">
+                <h3 className="section-title">Late Arrivals</h3>
+                <span className="badge badge-soft-warning">3 today</span>
               </div>
-              <div className="flex flex-col gap-3">
-                {records.filter(r => r.status === 'late').slice(0, 5).map((r, i) => (
-                  <div key={i} className="border border-warning/20 rounded-lg p-3 flex gap-3 items-center">
-                    <div className="w-8 h-8 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
+              <div className="late-list">
+                {records.filter(r => r.status === 'late').slice(0, 3).map((r, i) => (
+                  <div key={i} className="late-item">
+                    <div className="late-icon">
                       <Clock size={16} />
                     </div>
-                    <div className="flex-1">
-                      <div className="font-bold text-sm text-gray-900">{r.employee_name || `EMP${r.employee_id}`}</div>
-                      <div className="text-xs text-[var(--text-md)] mt-0.5">{r.department_name || '—'}</div>
+                    <div className="late-meta">
+                      <div className="late-name">{r.employee_name || `EMP${r.employee_id}`}</div>
+                      <div className="late-dept">{r.department_name || '—'}</div>
                     </div>
-                    <div className="text-warning font-semibold text-sm">{fmtMins(r.late_minutes)}</div>
+                    <div className="late-duration">{fmtMins(r.late_minutes)}</div>
                   </div>
                 ))}
                 {records.filter(r => r.status === 'late').length === 0 && (
-                  <p className="text-sm text-[var(--text-md)] text-center py-4">No late arrivals</p>
+                  <p className="empty-note">No late arrivals</p>
                 )}
               </div>
             </Card>
 
             {/* Absent Today */}
             <Card>
-              <div className="card-header-flex mb-4">
-                <h3 className="font-bold">Absent Today</h3>
-                <span className="badge badge-danger-light text-danger border border-danger/20">{stats.absent} absent</span>
+              <div className="card-header-flex">
+                <h3 className="section-title">Absent Today</h3>
+                <span className="badge badge-soft-danger">{stats.absent} absent</span>
               </div>
-              <div className="flex flex-col gap-3">
+              <div className="absent-list">
                 {records.filter(r => r.status === 'absent').slice(0, 5).map((r, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b border-gray-50 pb-3">
+                  <div key={i} className="absent-item">
                     <img
                       src={`https://i.pravatar.cc/150?u=abs_${r.employee_id}`}
-                      className="w-9 h-9 rounded-full"
+                      className="attendance-avatar attendance-avatar-md"
                       alt="avatar"
                     />
-                    <div className="flex-1">
-                      <div className="font-bold text-sm text-gray-900">{r.employee_name || `EMP${r.employee_id}`}</div>
-                      <div className="text-xs text-[var(--text-md)]">{r.department_name || '—'} • {r.shift_name || '—'}</div>
+                    <div className="absent-meta">
+                      <div className="absent-name">{r.employee_name || `EMP${r.employee_id}`}</div>
+                      <div className="absent-sub">{r.department_name || '—'} • {r.shift_name || '—'}</div>
                     </div>
                   </div>
                 ))}
                 {records.filter(r => r.status === 'absent').length === 0 && (
-                  <p className="text-sm text-[var(--text-md)] text-center py-4">No absences today</p>
+                  <p className="empty-note">No absences today</p>
                 )}
               </div>
             </Card>

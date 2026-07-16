@@ -120,7 +120,7 @@ export function Fine() {
   }, {});
 
   return (
-    <div className="page-container">
+    <div className="page-container fine-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -128,14 +128,14 @@ export function Fine() {
         ]}
         searchPlaceholder="Search employee..."
         actions={
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex items-center gap-2">
+          <div className="fine-actions">
+            <Button variant="outline" className="fine-action-btn fine-action-btn-outline">
               <Calendar size={16} /> {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })} <ChevronDown size={14} />
             </Button>
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button variant="outline" className="fine-action-btn fine-action-btn-outline">
               <Download size={16} /> Export
             </Button>
-            <Button variant="primary" className="bg-primary flex items-center gap-2" onClick={() => document.getElementById('fine-form-section')?.scrollIntoView({ behavior: 'smooth' })}>
+            <Button variant="primary" className="fine-action-btn fine-action-btn-primary" onClick={() => document.getElementById('fine-form-section')?.scrollIntoView({ behavior: 'smooth' })}>
               <Plus size={16} /> Issue Fine
             </Button>
           </div>
@@ -143,58 +143,66 @@ export function Fine() {
       />
 
       <div className="page-content fine-page">
-        <div className="page-header-text mb-6">
-          <h1 className="text-2xl font-bold mb-1">Fine & Penalty Management</h1>
-          <p className="text-[var(--text-md)] text-sm">Track, approve and deduct employee fines from payroll. Maintain a clean disciplinary record.</p>
+        <div className="fine-heading-block">
+          <h1 className="fine-title">Fine & Penalty Management</h1>
+          <p className="fine-subtitle">Track, approve and deduct employee fines from payroll. Maintain a clean disciplinary record.</p>
         </div>
 
         <div className="stats-grid mb-6">
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-pending">
+            <div className="stat-card-left">
               <div className="stat-label">Pending Fines</div>
-              <div className="stat-icon-wrapper bg-warning/10 text-warning"><AlertCircle size={18} /></div>
+              <div className="stat-value">{stats.pending}</div>
+              <div className="stat-sub">Awaiting approval</div>
             </div>
-            <div className="stat-value">{stats.pending}</div>
-            <div className="stat-sub">Awaiting approval</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <AlertCircle size={16} className="text-[#f97316]" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-month">
+            <div className="stat-card-left">
               <div className="stat-label">Total Fines This Month</div>
-              <div className="stat-icon-wrapper bg-danger/10 text-danger"><AlertOctagon size={18} /></div>
+              <div className="stat-value">{stats.total_month}</div>
+              <div className="stat-sub">{new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</div>
             </div>
-            <div className="stat-value">{stats.total_month}</div>
-            <div className="stat-sub">{new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <AlertOctagon size={16} className="text-[#f97316]" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-pending-amt">
+            <div className="stat-card-left">
               <div className="stat-label">Amount to Deduct</div>
-              <div className="stat-icon-wrapper bg-danger/10 text-danger"><MinusCircle size={18} /></div>
+              <div className="stat-value">₹{stats.amount_pending.toLocaleString('en-IN')}</div>
+              <div className="stat-sub">From active payroll</div>
             </div>
-            <div className="stat-value">₹{stats.amount_pending.toLocaleString('en-IN')}</div>
-            <div className="stat-sub">From current payroll</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <MinusCircle size={16} className="text-[#f97316]" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-deducted-ytd">
+            <div className="stat-card-left">
               <div className="stat-label">Deducted YTD</div>
-              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Banknote size={18} /></div>
+              <div className="stat-value">₹{stats.deducted_ytd.toLocaleString('en-IN')}</div>
+              <div className="stat-sub">Across all months</div>
             </div>
-            <div className="stat-value">₹{stats.deducted_ytd.toLocaleString('en-IN')}</div>
-            <div className="stat-sub">Across all months</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <Banknote size={16} className="text-[#3b82f6]" />
+            </div>
           </Card>
         </div>
 
         <div className="dashboard-grid">
           <div className="main-column">
             <Card className="h-full">
-              <div className="card-header-flex mb-4">
-                <h3 className="font-bold text-lg">Fine Records</h3>
+              <div className="card-header-flex">
+                <h3 className="section-title" style={{ marginBottom: 0 }}>Fine Records</h3>
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                  className="fine-filter-select"
                 >
                   <option value="">All Status</option>
                   <option value="pending">Pending</option>
@@ -204,50 +212,50 @@ export function Fine() {
                 </select>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="fine-table">
                   <thead>
-                    <tr className="text-left text-[var(--text-md)] border-b pb-2">
-                      <th className="pb-3 font-semibold">Employee</th>
-                      <th className="pb-3 font-semibold">Reason</th>
-                      <th className="pb-3 font-semibold">Date</th>
-                      <th className="pb-3 font-semibold">Amount</th>
-                      <th className="pb-3 font-semibold">Deduct From</th>
-                      <th className="pb-3 font-semibold">Status</th>
-                      <th className="pb-3 font-semibold">Action</th>
+                    <tr>
+                      <th className="fine-th">Employee</th>
+                      <th className="fine-th">Reason</th>
+                      <th className="fine-th">Date</th>
+                      <th className="fine-th">Amount</th>
+                      <th className="fine-th">Deduct From</th>
+                      <th className="fine-th">Status</th>
+                      <th className="fine-th">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {loading && <tr><td colSpan={7} className="py-12 text-center text-[var(--text-md)]">Loading…</td></tr>}
-                    {!loading && fines.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-[var(--text-md)]">No fine records found.</td></tr>}
+                    {loading && <tr><td colSpan={7} className="fine-empty">Loading…</td></tr>}
+                    {!loading && fines.length === 0 && <tr><td colSpan={7} className="fine-empty">No fine records found.</td></tr>}
                     {fines.map((f, i) => (
-                      <tr key={f.id || i} className="border-b border-gray-100">
-                        <td className="py-4">
-                          <div className="flex items-center gap-3">
-                            <img src={`https://i.pravatar.cc/150?u=fine_${f.employee_id}`} className="w-8 h-8 rounded-full" alt="avatar"/>
+                      <tr key={f.id || i} className="fine-row">
+                        <td>
+                          <div className="fine-employee-cell">
+                            <img src={`https://i.pravatar.cc/150?u=fine_${f.employee_id}`} className="fine-avatar" alt="avatar"/>
                             <div>
-                              <div className="font-semibold text-gray-900">{f.employee_name || `EMP${f.employee_id}`}</div>
-                              <div className="text-xs text-[var(--text-md)]">{f.department_name || f.department || '—'}</div>
+                              <div className="fine-name">{f.employee_name || `EMP${f.employee_id}`}</div>
+                              <div className="fine-dept">{f.department_name || f.department || '—'}</div>
                             </div>
                           </div>
                         </td>
-                        <td className="font-medium text-gray-800">{f.reason}</td>
-                        <td className="text-[var(--text-md)]">{fmtDate(f.incident_date || f.created_at)}</td>
-                        <td className="font-bold text-danger">₹{Number(f.amount).toLocaleString('en-IN')}</td>
-                        <td className="text-[var(--text-md)]">{f.payroll_month ? new Date(f.payroll_month + '-01').toLocaleString('en-GB', { month: 'long' }) + ' Payroll' : 'Current Payroll'}</td>
+                        <td>{f.reason}</td>
+                        <td className="fine-muted">{fmtDate(f.incident_date || f.created_at)}</td>
+                        <td className="fine-name">₹{Number(f.amount).toLocaleString('en-IN')}</td>
+                        <td className="fine-muted">{f.payroll_month ? new Date(f.payroll_month + '-01').toLocaleString('en-GB', { month: 'long' }) + ' Payroll' : 'Current Payroll'}</td>
                         <td>{statusBadge(f.status)}</td>
                         <td>
                           <div className="flex gap-2">
                             {f.status === 'pending' && (
                               <>
-                                <Button variant="outline" size="sm" className="text-success border-success hover:bg-success/10 h-8 px-3" onClick={() => handleApprove(f.id)}>Approve</Button>
-                                <Button variant="outline" size="sm" className="text-gray-600 border-gray-300 hover:bg-gray-50 h-8 px-3" onClick={() => handleWaive(f.id)}>Waive</Button>
+                                <Button variant="outline" size="sm" className="fine-action-btn fine-action-btn-outline" onClick={() => handleApprove(f.id)}>Approve</Button>
+                                <Button variant="outline" size="sm" className="fine-action-btn fine-action-btn-outline" onClick={() => handleWaive(f.id)}>Waive</Button>
                               </>
                             )}
                             {f.status === 'approved' && (
-                              <Button variant="primary" size="sm" className="bg-[#1e3a8a] hover:bg-[#1e3a8a]/90 h-8 px-4 text-white" onClick={() => handleDeduct(f.id)}>Deduct</Button>
+                              <Button variant="primary" size="sm" className="fine-action-btn fine-action-btn-primary" onClick={() => handleDeduct(f.id)}>Deduct</Button>
                             )}
                             {(f.status === 'deducted' || f.status === 'waived') && (
-                              <Button variant="outline" size="sm" className="text-gray-600 border-gray-300 hover:bg-gray-50 h-8 px-4">View</Button>
+                              <Button variant="outline" size="sm" className="fine-action-btn fine-action-btn-outline">View</Button>
                             )}
                           </div>
                         </td>
@@ -261,45 +269,45 @@ export function Fine() {
 
           <div className="side-column flex flex-col gap-6">
             <Card id="fine-form-section">
-              <h3 className="font-bold mb-5">Issue New Fine</h3>
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-sm text-[var(--text-md)]">
+              <h3 className="section-title">Issue New Fine</h3>
+              <form onSubmit={handleSubmit} className="fine-card-stack" style={{ marginTop: 16 }}>
                 <div>
-                  <label className="block mb-1.5 font-medium">Employee</label>
+                  <label className="fine-muted">Employee</label>
                   <div className="relative">
-                    <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <User size={16} className="fine-field-icon" />
                     <select
                       required
                       value={form.employee_id}
                       onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))}
-                      className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      className="fine-select fine-field-input"
                     >
                       <option value="">Select employee...</option>
                       {employees.map(emp => (
                         <option key={emp.id} value={emp.id}>{emp.full_name} — {emp.department_name || ''}</option>
                       ))}
                     </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <ChevronDown size={14} className="fine-field-chevron" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block mb-1.5 font-medium">Reason</label>
+                  <label className="fine-muted">Reason</label>
                   <div className="relative">
                     <select
                       required
                       value={form.reason}
                       onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-                      className="w-full px-3 pr-8 py-2 border border-gray-200 rounded-lg appearance-none bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      className="fine-select fine-field-input"
                     >
                       <option value="">Select reason...</option>
                       {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <ChevronDown size={14} className="fine-field-chevron" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block mb-1.5 font-medium">Fine Amount (₹)</label>
+                  <label className="fine-muted">Fine Amount (₹)</label>
                   <input
                     type="number"
                     required
@@ -307,37 +315,37 @@ export function Fine() {
                     placeholder="Enter amount..."
                     value={form.amount}
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="fine-input fine-field-input"
                   />
                 </div>
 
                 <div>
-                  <label className="block mb-1.5 font-medium">Date of Incident</label>
+                  <label className="fine-muted">Date of Incident</label>
                   <div className="relative">
-                    <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Calendar size={16} className="fine-field-icon" />
                     <input
                       type="date"
                       required
                       value={form.incident_date}
                       onChange={e => setForm(f => ({ ...f, incident_date: e.target.value }))}
-                      className="w-full pl-9 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      className="fine-input fine-field-input"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block mb-1.5 font-medium">Remarks (optional)</label>
+                  <label className="fine-muted">Remarks (optional)</label>
                   <textarea
                     placeholder="Add notes..."
                     value={form.remarks}
                     onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg h-20 resize-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="fine-textarea fine-field-input"
                   />
                 </div>
 
                 {err && <p className="text-danger text-xs">{err}</p>}
 
-                <Button variant="primary" className="bg-[#1e3a8a] w-full text-white hover:bg-[#1e3a8a]/90 mt-2 py-2" disabled={submitLoading}>
+                <Button variant="primary" className="fine-action-btn fine-action-btn-primary" disabled={submitLoading}>
                   {submitLoading ? 'Submitting…' : 'Submit Fine'}
                 </Button>
               </form>
@@ -345,18 +353,18 @@ export function Fine() {
 
             {/* Fine by Reason */}
             <Card>
-              <h3 className="font-bold mb-5">Fine by Reason ({new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })})</h3>
-              <div className="flex flex-col gap-4 text-sm">
+              <h3 className="section-title">Fine by Reason ({new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })})</h3>
+              <div className="fine-card-stack">
                 {Object.entries(byReason).length === 0 && (
-                  <p className="text-[var(--text-md)] text-center py-4">No fines recorded</p>
+                  <p className="fine-empty">No fines recorded</p>
                 )}
                 {Object.entries(byReason).map(([reason, data], i, arr) => (
-                  <div key={reason} className={`flex justify-between items-center ${i < arr.length - 1 ? 'border-b border-gray-50 pb-3' : 'pb-1'}`}>
+                  <div key={reason} className="fine-reason-row">
                     <div>
-                      <div className="font-semibold text-gray-900">{reason}</div>
-                      <div className="text-xs text-[var(--text-md)]">{data.count} incidents</div>
+                      <div className="fine-name">{reason}</div>
+                      <div className="fine-muted">{data.count} incidents</div>
                     </div>
-                    <div className="font-bold text-danger">₹{data.amount.toLocaleString('en-IN')}</div>
+                    <div className="fine-name" style={{ color: '#dc2626' }}>₹{data.amount.toLocaleString('en-IN')}</div>
                   </div>
                 ))}
               </div>

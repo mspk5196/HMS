@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { PageHeader } from '../../components/ui/PageHeader';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
 import { 
   Users, Clock, FileMinus, Banknote, 
-  Briefcase, Calendar, X, Plus, TrendingUp, RefreshCw, Check, LogOut, Edit
+  Briefcase, Calendar, X, Plus, TrendingUp, RefreshCw, Check
 } from 'lucide-react';
 import './Employees.css'; 
 
@@ -296,7 +294,6 @@ export function Employees() {
   const [employees, setEmployees] = useState(MOCK_EMPLOYEES);
   const [selectedEmpId, setSelectedEmpId] = useState(14);
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('Employees');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Interactive UI states
@@ -310,7 +307,6 @@ export function Employees() {
     request('/hr/employees?limit=200').then(res => {
       const rows = res?.data?.rows || res?.data || [];
       if (rows.length > 0) {
-        // Merge with existing, filtering out duplicates
         setEmployees(prev => {
           const merged = [...prev];
           rows.forEach(r => {
@@ -406,13 +402,12 @@ export function Employees() {
       <div className="page-content hr-content-wrapper">
         {/* Title Section */}
         <div className="hr-title-section">
-          <h1 className="hr-title-main">HR &amp; Payroll Management</h1>
-          <p className="hr-title-desc">Manage staff records, attendance, leave, fines, and monthly payroll from one place.</p>
+          <h1 className="hr-title-main">HR &amp; Employee Management</h1>
+          <p className="hr-title-desc">Manage staff records, attendance, leave, and payroll from one unified dashboard.</p>
         </div>
 
         {/* Stats Grid */}
-        <div className="stats-grid mb-5">
-          {/* Card 1 – Total Employees */}
+        <div className="stats-grid mb-18">
           <div className="stat-card">
             <div className="stat-card-left">
               <div className="stat-label">Total Employees</div>
@@ -429,13 +424,12 @@ export function Employees() {
             </div>
           </div>
 
-          {/* Card 2 – On Leave Today */}
           <div className="stat-card">
             <div className="stat-card-left">
               <div className="stat-label">On Leave Today</div>
-              <div className="stat-value">5</div>
+              <div className="stat-value">3</div>
               <div className="stat-sub">
-                <span>3 approved, 2 pending</span>
+                <span>2 pending approval</span>
               </div>
             </div>
             <div className="stat-icon-wrapper orange-bg">
@@ -443,16 +437,15 @@ export function Employees() {
             </div>
           </div>
 
-          {/* Card 3 – Attendance Rate */}
           <div className="stat-card">
             <div className="stat-card-left">
-              <div className="stat-label">Attendance Rate</div>
-              <div className="stat-value">91.5%</div>
+              <div className="stat-label">Attendance Today</div>
+              <div className="stat-value">86</div>
               <div className="stat-sub">
                 <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                  <TrendingUp size={11} />+1.2%
+                  <TrendingUp size={11} />91.5%
                 </span>
-                <span>This month average</span>
+                <span>Attendance rate</span>
               </div>
             </div>
             <div className="stat-icon-wrapper green-bg">
@@ -460,32 +453,18 @@ export function Employees() {
             </div>
           </div>
 
-          {/* Card 4 – Payroll This Month */}
           <div className="stat-card">
             <div className="stat-card-left">
               <div className="stat-label">Payroll This Month</div>
-              <div className="stat-value">₹18.4L</div>
+              <div className="stat-value">₹17.2L</div>
               <div className="stat-sub">
-                <span>Pending finalisation</span>
+                <span>5 pending approval</span>
               </div>
             </div>
             <div className="stat-icon-wrapper blue-bg">
               <Banknote size={16} className="text-[#3b82f6]" />
             </div>
           </div>
-        </div>
-
-        {/* Tab Navigation Pill bar */}
-        <div className="hr-tab-container">
-          {['Employees', 'Attendance', 'Leave', 'Fines', 'Payroll', 'Roster'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`hr-tab-btn ${activeTab === tab ? 'active' : ''}`}
-            >
-              {tab}
-            </button>
-          ))}
         </div>
 
         {/* Dashboard Content Container */}
@@ -533,10 +512,10 @@ export function Employees() {
               <div className="hr-card">
                 <div className="hr-card-header">
                   <h3 className="hr-card-title">
-                    Employee Profile — {selectedEmp.full_name} ({selectedEmp.employee_code})
+                    Employee Profile — {selectedEmp.full_name}
                   </h3>
-                  <button className="hr-btn hr-btn-outline hr-btn-sm text-[#24428b] border-[#cbd5e1] hover:bg-slate-50 font-bold" style={{ height: '28px', padding: '0 12px', fontSize: '11.5px', borderRadius: '6px', color: '#24428b' }}>
-                    Edit profile
+                  <button className="hr-btn hr-btn-outline hr-btn-sm" style={{ height: '28px', padding: '0 12px', fontSize: '11.5px', borderRadius: '6px' }}>
+                    Edit Profile
                   </button>
                 </div>
                 <div className="hr-card-body">
@@ -619,10 +598,7 @@ export function Employees() {
                 <div className="flex items-center gap-2">
                   <button onClick={handleSyncBiometric} className="hr-btn hr-btn-outline hr-btn-sm">
                     <RefreshCw size={13} />
-                    <span>Sync biometric</span>
-                  </button>
-                  <button className="hr-btn hr-btn-primary hr-btn-sm">
-                    <span>Extend window</span>
+                    <span>Sync Biometric</span>
                   </button>
                 </div>
               </div>
@@ -763,40 +739,38 @@ export function Employees() {
                   </button>
                 </div>
               </div>
-              <div className="hr-card-body pb-0">
-                <div className="border border-[#e2e8f0] rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="hr-roster-table">
-                      <thead>
-                        <tr>
-                          <th>Employee</th>
-                          {Array.from({ length: 14 }, (_, i) => (
-                            <th key={i}>{i + 1}</th>
+              <div className="hr-card-body pb-0" style={{ padding: '0 !important' }}>
+                <div className="overflow-x-auto">
+                  <table className="hr-roster-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        {Array.from({ length: 14 }, (_, i) => (
+                          <th key={i}>{i + 1}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {MOCK_ROSTER.map((row, i) => (
+                        <tr key={i}>
+                          <td className="font-semibold text-[13px] text-slate-800">{row.employee_name}</td>
+                          {row.shifts.map((shift, idx) => (
+                            <td key={idx}>
+                              <div className="flex justify-center">
+                                <span className={`roster-pill ${shift.toLowerCase()}`}>{shift}</span>
+                              </div>
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {MOCK_ROSTER.map((row, i) => (
-                          <tr key={i}>
-                            <td className="font-semibold text-[13px] text-slate-800">{row.employee_name}</td>
-                            {row.shifts.map((shift, idx) => (
-                              <td key={idx}>
-                                <div className="flex justify-center">
-                                  <span className={`roster-pill ${shift.toLowerCase()}`}>{shift}</span>
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
               <div className="hr-roster-legend">
-                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill m">M</span> Morning</div>
-                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill e">E</span> Evening</div>
-                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill n">N</span> Night</div>
+                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill m">M</span> Morning (6am-3pm)</div>
+                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill e">E</span> Evening (2pm-11pm)</div>
+                <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill n">N</span> Night (10pm-7am)</div>
                 <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600"><span className="roster-pill wo">WO</span> Week Off</div>
               </div>
             </div>

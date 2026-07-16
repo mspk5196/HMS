@@ -685,5 +685,53 @@
   padding: 0px 20px 20px 20px !important;
 }
 
+/* ─── Responsive Design ────────────────────────────── */
+@media (max-width: 1280px) {
+  .hr-dashboard-grid {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+}
 
+@media (max-width: 1024px) {
+  .hr-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 
+  .emp-list-card {
+    max-width: 100%;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hr-tab-container {
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .hr-overview-page .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ─── Animation ────────────────────────────────────── */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-bounce {
+  animation: bounce 0.6s ease-in-out;
+}
