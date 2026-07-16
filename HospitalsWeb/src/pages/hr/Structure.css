@@ -1,0 +1,121 @@
+.roles-permissions-page {
+  /* Removed standard container padding as PageHeader has its own padding/margin if needed */
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-md);
+  font-weight: 500;
+}
+
+.stat-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon-wrapper.blue-bg {
+  background-color: rgba(36, 66, 139, 0.1); /* --primary with opacity */
+}
+
+.stat-icon-wrapper.green-bg {
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.stat-icon-wrapper.orange-bg {
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-dark);
+  line-height: 1.2;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: var(--text-md);
+  margin-top: 4px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.card-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* Role List */
+.role-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.role-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.role-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.role-item:first-child {
+  padding-top: 0;
+}
+
+.role-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.badge-primary-light {
+  background-color: rgba(36, 66, 139, 0.1);
+  color: var(--primary);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.role-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.role-item.active-role {
+  /* If we wanted to highlight active role slightly differently, we can do it here. In mockup, Doctor seems identical just selected? Wait, no, Doctor is identical. */
+}

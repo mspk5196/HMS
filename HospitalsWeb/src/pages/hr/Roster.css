@@ -1,0 +1,34 @@
+.roster-page {
+  /* Roster page specific overrides if any */
+}
+
+.roster-scroll-container {
+  /* Hide scrollbar for a cleaner look while keeping it functional */
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-200) transparent;
+}
+
+.roster-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.roster-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.roster-scroll-container::-webkit-scrollbar-thumb {
+  background-color: var(--gray-200);
+  border-radius: 10px;
+}
+
+.shift-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 11px;
+  margin: 0 auto;
+}

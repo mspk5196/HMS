@@ -1,0 +1,102 @@
+.hr-overview-page {
+  /* Inherits from page-content */
+}
+
+.hr-tabs {
+  display: flex;
+  gap: 8px;
+  background-color: white;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+
+.hr-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-md);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hr-tab:hover {
+  background-color: rgba(36, 66, 139, 0.05);
+  color: var(--primary);
+}
+
+.hr-tab.active {
+  background-color: var(--page); /* Or a light gray depending on exact mockup */
+  color: var(--text-dark);
+  font-weight: 600;
+}
+
+.hr-dashboard-grid {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 24px;
+}
+
+.employee-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.emp-list-item {
+  display: flex;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.emp-list-item:last-child {
+  border-bottom: none;
+}
+
+.emp-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+/* Shifts Roster Table Pills */
+.roster-table th, .roster-table td {
+  padding: 8px 4px;
+}
+
+.roster-pill {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.roster-pill.morning {
+  background-color: #E0F2FE; /* Light blue */
+  color: #0369A1;
+}
+
+.roster-pill.evening {
+  background-color: #FEF3C7; /* Light yellow */
+  color: #B45309;
+}
+
+.roster-pill.night {
+  background-color: #F3F4F6; /* Light gray */
+  color: #374151;
+}
+
+.roster-pill.off {
+  background-color: #FEE2E2; /* Light red */
+  color: #B91C1C;
+}
