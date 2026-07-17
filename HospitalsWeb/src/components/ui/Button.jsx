@@ -10,33 +10,33 @@ export function Button({
   fullWidth = false,
   ...props
 }) {
-  const base = 'inline-flex items-center justify-center gap-1.5 font-semibold cursor-pointer border rounded transition-all duration-150 select-none disabled:opacity-50 disabled:cursor-not-allowed';
+  const base = 'ui-btn';
 
   const variants = {
-    primary:   'bg-[var(--primary)] text-white border-transparent hover:bg-[var(--accent)] shadow-sm',
-    secondary: 'bg-[#f0f2f4] text-[var(--text)] border-[var(--line)] hover:bg-[#e5e8eb]',
-    outline:   'bg-white text-[var(--text)] border-[var(--line)] hover:bg-[#f9fafb]',
-    danger:    'bg-[#dc2626] text-white border-transparent hover:bg-[#b91c1c]',
-    success:   'bg-[#059669] text-white border-transparent hover:bg-[#047857]',
-    ghost:     'bg-transparent text-[var(--mute)] border-transparent hover:bg-[#f3f4f6]',
+    primary:   'ui-btn-primary',
+    secondary: 'ui-btn-secondary',
+    outline:   'ui-btn-outline',
+    danger:    'ui-btn-danger',
+    success:   'ui-btn-success',
+    ghost:     'ui-btn-ghost',
   };
 
   const sizes = {
-    xs: 'px-2 py-1 text-[11px] h-6',
-    sm: 'px-3 py-1.5 text-[12px] h-7',
-    md: 'px-4 py-2 text-[13px] h-8',
-    lg: 'px-5 py-2.5 text-[14px] h-10',
+    xs: 'ui-btn-xs',
+    sm: 'ui-btn-sm',
+    md: 'ui-btn-md',
+    lg: 'ui-btn-lg',
   };
 
   return (
     <button
-      className={`${base} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${fullWidth ? 'w-full' : ''} ${className}`}
+      className={`${base} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${fullWidth ? 'ui-btn-full' : ''} ${className}`}
       disabled={isLoading || props.disabled}
       style={{ borderRadius: '8px' }}
       {...props}
     >
       {isLoading ? (
-        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <svg className="ui-btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <circle cx="12" cy="12" r="10" strokeWidth="4" strokeOpacity="0.25" />
           <path d="M12 2a10 10 0 0 1 10 10" strokeWidth="4" strokeLinecap="round" />
         </svg>

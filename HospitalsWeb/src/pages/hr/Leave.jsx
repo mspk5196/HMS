@@ -16,20 +16,20 @@ function fmtDate(d) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'pending':  return <span className="badge badge-warning-light text-warning border border-warning/20">Pending</span>;
-    case 'approved': return <span className="badge badge-success-light text-success border border-success/20">Approved</span>;
-    case 'rejected': return <span className="badge badge-danger-light text-danger border border-danger/20">Rejected</span>;
+    case 'pending':  return <span className="badge badge-warning-light">Pending</span>;
+    case 'approved': return <span className="badge badge-success-light">Approved</span>;
+    case 'rejected': return <span className="badge badge-danger-light">Rejected</span>;
     default:         return <span className="badge">{status}</span>;
   }
 }
 
 function leaveTypeBadge(type) {
   const lower = (type || '').toLowerCase();
-  if (lower.includes('sick'))    return <span className="badge bg-danger/10 text-danger border-none">{type}</span>;
-  if (lower.includes('casual'))  return <span className="badge bg-warning/10 text-warning border-none">{type}</span>;
-  if (lower.includes('annual'))  return <span className="badge bg-primary/10 text-primary border-none">{type}</span>;
-  if (lower.includes('maternity')) return <span className="badge bg-purple-100 text-purple-600 border-none">{type}</span>;
-  return <span className="badge bg-gray-100 text-gray-600 border-none">{type}</span>;
+  if (lower.includes('sick'))    return <span className="badge badge-danger-light">{type}</span>;
+  if (lower.includes('casual'))  return <span className="badge badge-warning-light">{type}</span>;
+  if (lower.includes('annual'))  return <span className="badge badge-primary-light">{type}</span>;
+  if (lower.includes('maternity')) return <span className="badge badge-purple-light">{type}</span>;
+  return <span className="badge badge-gray-light">{type}</span>;
 }
 
 function daysDiff(start, end) {
@@ -75,7 +75,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
     <div className="modal-overlay">
       <div className="modal-box" style={{ width: 480 }}>
         <div className="modal-header">
-          <h2 className="text-sm font-bold">Add Leave Request</h2>
+          <h2 className="modal-title">Add Leave Request</h2>
           <button className="modal-close-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -94,7 +94,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
                 {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="modal-grid">
               <div>
                 <label className="field-label">Start Date *</label>
                 <input className="field" type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} />
@@ -108,7 +108,7 @@ function NewRequestModal({ open, onClose, onSaved }) {
               <label className="field-label">Reason</label>
               <textarea className="field h-20 resize-none" placeholder="Reason for leave..." value={form.reason} onChange={e => set('reason', e.target.value)} />
             </div>
-            {err && <p className="text-danger text-xs">{err}</p>}
+            {err && <p className="modal-error">{err}</p>}
           </div>
           <div className="modal-footer">
             <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
@@ -189,7 +189,7 @@ export function Leave() {
   }));
 
   return (
-    <div className="page-container">
+    <div className="leave-page hr-overview-page">
       <NewRequestModal open={showModal} onClose={() => setShowModal(false)} onSaved={load} />
       <PageHeader 
         breadcrumbs={[
@@ -198,14 +198,14 @@ export function Leave() {
         ]}
         searchPlaceholder="Search employee..."
         actions={
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex items-center gap-2">
+          <div className="leave-actions">
+            <Button variant="outline" className="leave-action-btn leave-action-btn-outline">
               <Calendar size={16} /> {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })} <ChevronDown size={14} />
             </Button>
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button variant="outline" className="leave-action-btn leave-action-btn-outline">
               <Download size={16} /> Export
             </Button>
-            <Button variant="primary" className="bg-primary flex items-center gap-2" onClick={() => setShowModal(true)}>
+            <Button variant="primary" className="leave-action-btn leave-action-btn-primary" onClick={() => setShowModal(true)}>
               <Plus size={16} /> Add Leave Request
             </Button>
           </div>
@@ -213,59 +213,69 @@ export function Leave() {
       />
 
       <div className="page-content leave-page">
-        <div className="page-header-text mb-6">
-          <h1 className="text-2xl font-bold mb-1">Leave Management</h1>
-          <p className="text-[var(--text-md)] text-sm">Review and manage employee leave applications. Track leave balances and history.</p>
+        <div className="leave-heading-block">
+          <h1 className="leave-title">Leave Management</h1>
+          <p className="leave-subtitle">Review and manage employee leave applications. Track leave balances and history.</p>
         </div>
 
         <div className="stats-grid mb-6">
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-pending">
+            <div className="stat-card-left">
               <div className="stat-label">Pending Requests</div>
-              <div className="stat-icon-wrapper bg-warning/10 text-warning"><Clock size={18} /></div>
+              <div className="stat-value">{stats.pending}</div>
+              <div className="stat-sub">Awaiting approval</div>
             </div>
-            <div className="stat-value">{stats.pending}</div>
-            <div className="stat-sub">Awaiting approval</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <Clock size={16} className="icon-orange" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-on-leave">
+            <div className="stat-card-left">
               <div className="stat-label">On Leave Today</div>
-              <div className="stat-icon-wrapper bg-danger/10 text-danger"><FileMinus size={18} /></div>
+              <div className="stat-value">{stats.on_leave}</div>
+              <div className="stat-sub">Approved & active</div>
             </div>
-            <div className="stat-value">{stats.on_leave}</div>
-            <div className="stat-sub">Approved & active</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <FileMinus size={16} className="icon-orange" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-approved">
+            <div className="stat-card-left">
               <div className="stat-label">Approved This Month</div>
-              <div className="stat-icon-wrapper bg-success/10 text-success"><CalendarCheck size={18} /></div>
+              <div className="stat-value">{stats.approved_month}</div>
+              <div className="stat-sub">
+                <span className="stat-trend-up">Approved <span className="stat-trend-text">in {new Date().toLocaleString('en-GB', { month: 'short' })}</span></span>
+              </div>
             </div>
-            <div className="stat-value">{stats.approved_month}</div>
-            <div className="stat-sub">{new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <CalendarCheck size={16} className="icon-blue" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-total-days">
+            <div className="stat-card-left">
               <div className="stat-label">Total Leave Days Used</div>
-              <div className="stat-icon-wrapper bg-primary/10 text-primary"><BarChart2 size={18} /></div>
+              <div className="stat-value">{stats.total_days}</div>
+              <div className="stat-sub">Across all staff this month</div>
             </div>
-            <div className="stat-value">{stats.total_days}</div>
-            <div className="stat-sub">Across all staff this month</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <BarChart2 size={16} className="icon-blue" />
+            </div>
           </Card>
         </div>
 
         <div className="dashboard-grid">
           <div className="main-column">
             <Card className="h-full">
-              <div className="card-header-flex mb-6">
-                <h3 className="font-bold text-lg">Leave Requests</h3>
-                <div className="flex gap-2">
+              <div className="card-header-flex">
+                <h3 className="section-title">Leave Requests</h3>
+                <div className="leave-filter-row">
                   <select
                     value={typeFilter}
                     onChange={e => setTypeFilter(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                    className="leave-filter-select"
                   >
                     <option value="">All Types</option>
                     {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
@@ -273,7 +283,7 @@ export function Leave() {
                   <select
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                    className="leave-filter-select"
                   >
                     <option value="">All Status</option>
                     <option value="pending">Pending</option>
@@ -283,51 +293,50 @@ export function Leave() {
                 </div>
               </div>
 
-              <div className="leave-requests-list flex flex-col gap-4">
-                {loading && <p className="text-center text-[var(--text-md)] py-8">Loading…</p>}
+              <div className="leave-list">
+                {loading && <p className="leave-empty">Loading…</p>}
                 {!loading && filtered.length === 0 && (
-                  <p className="text-center text-[var(--text-md)] py-8">No leave requests found.</p>
+                  <p className="leave-empty">No leave requests found.</p>
                 )}
                 {filtered.map((req, i) => {
                   const days = daysDiff(req.start_date, req.end_date);
                   const isRejected = req.status === 'rejected';
+                  const statusClass = `leave-request-item status-${(req.status || 'pending').toLowerCase()}`;
                   return (
-                    <div key={req.id || i} className={`leave-request-item border border-gray-100 rounded-xl p-4 ${isRejected ? 'opacity-70' : ''}`}>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
+                    <div key={req.id || i} className={statusClass} style={{ opacity: isRejected ? 0.7 : 1 }}>
+                      <div className="leave-request-top">
+                        <div className="leave-request-meta">
                           <img
                             src={`https://i.pravatar.cc/150?u=leave_${req.employee_id}`}
-                            className="w-10 h-10 rounded-full bg-gray-200"
+                            className="leave-avatar"
                             alt="avatar"
                           />
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-gray-900">{req.employee_name || `Employee ${req.employee_id}`}</span>
-                              <span className="text-xs text-[var(--text-md)]">{req.employee_code || ''} {req.department_name ? `• ${req.department_name}` : ''}</span>
-                            </div>
-                            <div className="flex items-center gap-3 mt-1.5 text-xs">
+                            <div className="leave-name">{req.employee_name || `Employee ${req.employee_id}`}</div>
+                            <div className="leave-muted">{req.employee_code || ''} {req.department_name ? `• ${req.department_name}` : ''}</div>
+                            <div className="leave-subtext">
                               {leaveTypeBadge(req.leave_type_name || 'Leave')}
-                              <span className="flex items-center gap-1 text-[var(--text-md)]">
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                 <Calendar size={12}/> {fmtDate(req.start_date)} — {fmtDate(req.end_date)}
                               </span>
-                              <span className="font-medium text-gray-700">{days} {days === 1 ? 'day' : 'days'}</span>
-                              <span className="text-[var(--text-md)]">Applied: {fmtDate(req.created_at)}</span>
+                              <span>{days} {days === 1 ? 'day' : 'days'}</span>
+                              <span>Applied: {fmtDate(req.created_at)}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-3">
+                        <div className="leave-request-actions">
                           {statusBadge(req.status)}
                           {req.status === 'pending' && (
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" className="text-success border-success hover:bg-success/10 h-8 px-3" onClick={() => handleReview(req.id, 'approved')}>Approve</Button>
-                              <Button variant="outline" size="sm" className="text-danger border-danger hover:bg-danger/10 h-8 px-3" onClick={() => handleReview(req.id, 'rejected')}>Reject</Button>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <Button variant="outline" size="sm" className="leave-action-btn leave-action-btn-outline" onClick={() => handleReview(req.id, 'approved')}>Approve</Button>
+                              <Button variant="outline" size="sm" className="leave-action-btn leave-action-btn-outline" onClick={() => handleReview(req.id, 'rejected')}>Reject</Button>
                             </div>
                           )}
                         </div>
                       </div>
                       {req.reason && (
-                        <div className="text-xs text-[var(--text-md)] border-t border-gray-100 pt-3">
-                          <span className="font-medium">Reason: </span>{req.reason}
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eef2f7', fontSize: 12, color: '#64748b' }}>
+                          <span style={{ fontWeight: 600, color: '#374151' }}>Reason: </span>{req.reason}
                         </div>
                       )}
                     </div>
@@ -337,66 +346,72 @@ export function Leave() {
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             {/* Leave Types Breakdown */}
             <Card>
-              <h3 className="font-bold mb-5">Leave Types — {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</h3>
-              <div className="flex flex-col gap-5 text-sm">
-                {leaveBreakdown.length === 0 && <p className="text-[var(--text-md)] text-center py-4">No leave types configured</p>}
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Types — {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</h3>
+                <div className="leave-panel-stack">
+                {leaveBreakdown.length === 0 && <p className="leave-empty">No leave types configured</p>}
                 {leaveBreakdown.map(lt => (
                   <div key={lt.name}>
-                    <div className="flex justify-between font-semibold mb-2">
-                      <span className="text-gray-900">{lt.name}</span>
-                      <span className="text-gray-900">{lt.days} <span className="font-normal text-[var(--text-md)]">days</span></span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span className="leave-name">{lt.name}</span>
+                      <span className="leave-name">{lt.days} <span className="leave-muted" style={{ fontWeight: 400 }}>days</span></span>
                     </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="leave-bar-track">
                       <div
-                        className="bg-primary h-full rounded-full"
+                        className="leave-bar-fill"
                         style={{ width: `${Math.min(100, (lt.days / (lt.max_days || 30)) * 100)}%` }}
                       />
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
             {/* On Leave Today */}
             <Card>
-              <div className="card-header-flex mb-5">
-                <h3 className="font-bold">On Leave Today</h3>
-                <span className="badge badge-danger-light border border-danger text-danger">{onLeaveToday.length} absent</span>
+              <div className="card-header-flex">
+                <h3 className="section-title">On Leave Today</h3>
+                <span className="badge badge-soft-danger">{onLeaveToday.length} absent</span>
               </div>
-              <div className="flex flex-col gap-4">
-                {onLeaveToday.length === 0 && <p className="text-sm text-[var(--text-md)] text-center py-4">No one on leave today</p>}
+              <div className="ui-card-content" style={{ paddingTop: 0 }}>
+                <div className="leave-panel-stack">
+                {onLeaveToday.length === 0 && <p className="leave-empty">No one on leave today</p>}
                 {onLeaveToday.slice(0, 5).map((r, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <img src={`https://i.pravatar.cc/150?u=today_${r.employee_id}`} className="w-10 h-10 rounded-full bg-gray-200" alt="avatar"/>
-                    <div className="flex-1">
-                      <div className="font-bold text-sm text-gray-900">{r.employee_name || `Employee ${r.employee_id}`}</div>
-                      <div className="text-xs text-[var(--text-md)] mt-0.5">{r.leave_type_name || 'Leave'}</div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img src={`https://i.pravatar.cc/150?u=today_${r.employee_id}`} className="leave-avatar" alt="avatar" style={{ flexShrink: 0 }}/>
+                    <div style={{ flex: 1 }}>
+                      <div className="leave-name">{r.employee_name || `Employee ${r.employee_id}`}</div>
+                      <div className="leave-muted">{r.leave_type_name || 'Leave'}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-xs text-gray-900">Returns</div>
-                      <div className="text-xs text-[var(--text-md)]">{fmtDate(r.end_date)}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Returns</div>
+                      <div className="leave-name" style={{ fontSize: 12 }}>{fmtDate(r.end_date)}</div>
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
             {/* Leave Policy */}
             <Card>
-              <h3 className="font-bold mb-5">Leave Policy Summary</h3>
-              <div className="flex flex-col gap-4 text-sm text-[var(--text-md)] font-medium">
-                {leavePolicy.length === 0 && <p className="text-center py-4">No policies configured</p>}
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Policy Summary</h3>
+                <div className="leave-panel-stack">
+                {leavePolicy.length === 0 && <p className="leave-empty">No policies configured</p>}
                 {leavePolicy.map((lt, i) => (
                   <div key={lt.id} className={`flex justify-between ${i < leavePolicy.length - 1 ? 'border-b border-gray-50 pb-2' : 'pb-2'}`}>
-                    <span>{lt.name}</span>
-                    <span className="text-primary font-semibold">
+                    <span className="leave-name">{lt.name}</span>
+                    <span className="leave-name" style={{ color: '#24428b' }}>
                       {lt.max_days_per_year || lt.annual_limit || '—'} days/yr
                     </span>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
           </div>

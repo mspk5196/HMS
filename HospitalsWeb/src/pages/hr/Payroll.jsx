@@ -23,10 +23,10 @@ function fmtINRFull(val) {
 
 function statusBadge(status) {
   switch ((status || '').toLowerCase()) {
-    case 'draft':     return <span className="badge badge-warning-light border border-warning/20 text-warning">Draft</span>;
-    case 'calculated': return <span className="badge bg-primary/10 text-primary border border-primary/20">Calculated</span>;
-    case 'locked':    return <span className="badge badge-success-light border border-success/20">Approved</span>;
-    case 'paid':      return <span className="badge bg-green-100 text-green-700 border border-green-200">Paid</span>;
+    case 'draft':     return <span className="badge badge-warning-light">Draft</span>;
+    case 'calculated': return <span className="badge badge-primary-light">Calculated</span>;
+    case 'locked':    return <span className="badge badge-success-light">Approved</span>;
+    case 'paid':      return <span className="badge badge-success-solid">Paid</span>;
     default:          return <span className="badge">{status}</span>;
   }
 }
@@ -126,7 +126,7 @@ export function Payroll() {
   };
 
   return (
-    <div className="page-container">
+    <div className="payroll-page hr-overview-page">
       <PageHeader 
         breadcrumbs={[
           { label: 'HR & Payroll', path: '#' },
@@ -134,7 +134,7 @@ export function Payroll() {
         ]}
         searchPlaceholder="Search employee..."
         actions={
-          <div className="flex gap-3">
+          <div className="payroll-actions">
             <select
               value={activeRun?.id || ''}
               onChange={e => {
@@ -142,17 +142,17 @@ export function Payroll() {
                 setActiveRun(r || null);
                 if (r) loadItems(r.id);
               }}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+              className="payroll-filter-select"
             >
               {runs.map(r => <option key={r.id} value={r.id}>{r.month || r.id} ({r.status})</option>)}
               {runs.length === 0 && <option value="">{monthLabel}</option>}
             </select>
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline">
               <Download size={16} /> Export Payslips
             </Button>
             <Button
               variant="primary"
-              className="bg-[#1e3a8a] text-white hover:bg-[#1e3a8a]/90 flex items-center gap-2"
+              className="payroll-action-btn payroll-action-btn-primary"
               onClick={handleRunPayroll}
               disabled={runLoading}
             >
@@ -163,59 +163,69 @@ export function Payroll() {
       />
 
       <div className="page-content payroll-page">
-        <div className="page-header-text mb-6">
-          <h1 className="text-2xl font-bold mb-1">Payroll — {activeRun?.month || monthLabel}</h1>
-          <p className="text-[var(--text-md)] text-sm">Review salary calculations, approve payments, and disburse monthly payroll for all staff.</p>
+        <div className="payroll-heading-block">
+          <h1 className="payroll-title">Payroll — {activeRun?.month || monthLabel}</h1>
+          <p className="payroll-subtitle">Review salary calculations, approve payments, and disburse monthly payroll for all staff.</p>
         </div>
 
         <div className="stats-grid mb-6">
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-gross">
+            <div className="stat-card-left">
               <div className="stat-label">Total Gross Payout</div>
-              <div className="stat-icon-wrapper bg-primary/10 text-primary"><Banknote size={18} /></div>
+              <div className="stat-value">{fmtINR(stats.gross)}</div>
+              <div className="stat-sub">{items.length} employees</div>
             </div>
-            <div className="stat-value">{fmtINR(stats.gross)}</div>
-            <div className="stat-sub">{items.length} employees</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <Banknote size={16} className="icon-blue" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-deductions">
+            <div className="stat-card-left">
               <div className="stat-label">Total Deductions</div>
-              <div className="stat-icon-wrapper bg-danger/10 text-danger"><MinusCircle size={18} /></div>
+              <div className="stat-value">{fmtINR(stats.deductions)}</div>
+              <div className="stat-sub">PF, ESI & fines</div>
             </div>
-            <div className="stat-value">{fmtINR(stats.deductions)}</div>
-            <div className="stat-sub">PF, ESI & fines</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <MinusCircle size={16} className="icon-orange" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-net">
+            <div className="stat-card-left">
               <div className="stat-label">Net Payout</div>
-              <div className="stat-icon-wrapper bg-success/10 text-success"><Wallet size={18} /></div>
+              <div className="stat-value">{fmtINR(stats.net)}</div>
+              <div className="stat-sub">
+                <span className="stat-trend-up">Calculated <span className="stat-trend-text">this period</span></span>
+              </div>
             </div>
-            <div className="stat-value">{fmtINR(stats.net)}</div>
-            <div className="stat-sub">After all deductions</div>
+            <div className="stat-icon-wrapper blue-bg">
+              <Wallet size={16} className="icon-blue" />
+            </div>
           </Card>
 
-          <Card className="stat-card">
-            <div className="stat-card-header">
+          <Card className="stat-card stat-pending">
+            <div className="stat-card-left">
               <div className="stat-label">Pending Approvals</div>
-              <div className="stat-icon-wrapper bg-warning/10 text-warning"><Clock size={18} /></div>
+              <div className="stat-value">{stats.pending}</div>
+              <div className="stat-sub">Requires calculation check</div>
             </div>
-            <div className="stat-value">{stats.pending}</div>
-            <div className="stat-sub">Requires sign-off</div>
+            <div className="stat-icon-wrapper orange-bg">
+              <Clock size={16} className="icon-orange" />
+            </div>
           </Card>
         </div>
 
         <div className="dashboard-grid">
           <div className="main-column">
             <Card className="h-full">
-              <div className="card-header-flex mb-4">
-                <h3 className="font-bold text-lg">Payroll Register</h3>
-                <div className="flex gap-2">
+              <div className="card-header-flex">
+                <h3 className="section-title">Payroll Register</h3>
+                <div className="payroll-filter-row">
                   <select
                     value={deptFilter}
                     onChange={e => setDeptFilter(e.target.value)}
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-primary"
+                    className="payroll-filter-select"
                   >
                     <option value="">All Depts</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -223,48 +233,48 @@ export function Payroll() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="payroll-table">
                   <thead>
-                    <tr className="text-left text-[var(--text-md)] border-b pb-2">
-                      <th className="pb-3 font-semibold">Employee</th>
-                      <th className="pb-3 font-semibold">Days</th>
-                      <th className="pb-3 font-semibold">Gross</th>
-                      <th className="pb-3 font-semibold">Fines</th>
-                      <th className="pb-3 font-semibold">PF/ESI</th>
-                      <th className="pb-3 font-semibold">Net Pay</th>
-                      <th className="pb-3 font-semibold">Mode</th>
-                      <th className="pb-3 font-semibold">Status</th>
+                    <tr>
+                      <th className="payroll-th">Employee</th>
+                      <th className="payroll-th">Days</th>
+                      <th className="payroll-th">Gross</th>
+                      <th className="payroll-th">Fines</th>
+                      <th className="payroll-th">PF/ESI</th>
+                      <th className="payroll-th">Net Pay</th>
+                      <th className="payroll-th">Mode</th>
+                      <th className="payroll-th">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {loading && <tr><td colSpan={8} className="py-12 text-center text-[var(--text-md)]">Loading…</td></tr>}
+                    {loading && <tr><td colSpan={8} className="payroll-empty">Loading…</td></tr>}
                     {!loading && !activeRun && (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-[var(--text-md)]">
+                        <td colSpan={8} className="payroll-empty">
                           No payroll run found for this period. Click <strong>Run Payroll</strong> to generate.
                         </td>
                       </tr>
                     )}
                     {!loading && activeRun && items.length === 0 && (
-                      <tr><td colSpan={8} className="py-12 text-center text-[var(--text-md)]">Payroll not yet calculated. Click <strong>Run Payroll</strong>.</td></tr>
+                      <tr><td colSpan={8} className="payroll-empty">Payroll not yet calculated. Click <strong>Run Payroll</strong>.</td></tr>
                     )}
                     {items.map((it, i) => (
-                      <tr key={it.id || i} className="border-b border-gray-100">
-                        <td className="py-3">
-                          <div className="flex items-center gap-3">
-                            <img src={`https://i.pravatar.cc/150?u=pay_${it.employee_id}`} className="w-8 h-8 rounded-full" alt="avatar"/>
+                      <tr key={it.id || i} className="payroll-row">
+                        <td>
+                          <div className="payroll-employee-cell">
+                            <img src={`https://i.pravatar.cc/150?u=pay_${it.employee_id}`} className="payroll-avatar" alt="avatar"/>
                             <div>
-                              <div className="font-semibold text-gray-900">{it.employee_name || `EMP${it.employee_id}`}</div>
-                              <div className="text-xs text-[var(--text-md)]">{it.department_name || '—'}</div>
+                              <div className="payroll-name">{it.employee_name || `EMP${it.employee_id}`}</div>
+                              <div className="payroll-muted">{it.department_name || '—'}</div>
                             </div>
                           </div>
                         </td>
-                        <td className="font-medium">{it.working_days || it.present_days || '—'}</td>
-                        <td className="font-semibold">{fmtINRFull(it.gross_salary || it.basic_salary)}</td>
-                        <td className="text-danger">{fmtINRFull(it.fine_deductions || it.fines || 0)}</td>
-                        <td className="text-[var(--text-md)]">{fmtINRFull(it.pf_deduction || it.pf || 0)}</td>
-                        <td className="font-bold text-gray-900">{fmtINRFull(it.net_salary)}</td>
-                        <td className="text-[var(--text-md)]">{it.payment_mode || 'Bank Transfer'}</td>
+                        <td>{it.working_days || it.present_days || '—'}</td>
+                        <td className="payroll-name">{fmtINRFull(it.gross_salary || it.basic_salary)}</td>
+                        <td style={{ color: '#dc2626' }}>{fmtINRFull(it.fine_deductions || it.fines || 0)}</td>
+                        <td className="payroll-muted">{fmtINRFull(it.pf_deduction || it.pf || 0)}</td>
+                        <td className="payroll-name">{fmtINRFull(it.net_salary)}</td>
+                        <td className="payroll-muted">{it.payment_mode || 'Bank Transfer'}</td>
                         <td>{statusBadge(it.status || activeRun?.status)}</td>
                       </tr>
                     ))}
@@ -273,93 +283,99 @@ export function Payroll() {
               </div>
 
               {items.length > 0 && (
-                <div className="mt-6 pt-4 border-t flex items-center gap-8 text-sm">
-                  <div className="text-[var(--text-md)]">Gross Total: <span className="font-bold text-gray-900 ml-1">{fmtINRFull(stats.gross)}</span></div>
-                  <div className="text-[var(--text-md)]">Total Deductions: <span className="font-bold text-danger ml-1">{fmtINRFull(stats.deductions)}</span></div>
-                  <div className="text-[var(--text-md)] flex-1 text-right">Net Total: <span className="font-bold text-success text-base ml-1">{fmtINRFull(stats.net)}</span></div>
+                <div className="payroll-summary">
+                  <div className="payroll-muted">Gross Total: <span className="payroll-name">{fmtINRFull(stats.gross)}</span></div>
+                  <div className="payroll-muted">Total Deductions: <span style={{ color: '#dc2626' }}>{fmtINRFull(stats.deductions)}</span></div>
+                  <div className="payroll-muted" style={{ marginLeft: 'auto' }}>Net Total: <span style={{ color: '#16a34a', fontWeight: 700 }}>{fmtINRFull(stats.net)}</span></div>
                 </div>
               )}
             </Card>
           </div>
 
-          <div className="side-column flex flex-col gap-6">
+          <div className="side-column">
             {/* Payroll Status */}
             <Card>
-              <h3 className="font-bold mb-5">Payroll Status</h3>
-              <div className="flex flex-col gap-4 text-sm font-medium">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Payroll Status</h3>
+                <div className="payroll-panel-stack">
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-900">Approved & Ready</span>
-                    <span className="font-bold text-gray-900">{payrollStatusCounts.locked}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span className="payroll-name">Approved & Ready</span>
+                    <span className="payroll-name">{payrollStatusCounts.locked}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full w-full overflow-hidden">
-                    <div className="bg-success h-full" style={{ width: items.length ? `${(payrollStatusCounts.locked / items.length) * 100}%` : '0%' }} />
+                  <div className="payroll-progress-bar">
+                    <div className="payroll-progress-fill-green" style={{ width: items.length ? `${(payrollStatusCounts.locked / items.length) * 100}%` : '0%' }} />
                   </div>
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-900">Calculated</span>
-                    <span className="font-bold text-gray-900">{payrollStatusCounts.calculated}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span className="payroll-name">Calculated</span>
+                    <span className="payroll-name">{payrollStatusCounts.calculated}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full w-full overflow-hidden">
-                    <div className="bg-primary h-full" style={{ width: items.length ? `${(payrollStatusCounts.calculated / items.length) * 100}%` : '0%' }} />
+                  <div className="payroll-progress-bar">
+                    <div className="payroll-progress-fill-blue" style={{ width: items.length ? `${(payrollStatusCounts.calculated / items.length) * 100}%` : '0%' }} />
                   </div>
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-900">Pending Approval</span>
-                    <span className="font-bold text-gray-900">{payrollStatusCounts.pending}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span className="payroll-name">Pending Approval</span>
+                    <span className="payroll-name">{payrollStatusCounts.pending}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full w-full overflow-hidden">
-                    <div className="bg-warning h-full" style={{ width: items.length ? `${(payrollStatusCounts.pending / items.length) * 100}%` : '0%' }} />
+                  <div className="payroll-progress-bar">
+                    <div className="payroll-progress-fill-orange" style={{ width: items.length ? `${(payrollStatusCounts.pending / items.length) * 100}%` : '0%' }} />
                   </div>
                 </div>
 
                 {activeRun && activeRun.status !== 'locked' && activeRun.status !== 'paid' && (
-                  <Button variant="primary" className="bg-[#1e3a8a] text-white hover:bg-[#1e3a8a]/90 w-full py-2 mt-2" onClick={handleLock}>
+                  <Button variant="primary" className="payroll-action-btn payroll-action-btn-primary" onClick={handleLock}>
                     Approve & Lock Payroll
                   </Button>
                 )}
                 {activeRun && (activeRun.status === 'locked' || activeRun.status === 'paid') && (
-                  <div className="text-center text-success text-sm font-semibold py-2">✓ Payroll Locked</div>
+                  <div className="payroll-locked">✓ Payroll Locked</div>
                 )}
+                </div>
               </div>
             </Card>
 
             {/* Payout by Department */}
             <Card>
-              <h3 className="font-bold mb-5">Payout by Department</h3>
-              <div className="flex flex-col gap-4 text-sm">
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 20 }}>Payout by Department</h3>
+                <div className="payroll-panel-stack">
                 {Object.entries(deptBreakdown).length === 0 && (
-                  <p className="text-[var(--text-md)] text-center py-4">No data available</p>
+                  <p className="payroll-empty">No data available</p>
                 )}
                 {Object.entries(deptBreakdown).map(([dept, data], i, arr) => (
-                  <div key={dept} className={`flex justify-between items-center ${i < arr.length - 1 ? 'border-b border-gray-50 pb-3' : 'pb-1'}`}>
+                  <div key={dept} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: i < arr.length - 1 ? 16 : 0, borderBottom: i < arr.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                     <div>
-                      <div className="font-semibold text-gray-900">{dept}</div>
-                      <div className="text-xs text-[var(--text-md)]">{data.count} employees</div>
+                      <div className="payroll-name">{dept}</div>
+                      <div className="payroll-muted">{data.count} employees</div>
                     </div>
-                    <div className="font-bold text-gray-900">{fmtINR(data.net)}</div>
+                    <div className="payroll-name">{fmtINR(data.net)}</div>
                   </div>
                 ))}
+                </div>
               </div>
             </Card>
 
             {/* Payslip Actions */}
             <Card>
-              <h3 className="font-bold mb-4">Payslip Actions</h3>
-              <div className="flex flex-col gap-3">
-                <Button variant="outline" className="w-full flex items-center justify-start gap-3 h-10 border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <Mail size={16} className="text-primary" /> Email Payslips to All
+              <div className="ui-card-content">
+                <h3 className="section-title" style={{ marginBottom: 16 }}>Payslip Actions</h3>
+                <div className="payroll-action-list">
+                <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline" style={{ width: '100%', justifyContent: 'flex-start' }}>
+                  <Mail size={15} style={{ color: '#24428b', flexShrink: 0 }} /> Email Payslips to All
                 </Button>
-                <Button variant="outline" className="w-full flex items-center justify-start gap-3 h-10 border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <FileText size={16} className="text-primary" /> Generate PDF Report
+                <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline" style={{ width: '100%', justifyContent: 'flex-start' }}>
+                  <FileText size={15} style={{ color: '#24428b', flexShrink: 0 }} /> Generate PDF Report
                 </Button>
-                <Button variant="outline" className="w-full flex items-center justify-start gap-3 h-10 border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <Landmark size={16} className="text-primary" /> Submit to Bank
+                <Button variant="outline" className="payroll-action-btn payroll-action-btn-outline" style={{ width: '100%', justifyContent: 'flex-start' }}>
+                  <Landmark size={15} style={{ color: '#24428b', flexShrink: 0 }} /> Submit to Bank
                 </Button>
+                </div>
               </div>
             </Card>
           </div>
