@@ -6,110 +6,200 @@ import { Button } from '../../components/ui/Button';
 import { 
   Users, Sun, Moon, Coffee, 
   Calendar, ChevronDown, Wand2, Send,
-  Filter
+  Filter, Check, RefreshCw, AlertCircle
 } from 'lucide-react';
 import './Roster.css';
 
-const SHIFT_ABBR = { 'M': 'M', 'E': 'E', 'N': 'N', 'WO': 'WO' };
-
-function renderShift(shift) {
-  switch (shift) {
-    case 'M': return <span className="shift-cell shift-morning">M</span>;
-    case 'E': return <span className="shift-cell shift-evening">E</span>;
-    case 'N': return <span className="shift-cell shift-night">N</span>;
-    case 'WO': return <span className="shift-cell shift-wo">WO</span>;
-    default: return <span className="shift-cell"></span>;
-  }
-}
-
-function getShiftCode(shiftName) {
-  if (!shiftName) return '';
-  const n = shiftName.toLowerCase();
-  if (n.includes('morn') || n.includes('day')) return 'M';
-  if (n.includes('even') || n.includes('after')) return 'E';
-  if (n.includes('night')) return 'N';
-  if (n.includes('off') || n.includes('week')) return 'WO';
-  return n.charAt(0).toUpperCase();
-}
-
-function shiftBadge(shiftName) {
-  const code = getShiftCode(shiftName);
-  switch (code) {
-    case 'M': return <span className="badge badge-primary-light">{shiftName || 'Morning'}</span>;
-    case 'E': return <span className="badge badge-warning-light">{shiftName || 'Evening'}</span>;
-    case 'N': return <span className="badge badge-gray-light">{shiftName || 'Night'}</span>;
-    case 'WO': return <span className="badge badge-danger-light">Week Off</span>;
-    default:  return <span className="badge badge-gray-light">{shiftName}</span>;
-  }
-}
+// Shift cycling values and styling
+const SHIFT_TYPES = {
+  '': { label: '—', class: 'shift-cell-empty', desc: 'Not Scheduled' },
+  'day': { label: 'D', class: 'shift-cell-day', desc: 'Day Shift (9am-6pm)' },
+  'night': { label: 'N', class: 'shift-cell-night', desc: 'Night Shift (10pm-7am)' },
+  'wo': { label: 'WO', class: 'shift-cell-wo', desc: 'Week Off' }
+};
 
 export function Roster() {
-  const { request, loading } = useApi();
-  const [roster, setRoster] = useState([]); // array of { employee, days: [{date, shift_code}] }
-  const [employees, setEmployees] = useState([]);
-  const [shifts, setShifts] = useState([]);
+  const { request } = useApi();
   const [departments, setDepartments] = useState([]);
-  const [deptFilter, setDeptFilter] = useState('');
+  const [selectedDept, setSelectedDept] = useState('');
+  const [roles, setRoles] = useState([]);
+  const [selectedRole, setSelectedRole] = useState('');
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  
+  const [employees, setEmployees] = useState([]);
+  const [gridData, setGridData] = useState({}); // { [empId]: { [day]: 'day'|'night'|'wo'|'' } }
+  const [initialGridData, setInitialGridData] = useState({}); // to track changes
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // Compute days in selected month
   const [year, mon] = month.split('-').map(Number);
   const daysInMonth = new Date(year, mon, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const firstDow = new Date(year, mon - 1, 1).getDay(); // 0=Sun
-  const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-  const load = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ month });
-      if (deptFilter) params.set('department_id', deptFilter);
-      const res = await request(`/hr/roster?${params}`);
-      const data = res?.data || [];
-      // Data shape: array of { employee_id, employee_name, department_name, roster: [{date, shift_code, shift_name}] }
-      setRoster(Array.isArray(data) ? data : []);
-    } catch (_) {}
-  }, [month, deptFilter]);
-
-  useEffect(() => {
-    request('/hr/departments').then(r => setDepartments(r?.data || [])).catch(() => {});
-    request('/hr/shifts').then(r => setShifts(r?.data || [])).catch(() => {});
-    request('/hr/employees?limit=200').then(r => setEmployees(r?.data?.rows || r?.data || [])).catch(() => {});
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  // Stats derived from roster
-  const shiftCounts = roster.reduce((acc, emp) => {
-    (emp.roster || []).forEach(d => {
-      const code = d.shift_code || getShiftCode(d.shift_name);
-      if (code === 'M') acc.morning = (acc.morning || 0) + 1;
-      else if (code === 'E') acc.evening = (acc.evening || 0) + 1;
-      else if (code === 'N') acc.night = (acc.night || 0) + 1;
-      else if (code === 'WO') acc.wo = (acc.wo || 0) + 1;
-    });
-    return acc;
-  }, {});
-
+  // Format month label
   const monthLabel = new Date(year, mon - 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
 
-  // Build a lookup for employee roster: empId -> { day -> shift_code }
-  const rosterMap = {};
-  roster.forEach(emp => {
-    rosterMap[emp.employee_id] = {};
-    (emp.roster || []).forEach(d => {
-      const day = new Date(d.date).getDate();
-      rosterMap[emp.employee_id][day] = d.shift_code || getShiftCode(d.shift_name) || '';
-    });
-  });
+  // Generate list of Dates with weekday labels
+  const daysList = days.map(d => new Date(year, mon - 1, d));
 
-  // Employees with roster data
-  const rosterEmployees = roster.length > 0 ? roster : employees.map(emp => ({
-    employee_id: emp.id,
-    employee_name: emp.full_name,
-    employee_code: emp.employee_code,
-    department_name: emp.department_name || '',
-    roster: [],
-  }));
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Fetch initial departments
+  useEffect(() => {
+    request('/hr/departments')
+      .then(res => setDepartments(res?.data || []))
+      .catch(() => showToast('Failed to load departments', 'error'));
+  }, []);
+
+  // Cascade fetch roles when department changes
+  useEffect(() => {
+    if (!selectedDept) {
+      setRoles([]);
+      setSelectedRole('');
+      return;
+    }
+    request(`/hr/staff-roles?departmentId=${selectedDept}`)
+      .then(res => {
+        setRoles(res?.data || []);
+        setSelectedRole('');
+      })
+      .catch(() => showToast('Failed to load staff roles', 'error'));
+  }, [selectedDept]);
+
+  // Load roster and employees grid
+  const loadRoster = useCallback(async () => {
+    if (!selectedDept || !selectedRole) return;
+    setLoading(true);
+    try {
+      // 1. Fetch employees matching the filters
+      const empRes = await request(`/hr/roster/employees?departmentId=${selectedDept}&staffRoleId=${selectedRole}`);
+      const emps = empRes?.data || [];
+      setEmployees(emps);
+
+      // 2. Fetch existing roster entries for the month
+      const params = new URLSearchParams({
+        month: mon.toString(),
+        year: year.toString(),
+        departmentId: selectedDept,
+        staffRoleId: selectedRole
+      });
+      const rosterRes = await request(`/hr/roster?${params}`);
+      const rosterList = rosterRes?.data || [];
+
+      // 3. Construct lookup map of existing roster: employee_id -> day -> shift_type
+      const rosterMap = {};
+      rosterList.forEach(r => {
+        const empId = r.employee_id;
+        const day = new Date(r.roster_date).getDate();
+        let shiftType = '';
+        if (r.is_week_off) {
+          shiftType = 'wo';
+        } else if (r.is_night_shift) {
+          shiftType = 'night';
+        } else if (r.shift_id) {
+          shiftType = 'day';
+        }
+        if (!rosterMap[empId]) rosterMap[empId] = {};
+        rosterMap[empId][day] = shiftType;
+      });
+
+      // 4. Initialize grid data for all employees & days
+      const newGrid = {};
+      emps.forEach(emp => {
+        newGrid[emp.employee_id] = {};
+        days.forEach(day => {
+          newGrid[emp.employee_id][day] = rosterMap[emp.employee_id]?.[day] || '';
+        });
+      });
+
+      setGridData(newGrid);
+      setInitialGridData(JSON.parse(JSON.stringify(newGrid)));
+    } catch (err) {
+      showToast('Failed to load roster data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDept, selectedRole, month]);
+
+  // Auto-fetch roster when filters change
+  useEffect(() => {
+    loadRoster();
+  }, [loadRoster]);
+
+  // Cycle shift type on click
+  const handleCellClick = (empId, day) => {
+    const current = gridData[empId]?.[day] || '';
+    const cycle = ['', 'day', 'night', 'wo'];
+    const nextIndex = (cycle.indexOf(current) + 1) % cycle.length;
+    const next = cycle[nextIndex];
+
+    setGridData(prev => ({
+      ...prev,
+      [empId]: {
+        ...prev[empId],
+        [day]: next
+      }
+    }));
+  };
+
+  // Determine if there are unsaved edits
+  const hasChanges = JSON.stringify(gridData) !== JSON.stringify(initialGridData);
+
+  // Bulk save roster entries to DB
+  const handleSaveAll = async () => {
+    if (!hasChanges) return;
+    setSaving(true);
+    try {
+      const rows = [];
+      Object.keys(gridData).forEach(empId => {
+        const empIdNum = Number(empId);
+        days.forEach(day => {
+          const shiftType = gridData[empId][day];
+          const dateStr = `${year}-${mon.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+          
+          // Only send if it differs from initial state, or if we want to write/overwrite it
+          if (gridData[empId][day] !== initialGridData[empId]?.[day]) {
+            rows.push({
+              employee_id: empIdNum,
+              shift_date: dateStr,
+              shift_type: shiftType
+            });
+          }
+        });
+      });
+
+      if (rows.length > 0) {
+        await request('/hr/roster/bulk', {
+          method: 'POST',
+          body: JSON.stringify({ rows })
+        });
+        showToast(`Successfully updated ${rows.length} roster entries!`);
+        // Sync initial state
+        setInitialGridData(JSON.parse(JSON.stringify(gridData)));
+      } else {
+        showToast('No changes to save');
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to save roster', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Statistics summaries from grid
+  const stats = Object.values(gridData).reduce((acc, empGrid) => {
+    Object.values(empGrid).forEach(shift => {
+      if (shift === 'day') acc.day++;
+      if (shift === 'night') acc.night++;
+      if (shift === 'wo') acc.wo++;
+    });
+    return acc;
+  }, { day: 0, night: 0, wo: 0 });
 
   return (
     <div className="roster-page hr-overview-page">
@@ -126,11 +216,14 @@ export function Roster() {
               onChange={e => setMonth(e.target.value)}
               className="roster-month-input"
             />
-            <Button variant="outline" className="roster-action-btn roster-action-btn-outline">
-              <Wand2 size={16} /> AI Suggest
-            </Button>
-            <Button variant="primary" className="roster-action-btn roster-action-btn-primary">
-              <Send size={16} /> Publish Roster
+            <Button 
+              variant="primary" 
+              onClick={handleSaveAll}
+              disabled={!hasChanges || saving}
+              className={`roster-action-btn roster-action-btn-primary ${hasChanges ? 'roster-btn-glow' : ''}`}
+            >
+              {saving ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />}
+              {saving ? 'Saving...' : 'Save Roster'}
             </Button>
           </div>
         }
@@ -139,99 +232,144 @@ export function Roster() {
       <div className="page-content roster-page">
         <div className="roster-heading-block">
           <h1 className="roster-title">Shift & Roster Management</h1>
-          <p className="roster-subtitle">Plan and manage monthly shift rotations for all departments.</p>
+          <p className="roster-subtitle">Schedule shift rotations and week offs for your department staff.</p>
         </div>
 
-        <div className="stats-grid mb-6">
-          <Card className="stat-card stat-total-staff">
-            <div className="stat-card-left">
-              <div className="stat-label">Total Staff Scheduled</div>
-              <div className="stat-value">{rosterEmployees.length}</div>
-              <div className="stat-sub">For {monthLabel}</div>
-            </div>
-            <div className="stat-icon-wrapper blue-bg">
-              <Users size={16} className="icon-blue" />
-            </div>
-          </Card>
+        {/* Global Toast */}
+        {toast && (
+          <div className={`roster-global-toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>
+            {toast.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+            <span>{toast.msg}</span>
+          </div>
+        )}
 
-          <Card className="stat-card stat-morning-shifts">
-            <div className="stat-card-left">
-              <div className="stat-label">Morning Shifts</div>
-              <div className="stat-value">{shiftCounts.morning || 0}</div>
-              <div className="stat-sub">Across all depts</div>
+        {/* Dynamic Filters Card */}
+        <Card className="mb-6 roster-filter-card">
+          <div className="ui-card-content roster-filter-grid">
+            <div className="filter-group">
+              <label className="filter-label">1. Select Department</label>
+              <div className="select-wrapper">
+                <select
+                  value={selectedDept}
+                  onChange={e => setSelectedDept(e.target.value)}
+                  className="roster-filter-select"
+                >
+                  <option value="">Choose Department...</option>
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <ChevronDown className="select-arrow" size={16} />
+              </div>
             </div>
-            <div className="stat-icon-wrapper blue-bg">
-              <Sun size={16} className="icon-blue" />
-            </div>
-          </Card>
 
-          <Card className="stat-card stat-night-shifts">
-            <div className="stat-card-left">
-              <div className="stat-label">Night Shifts</div>
-              <div className="stat-value">{shiftCounts.night || 0}</div>
-              <div className="stat-sub">Across all depts</div>
+            <div className="filter-group">
+              <label className="filter-label">2. Select Role/Designation</label>
+              <div className="select-wrapper">
+                <select
+                  value={selectedRole}
+                  onChange={e => setSelectedRole(e.target.value)}
+                  disabled={!selectedDept}
+                  className="roster-filter-select"
+                >
+                  <option value="">Choose Designation...</option>
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+                <ChevronDown className="select-arrow" size={16} />
+              </div>
             </div>
-            <div className="stat-icon-wrapper blue-bg">
-              <Moon size={16} className="icon-blue" />
-            </div>
-          </Card>
 
-          <Card className="stat-card stat-wo-assigned">
-            <div className="stat-card-left">
-              <div className="stat-label">Week Offs Assigned</div>
-              <div className="stat-value">{shiftCounts.wo || 0}</div>
-              <div className="stat-sub">For selected period</div>
-            </div>
-            <div className="stat-icon-wrapper orange-bg">
-              <Coffee size={16} className="icon-orange" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Legend & Filter */}
-        <Card className="mb-6">
-          <div className="ui-card-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-            <div className="roster-legend-items">
-              <span className="section-title" style={{ fontSize: 13, marginBottom: 0 }}>Legend</span>
-              {shifts.length > 0 ? shifts.map(s => (
-                <div key={s.id} className="roster-legend-item">
-                  <span className="shift-pill-m" style={{ background: 'var(--color-m-bg, #dbeafe)', color: 'var(--color-m-text, #2563eb)' }}>{getShiftCode(s.name)}</span>
-                  {s.name} {s.start_time && s.end_time ? `(${s.start_time}–${s.end_time})` : ''}
-                </div>
-              )) : (
-                <>
-                  <div className="roster-legend-item"><span className="shift-pill-m">M</span> Morning (9am–6pm)</div>
-                  <div className="roster-legend-item"><span className="shift-pill-e">E</span> Evening (2pm–10pm)</div>
-                  <div className="roster-legend-item"><span className="shift-pill-n">N</span> Night (10pm–7am)</div>
-                  <div className="roster-legend-item"><span className="shift-pill-wo">WO</span> Week Off</div>
-                </>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Filter size={15} style={{ color: '#9ca3af' }} />
-              <span className="roster-muted">Department:</span>
-              <select
-                value={deptFilter}
-                onChange={e => setDeptFilter(e.target.value)}
-                className="roster-filter-select"
-              >
-                <option value="">All Departments</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+            <div className="filter-legend-box">
+              <span className="legend-title">Shift Guide (Click cells to cycle):</span>
+              <div className="legend-items">
+                {Object.entries(SHIFT_TYPES).map(([type, info]) => (
+                  <div key={type} className="legend-item-pill">
+                    <span className={`legend-dot ${info.class}`}>{info.label}</span>
+                    <span className="legend-desc">{info.desc}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </Card>
 
-        {/* Monthly Roster Table */}
-        <Card className="mb-6 overflow-hidden">
-          <div className="card-header-flex">
-            <h3 className="section-title" style={{ margin: 0 }}>Monthly Roster — {monthLabel}</h3>
+        {/* Stats Section */}
+        {employees.length > 0 && (
+          <div className="stats-grid mb-6">
+            <Card className="stat-card stat-total-staff">
+              <div className="stat-card-left">
+                <div className="stat-label">Total Staff Loaded</div>
+                <div className="stat-value">{employees.length}</div>
+                <div className="stat-sub">For {monthLabel}</div>
+              </div>
+              <div className="stat-icon-wrapper blue-bg">
+                <Users size={16} className="icon-blue" />
+              </div>
+            </Card>
+
+            <Card className="stat-card stat-morning-shifts">
+              <div className="stat-card-left">
+                <div className="stat-label">Day Shifts Scheduled</div>
+                <div className="stat-value">{stats.day}</div>
+                <div className="stat-sub">This month</div>
+              </div>
+              <div className="stat-icon-wrapper blue-bg">
+                <Sun size={16} className="icon-blue" />
+              </div>
+            </Card>
+
+            <Card className="stat-card stat-night-shifts">
+              <div className="stat-card-left">
+                <div className="stat-label">Night Shifts Scheduled</div>
+                <div className="stat-value">{stats.night}</div>
+                <div className="stat-sub">This month</div>
+              </div>
+              <div className="stat-icon-wrapper purple-bg">
+                <Moon size={16} className="icon-purple" />
+              </div>
+            </Card>
+
+            <Card className="stat-card stat-wo-assigned">
+              <div className="stat-card-left">
+                <div className="stat-label">Week Offs Assigned</div>
+                <div className="stat-value">{stats.wo}</div>
+                <div className="stat-sub">This month</div>
+              </div>
+              <div className="stat-icon-wrapper orange-bg">
+                <Coffee size={16} className="icon-orange" />
+              </div>
+            </Card>
           </div>
-          {loading && <p className="roster-loading">Loading roster…</p>}
-          {!loading && rosterEmployees.length === 0 && (
-            <p className="roster-empty">No roster data for this period. Please publish roster first.</p>
-          )}
-          {!loading && rosterEmployees.length > 0 && (
+        )}
+
+        {/* Roster Main Work Grid */}
+        <Card className="mb-6 overflow-hidden roster-grid-card">
+          <div className="card-header-flex roster-grid-header">
+            <div>
+              <h3 className="section-title">Roster Scheduling Grid — {monthLabel}</h3>
+              <p className="section-subtitle">Click on cells to set or change shifts. Make sure to click save when finished.</p>
+            </div>
+            {hasChanges && (
+              <span className="unsaved-badge">Unsaved Changes Present</span>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="roster-loading-wrapper">
+              <RefreshCw className="animate-spin spinner-blue" size={32} />
+              <p>Loading roster information...</p>
+            </div>
+          ) : !selectedDept || !selectedRole ? (
+            <div className="roster-empty-state">
+              <Calendar size={48} className="empty-icon" />
+              <h4>Select Department and Role to Begin</h4>
+              <p>Choose a department and then select a designation role above to load and edit the schedule grid.</p>
+            </div>
+          ) : employees.length === 0 ? (
+            <div className="roster-empty-state">
+              <Users size={48} className="empty-icon" />
+              <h4>No Employees Found</h4>
+              <p>There are no active employees assigned to the selected Department and Designation.</p>
+            </div>
+          ) : (
             <div className="overflow-x-auto roster-scroll-container">
               <table className="roster-table">
                 <thead>
@@ -239,51 +377,65 @@ export function Roster() {
                     <th className="roster-th roster-th-sticky">Employee</th>
                     {daysList.map(d => {
                       const day = d.getDate();
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       return (
-                        <th key={day} className="roster-th-day">
+                        <th key={day} className={`roster-th-day ${isWeekend ? 'roster-th-weekend' : ''}`}>
                           <div className="roster-th-day-num">{day}</div>
-                          <div>{d.toLocaleString('en-US', { weekday: 'short' }).charAt(0)}</div>
+                          <div className="roster-th-day-lbl">
+                            {d.toLocaleString('en-US', { weekday: 'short' }).charAt(0)}
+                          </div>
                         </th>
-                      )
+                      );
                     })}
-                    <th className="roster-th-total color-primary">M</th>
-                    <th className="roster-th-total color-warning">E</th>
+                    <th className="roster-th-total color-primary">D</th>
                     <th className="roster-th-total color-gray">N</th>
                     <th className="roster-th-total color-danger">WO</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rosterEmployees.map((emp, ri) => {
-                    const empRoster = rosterMap[emp.employee_id] || {};
-                    const counts = { M: 0, E: 0, N: 0, WO: 0 };
+                  {employees.map((emp) => {
+                    const empGrid = gridData[emp.employee_id] || {};
+                    const counts = { day: 0, night: 0, wo: 0 };
                     days.forEach(d => {
-                      const code = empRoster[d] || '';
-                      if (counts[code] !== undefined) counts[code]++;
+                      const shift = empGrid[d] || '';
+                      if (counts[shift] !== undefined) counts[shift]++;
                     });
+
                     return (
-                      <tr key={emp.employee_id || ri} className="roster-td-row">
+                      <tr key={emp.employee_id} className="roster-td-row">
                         <td className="roster-td roster-td-sticky">
                           <div className="roster-employee-cell">
                             <img
-                              src={`https://i.pravatar.cc/150?u=roster_${emp.employee_id}`}
+                              src={`https://api.dicebear.com/7.x/initials/svg?seed=${emp.full_name}&backgroundColor=24428b,0369a1,4f46e5`}
                               className="roster-avatar"
                               alt="avatar"
                             />
-                            <div>
-                              <div className="roster-name">{emp.employee_name || `EMP${emp.employee_id}`}</div>
-                              <div className="roster-muted">{emp.department_name || '—'}</div>
+                            <div className="roster-info-block">
+                              <div className="roster-name">{emp.full_name}</div>
+                              <div className="roster-muted">{emp.employee_code}</div>
                             </div>
                           </div>
                         </td>
-                        {days.map(d => (
-                          <td key={d} className="roster-td-day">
-                            {renderShift(empRoster[d] || '')}
-                          </td>
-                        ))}
-                        <td className="roster-td-total color-primary">{counts.M}</td>
-                        <td className="roster-td-total color-warning">{counts.E}</td>
-                        <td className="roster-td-total color-gray">{counts.N}</td>
-                        <td className="roster-td-total color-danger">{counts.WO}</td>
+                        {daysList.map(d => {
+                          const day = d.getDate();
+                          const shiftType = empGrid[day] || '';
+                          const info = SHIFT_TYPES[shiftType];
+                          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                          return (
+                            <td 
+                              key={day} 
+                              className={`roster-td-day ${isWeekend ? 'roster-td-weekend' : ''}`}
+                              onClick={() => handleCellClick(emp.employee_id, day)}
+                            >
+                              <div className={`shift-cell-pill ${info.class}`}>
+                                {info.label}
+                              </div>
+                            </td>
+                          );
+                        })}
+                        <td className="roster-td-total color-primary">{counts.day}</td>
+                        <td className="roster-td-total color-gray">{counts.night}</td>
+                        <td className="roster-td-total color-danger">{counts.wo}</td>
                       </tr>
                     );
                   })}
@@ -291,42 +443,6 @@ export function Roster() {
               </table>
             </div>
           )}
-        </Card>
-
-        {/* Shifts Config Table */}
-        <Card>
-          <div className="card-header-flex">
-            <h3 className="section-title" style={{ margin: 0 }}>Configured Shifts</h3>
-          </div>
-          <div className="ui-card-content">
-            <table className="roster-shift-table">
-              <thead>
-                <tr className="roster-shift-th-row">
-                  <th className="pb-3 font-semibold">Shift Name</th>
-                  <th className="pb-3 font-semibold">Code</th>
-                  <th className="pb-3 font-semibold">Start Time</th>
-                  <th className="pb-3 font-semibold">End Time</th>
-                  <th className="pb-3 font-semibold">Grace Period</th>
-                  <th className="pb-3 font-semibold">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shifts.length === 0 && (
-                  <tr><td colSpan={6} className="roster-shift-empty">No shifts configured.</td></tr>
-                )}
-                {shifts.map((s, i) => (
-                  <tr key={s.id || i} className="roster-shift-row">
-                    <td className="roster-shift-name">{s.name}</td>
-                    <td>{shiftBadge(s.name)}</td>
-                    <td className="font-medium">{s.start_time || '—'}</td>
-                    <td className="font-medium">{s.end_time || '—'}</td>
-                    <td className="roster-shift-muted">{s.grace_minutes ? `${s.grace_minutes} min` : '—'}</td>
-                    <td className="roster-shift-muted">{s.shift_type || s.type || 'Regular'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </Card>
       </div>
     </div>

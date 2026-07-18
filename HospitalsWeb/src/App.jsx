@@ -28,6 +28,7 @@ import { Payroll }    from './pages/hr/Payroll';
 import { Structure }  from './pages/hr/Structure';
 import { Leave }      from './pages/hr/Leave';
 import { Fine }       from './pages/hr/Fine';
+import { Departments } from './pages/hr/Departments';
 
 // ── Auth Guard ─────────────────────────────────────────
 const RequireAuth = ({ children }) => {
@@ -71,6 +72,7 @@ export default function App() {
             {/* Human Resources */}
             <Route path="hr">
               <Route path="employees"  element={<Employees />} />
+              <Route path="departments" element={<Departments />} />
               <Route path="roster"     element={<Roster />} />
               <Route path="attendance" element={<Attendance />} />
               <Route path="payroll"    element={<Payroll />} />

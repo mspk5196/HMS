@@ -90,7 +90,7 @@ const createBiometricWindow = async ({ window_date, role_id, extended_start, ext
 /** Get daily attendance summary for an employee on a specific date. */
 const getDailySummary = async (employeeId, date) => {
   const [rows] = await db.execute(
-    `SELECT ads.*, e.full_name, s.name AS shift_name
+    `SELECT ads.*, ads.first_in_time AS first_punch_in, ads.last_out_time AS last_punch_out, e.full_name, s.name AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
      LEFT JOIN shifts s ON s.id = ads.shift_id
@@ -115,7 +115,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
   const where = filters.join(' AND ');
 
   const [rows] = await db.query(
-    `SELECT ads.*, e.full_name, e.employee_code, d.name AS department_name, s.name AS shift_name
+    `SELECT ads.*, ads.first_in_time AS first_punch_in, ads.last_out_time AS last_punch_out, e.full_name, e.employee_code, d.name AS department_name, s.name AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
      LEFT JOIN departments d ON d.id = e.department_id
@@ -142,26 +142,28 @@ const upsertDailySummary = async (data) => {
   const {
     employee_id, attendance_date, shift_id, status,
     first_punch_in, last_punch_out, worked_minutes,
-    late_minutes, is_missed_punch,
+    late_minutes, is_missed_punch, overtime_minutes,
   } = data;
 
   await db.execute(
     `INSERT INTO attendance_daily_summary
        (employee_id, attendance_date, shift_id, status,
-        first_punch_in, last_punch_out, worked_minutes,
-        late_minutes, is_missed_punch)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_in_time, last_out_time, worked_minutes,
+        late_minutes, is_missed_punch, overtime_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        shift_id = VALUES(shift_id),
        status = VALUES(status),
-       first_punch_in = VALUES(first_punch_in),
-       last_punch_out = VALUES(last_punch_out),
+       first_in_time = VALUES(first_in_time),
+       last_out_time = VALUES(last_out_time),
        worked_minutes = VALUES(worked_minutes),
        late_minutes = VALUES(late_minutes),
-       is_missed_punch = VALUES(is_missed_punch)`,
+       is_missed_punch = VALUES(is_missed_punch),
+       overtime_minutes = VALUES(overtime_minutes)`,
     [employee_id, attendance_date, shift_id ?? null, status,
      first_punch_in ?? null, last_punch_out ?? null,
-     worked_minutes ?? 0, late_minutes ?? 0, is_missed_punch ? 1 : 0]
+     worked_minutes ?? 0, late_minutes ?? 0, is_missed_punch ? 1 : 0,
+     overtime_minutes ?? 0]
   );
 };
 
@@ -184,13 +186,25 @@ const adminMarkAttendance = async (employeeId, date, status, markedBy) => {
    LATE-BUFFER POOL
 ───────────────────────────────────────────── */
 
-/** Get or create the buffer record for an employee + period. */
+/** Get or create the buffer record for an employee + period.
+ *  Reads the allocation from the employee's role (staff_roles.monthly_buffer_minutes).
+ *  Falls back to defaultMinutes if no role found. */
 const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) => {
+  // Fetch the role-based allocation
+  const [roleRows] = await db.execute(
+    `SELECT COALESCE(sr.monthly_buffer_minutes, ?) AS alloc
+     FROM employees e
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE e.id = ?`,
+    [defaultMinutes, employeeId]
+  );
+  const allocMinutes = roleRows[0]?.alloc ?? defaultMinutes;
+
   await db.execute(
     `INSERT IGNORE INTO employee_attendance_buffers
        (employee_id, period_month, period_year, buffer_allocated_minutes)
      VALUES (?, ?, ?, ?)`,
-    [employeeId, month, year, defaultMinutes]
+    [employeeId, month, year, allocMinutes]
   );
   const [rows] = await db.execute(
     `SELECT * FROM employee_attendance_buffers
@@ -198,6 +212,35 @@ const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) =
     [employeeId, month, year]
   );
   return rows[0];
+};
+
+/** Get full buffer status for one employee in a period, including role allocation. */
+const getEmployeeBufferWithRole = async (employeeId, month, year) => {
+  // Ensure buffer row exists
+  const [roleRows] = await db.execute(
+    `SELECT COALESCE(sr.monthly_buffer_minutes, 30) AS alloc, sr.name AS role_name
+     FROM employees e
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE e.id = ?`,
+    [employeeId]
+  );
+  const allocMinutes = roleRows[0]?.alloc ?? 30;
+  const roleName = roleRows[0]?.role_name ?? 'Unknown';
+
+  await db.execute(
+    `INSERT IGNORE INTO employee_attendance_buffers
+       (employee_id, period_month, period_year, buffer_allocated_minutes)
+     VALUES (?, ?, ?, ?)`,
+    [employeeId, month, year, allocMinutes]
+  );
+  const [rows] = await db.execute(
+    `SELECT eab.*, e.full_name
+     FROM employee_attendance_buffers eab
+     JOIN employees e ON e.id = eab.employee_id
+     WHERE eab.employee_id = ? AND eab.period_month = ? AND eab.period_year = ?`,
+    [employeeId, month, year]
+  );
+  return { ...rows[0], role_name: roleName, role_allocated_minutes: allocMinutes };
 };
 
 /** Deduct lateMinutes from the buffer, update used_minutes. */
@@ -292,6 +335,14 @@ const reviewCorrectionRequest = async (id, { status, reviewer_notes, reviewed_by
   );
 };
 
+const deleteRawPunches = async (employeeId, date) => {
+  await db.execute(
+    `DELETE FROM attendance_raw_punches 
+     WHERE employee_id = ? AND DATE(punch_time) = ?`,
+    [employeeId, date]
+  );
+};
+
 module.exports = {
   bulkInsertPunches,
   getUnprocessedPunches,
@@ -303,10 +354,12 @@ module.exports = {
   upsertDailySummary,
   adminMarkAttendance,
   getOrCreateBuffer,
+  getEmployeeBufferWithRole,
   deductFromBuffer,
   logBufferDeduction,
   getBufferSummary,
   listCorrectionRequests,
   createCorrectionRequest,
   reviewCorrectionRequest,
+  deleteRawPunches,
 };

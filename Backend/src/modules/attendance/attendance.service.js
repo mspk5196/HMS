@@ -31,7 +31,19 @@ const getShiftForDate = async (employeeId, date) => {
      LIMIT 1`,
     [employeeId, date]
   );
-  return rows[0] ?? null;
+  if (rows.length) return rows[0];
+
+  // Fallback to employee's default shift (Wait, employees table has no shift_id)
+  // Just return a generic 09:00 to 17:00 default shift if no roster exists, 
+  // so we can still calculate late minutes.
+  return {
+    shift_id: null,
+    shift_name: 'Default Shift',
+    start_time: '09:00:00',
+    end_time: '17:00:00',
+    is_night_shift: 0,
+    grace_period_minutes: 0
+  };
 };
 
 /** Read DEFAULT_BUFFER_MINUTES from system_config. */
@@ -98,13 +110,15 @@ const processDailyAttendance = async (date) => {
     const shift = await getShiftForDate(Number(empId), date);
     const biometricWindow = await q.getBiometricWindow(date, employee.role_id ?? null);
 
+    const hasShift = !!shift && !!shift.start_time;
+
     // Determine acceptance window
     let windowStart = null;
     let windowEnd = null;
     if (biometricWindow) {
       windowStart = biometricWindow.extended_start;
       windowEnd = biometricWindow.extended_end;
-    } else if (shift) {
+    } else if (hasShift) {
       windowStart = shift.start_time;
       windowEnd = shift.is_night_shift
         ? '23:59:59'   // Night shift: accept until midnight
@@ -130,30 +144,25 @@ const processDailyAttendance = async (date) => {
     const lastOut = validPunches[validPunches.length - 1].punch_time;
     const isMissedPunch = validPunches.length === 1; // Only one punch = missed out-punch
 
-    // Compute late minutes
+    // Compute late minutes — purely: actualIn - shiftStart (NO grace period)
+    // Late minutes are deducted from the monthly buffer pool instead
     let lateMinutes = 0;
-    if (shift) {
+    if (hasShift) {
       const shiftStartMin = timeToMinutes(shift.start_time);
-      const grace = shift.grace_period_minutes ?? 0;
       const actualInMin = new Date(firstIn).getHours() * 60 + new Date(firstIn).getMinutes();
-      lateMinutes = Math.max(0, actualInMin - shiftStartMin - grace);
+      lateMinutes = Math.max(0, actualInMin - shiftStartMin);
     }
 
     // Compute worked minutes
     const worked = workedMinutes(firstIn, lastOut);
     const shiftMinutes = shift ? timeToMinutes(shift.end_time) - timeToMinutes(shift.start_time) : 480;
 
-    // Determine attendance status
+    // Determine attendance status (db enum only allows: present, absent, on_leave, lop, week_off, holiday)
     let status = 'present';
     if (isMissedPunch) {
       status = 'present'; // treat as present but flag missed punch
-    } else if (worked < shiftMinutes * 0.5) {
-      status = 'half_day';
-    } else if (lateMinutes > 0) {
-      status = 'late_present';
     }
 
-    // Upsert daily summary
     await q.upsertDailySummary({
       employee_id: empId,
       attendance_date: date,
@@ -164,6 +173,7 @@ const processDailyAttendance = async (date) => {
       worked_minutes: worked,
       late_minutes: lateMinutes,
       is_missed_punch: isMissedPunch,
+      overtime_minutes: 0,
     });
 
     // Get the summary row we just upserted (need its id for buffer log)
@@ -288,6 +298,63 @@ const createBiometricWindow = async (data, createdBy) => {
   return q.createBiometricWindow({ ...data, created_by: createdBy });
 };
 
+const addManualPunch = async (employeeId, date, checkIn, checkOut, overtimeMinutes = 0) => {
+  if (!employeeId || !date || !checkIn) {
+    throw new AppError('employeeId, date and checkIn are required', 400);
+  }
+
+  // Delete any existing punches for this employee on this date
+  await q.deleteRawPunches(employeeId, date);
+
+  const punchesToInsert = [];
+  const checkInTime = `${date} ${checkIn.length === 5 ? checkIn + ':00' : checkIn}`;
+  punchesToInsert.push({
+    employee_id: employeeId,
+    device_id: 'MANUAL',
+    punch_time: checkInTime,
+    punch_type: 'in'
+  });
+
+  if (checkOut) {
+    const checkOutTime = `${date} ${checkOut.length === 5 ? checkOut + ':00' : checkOut}`;
+    punchesToInsert.push({
+      employee_id: employeeId,
+      device_id: 'MANUAL',
+      punch_time: checkOutTime,
+      punch_type: 'out'
+    });
+  }
+
+  await q.bulkInsertPunches(punchesToInsert);
+
+  // Process attendance — computes late, worked, status, buffer deductions
+  await processDailyAttendance(date);
+
+  // After processing, upsert overtime_minutes (manual entry)
+  if (overtimeMinutes > 0) {
+    const summary = await q.getDailySummary(employeeId, date);
+    if (summary) {
+      await q.upsertDailySummary({
+        employee_id: employeeId,
+        attendance_date: date,
+        shift_id: summary.shift_id,
+        status: summary.status,
+        first_punch_in: summary.first_punch_in,
+        last_punch_out: summary.last_punch_out,
+        worked_minutes: summary.worked_minutes,
+        late_minutes: summary.late_minutes,
+        is_missed_punch: summary.is_missed_punch,
+        overtime_minutes: overtimeMinutes,
+      });
+    }
+  }
+};
+
+/** Get buffer status for a single employee in the current month (for UI display). */
+const getEmployeeBuffer = async (employeeId, month, year) => {
+  return q.getEmployeeBufferWithRole(employeeId, month, year);
+};
+
 module.exports = {
   processDailyAttendance,
   importPunches,
@@ -295,6 +362,8 @@ module.exports = {
   submitCorrectionRequest,
   reviewCorrectionRequest,
   createBiometricWindow,
+  addManualPunch,
+  getEmployeeBuffer,
   listDailySummaries: q.listDailySummaries,
   getDailySummary: q.getDailySummary,
   listBiometricWindows: q.listBiometricWindows,

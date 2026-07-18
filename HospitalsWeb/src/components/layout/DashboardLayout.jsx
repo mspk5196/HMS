@@ -14,6 +14,7 @@ const NAV_GROUPS = [
     label: 'STAFF & SALARY',
     items: [
       { name: 'HR & Employees', path: '/hr/employees', icon: Users, perm: 'hr_employee.view' },
+      { name: 'Department & Role', path: '/hr/departments', icon: FolderOpen, perm: 'hr_employee.view' },
       { name: 'Shift & Roster', path: '/hr/roster', icon: CalendarDays, perm: 'shift_roster.view' },
       { name: 'Attendance', path: '/hr/attendance', icon: Clock, perm: 'attendance.view' },
       { name: 'Leave', path: '/hr/leave', icon: FileMinus, perm: 'hr_employee.view' },

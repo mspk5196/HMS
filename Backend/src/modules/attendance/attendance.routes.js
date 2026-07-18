@@ -31,6 +31,7 @@ router.post('/punches/import', ctrl.importPunches);
 
 // Admin manual mark
 router.post('/mark', ctrl.manualMark);
+router.post('/manual-punch', ctrl.manualPunch);
 
 // Biometric windows
 router.get('/biometric-windows', ctrl.listBiometricWindows);
@@ -43,5 +44,7 @@ router.patch('/corrections/:id/review', ctrl.reviewCorrection);
 
 // Buffer summary
 router.get('/buffer', ctrl.getBufferSummary);
+router.get('/buffer/employee/:id', ctrl.getEmployeeBuffer);
+
 
 module.exports = router;

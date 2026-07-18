@@ -1,0 +1,453 @@
+/* Consolidated Department & Role Management Layout */
+
+.dept-roles-master-page {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* Split Pane Grid Layout */
+.dept-roles-layout-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .dept-roles-layout-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .dept-list-panel {
+    height: auto !important;
+    min-height: auto !important;
+  }
+  
+  .dept-detail-panel {
+    height: auto !important;
+    min-height: auto !important;
+  }
+}
+
+/* Master Pane: Department List Card Item */
+.dept-list-item {
+  border: 1px solid var(--line-lt, #f1f5f9);
+  background-color: #fff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dept-list-item:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+}
+
+.dept-list-item.selected {
+  border-color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ROLE CARDS GRID 
+   ═══════════════════════════════════════════════════════════ */
+.role-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.role-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.role-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.role-card.inactive-role {
+  opacity: 0.6;
+  background: #f8fafc;
+}
+
+.role-card-accent {
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  border-radius: 3px 3px 0 0;
+}
+
+.role-card.night-role .role-card-accent {
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+}
+
+.role-card-body {
+  padding: 16px;
+}
+
+.role-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.role-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.role-card-badges {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.role-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.role-card-actions button {
+  padding: 5px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-card-actions button.edit-btn {
+  color: #64748b;
+}
+
+.role-card-actions button.edit-btn:hover {
+  background: #f1f5f9;
+  color: #3b82f6;
+}
+
+.role-card-actions button.del-btn {
+  color: #94a3b8;
+}
+
+.role-card-actions button.del-btn:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+/* Role card info sections */
+.role-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.role-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.role-info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.role-info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.role-info-sub {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Shift timing strip */
+.role-shift-strip {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.role-card.night-role .role-shift-strip {
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+  border-color: #ddd6fe;
+}
+
+.shift-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shift-icon-box.day {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  color: #2563eb;
+}
+
+.shift-icon-box.night {
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  color: #7c3aed;
+}
+
+.shift-details-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.shift-name-row {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.shift-time-row {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+/* Biometric strip */
+.biometric-strip {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.bio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.bio-badge.in {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.bio-badge.out {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+/* Night shift badge */
+.night-shift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL FORM SECTIONS  
+   ═══════════════════════════════════════════════════════════ */
+.form-section {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fafbfc;
+}
+
+.form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.form-section-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.form-section-icon.blue {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  color: #2563eb;
+}
+
+.form-section-icon.green {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #16a34a;
+}
+
+.form-section-icon.amber {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #d97706;
+}
+
+.form-section-icon.purple {
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  color: #7c3aed;
+}
+
+.form-section-icon.indigo {
+  background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+  color: #4338ca;
+}
+
+.form-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-section-subtitle {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Night shift section highlight */
+.night-shift-section {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid #ddd6fe;
+  background: linear-gradient(135deg, #faf5ff, #f5f3ff);
+  position: relative;
+  overflow: hidden;
+}
+
+.night-shift-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #c084fc);
+}
+
+/* Detail Pane Tabs */
+.tab-btn {
+  position: relative;
+  outline: none;
+}
+
+.tab-btn::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.tab-btn.active::after {
+  background-color: #3b82f6;
+}
+
+/* Toast Success / Error Notifications */
+.toast-alert {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  color: white;
+  padding: 12px 18px;
+  border-radius: 10px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  z-index: 9999;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateY(0);
+  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.success-toast {
+  border-left: 4px solid #10b981;
+}
+
+.success-toast svg {
+  color: #10b981;
+}
+
+.error-toast {
+  border-left: 4px solid #ef4444;
+}
+
+.error-toast svg {
+  color: #ef4444;
+}
+
+/* Empty state */
+.dept-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

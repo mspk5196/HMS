@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
 import { 
   Users, Clock, FileMinus, Banknote, 
   Briefcase, Calendar, X, Plus, TrendingUp, RefreshCw, Check
@@ -31,6 +32,8 @@ const MOCK_EMPLOYEES = [
     phone: '98xxxxxx10',
     salary_type: 'monthly',
     basic_salary: 22500,
+    per_day_salary: 850,
+    per_night_salary: 1050,
     email: 'priya.n@hospital.com',
     bank_account: 'xxxxxxxx4213',
     ifsc: 'HDFC0001234',
@@ -48,6 +51,8 @@ const MOCK_EMPLOYEES = [
     phone: '98xxxxxx11',
     salary_type: 'monthly',
     basic_salary: 19700,
+    per_day_salary: 750,
+    per_night_salary: 950,
     email: 'sundar.m@hospital.com',
     bank_account: 'xxxxxxxx1234',
     ifsc: 'HDFC0001234',
@@ -65,6 +70,8 @@ const MOCK_EMPLOYEES = [
     phone: '98xxxxxx12',
     salary_type: 'monthly',
     basic_salary: 20100,
+    per_day_salary: 780,
+    per_night_salary: 980,
     email: 'ravi.t@hospital.com',
     bank_account: 'xxxxxxxx5678',
     ifsc: 'HDFC0001234',
@@ -82,6 +89,8 @@ const MOCK_EMPLOYEES = [
     phone: '98xxxxxx13',
     salary_type: 'monthly',
     basic_salary: 18000,
+    per_day_salary: 700,
+    per_night_salary: 900,
     email: 'kavitha.s@hospital.com',
     bank_account: 'xxxxxxxx9012',
     ifsc: 'HDFC0001234',
@@ -99,6 +108,8 @@ const MOCK_EMPLOYEES = [
     phone: '98xxxxxx03',
     salary_type: 'monthly',
     basic_salary: 72000,
+    per_day_salary: 2800,
+    per_night_salary: 3200,
     email: 'meera.r@hospital.com',
     bank_account: 'xxxxxxxx2468',
     ifsc: 'HDFC0001234',
@@ -150,134 +161,244 @@ function AddEmployeeModal({ open, onClose, onSaved }) {
   const [designations, setDesignations] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [form, setForm] = useState({
-    full_name: '', employee_code: '', phone: '', email: '',
-    department_id: '', designation_id: '', shift_id: '',
+    full_name: '',
+    employee_code: '',
+    phone: '',
+    email: '',
+    department_id: '',
+    designation_id: '',
+    shift_id: '',
     joining_date: new Date().toISOString().split('T')[0],
-    salary_type: 'monthly', basic_salary: '',
+    salary_type: 'monthly',
+    basic_salary: '',
+    per_day_salary: '',
+    per_night_salary: '',
+    gender: 'male',
+    dob: '1995-01-01',
+    address: '',
+    bank_account_no: '',
+    bank_ifsc: '',
+    uan_number: ''
   });
   const [err, setErr] = useState('');
-
-  const defaultDepts = [{ id: 1, name: 'Nursing' }, { id: 2, name: 'Laboratory' }, { id: 3, name: 'Pharmacy' }, { id: 4, name: 'Admin' }, { id: 5, name: 'General Medicine' }];
-  const defaultDesigs = [{ id: 1, name: 'Nurse' }, { id: 2, name: 'Lab Technician' }, { id: 3, name: 'Pharmacist' }, { id: 4, name: 'Receptionist' }, { id: 5, name: 'Doctor' }];
-  const defaultShifts = [{ id: 1, name: 'Morning' }, { id: 2, name: 'Night' }];
 
   useEffect(() => {
     if (!open) return;
     request('/hr/departments').then(r => setDepartments(r?.data || [])).catch(() => {});
-    request('/hr/designations').then(r => setDesignations(r?.data || [])).catch(() => {});
     request('/hr/shifts').then(r => setShifts(r?.data || [])).catch(() => {});
+    setDesignations([]);
   }, [open]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  const handleDepartmentChange = async (deptId) => {
+    setForm(f => ({ ...f, department_id: deptId, designation_id: '', basic_salary: '' }));
+    if (!deptId) {
+      setDesignations([]);
+      return;
+    }
+    try {
+      const res = await request(`/hr/staff-roles?departmentId=${deptId}`);
+      const roles = res?.data || [];
+      setDesignations(roles);
+      if (roles.length > 0) {
+        const firstRole = roles[0];
+        setForm(f => {
+          const updated = {
+            ...f,
+            department_id: deptId,
+            designation_id: firstRole.id,
+            basic_salary: firstRole.basic_salary ?? ''
+          };
+          if (firstRole.shift_name) {
+            const matched = shifts.find(s => s.name.toLowerCase() === firstRole.shift_name.toLowerCase());
+            if (matched) {
+              updated.shift_id = matched.id;
+            }
+          }
+          return updated;
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDesignationChange = (roleId) => {
+    const selectedRole = designations.find(d => String(d.id) === String(roleId));
+    if (selectedRole) {
+      setForm(f => {
+        const updated = {
+          ...f,
+          designation_id: roleId,
+          basic_salary: selectedRole.basic_salary ?? ''
+        };
+        if (selectedRole.shift_name) {
+          const matched = shifts.find(s => s.name.toLowerCase() === selectedRole.shift_name.toLowerCase());
+          if (matched) {
+            updated.shift_id = matched.id;
+          }
+        }
+        return updated;
+      });
+    } else {
+      setForm(f => ({ ...f, designation_id: roleId }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setErr('');
-    const depts = departments.length > 0 ? departments : defaultDepts;
-    const desigs = designations.length > 0 ? designations : defaultDesigs;
     try {
-      const newEmp = {
-        id: Date.now(),
+      const payload = {
         employee_code: form.employee_code || `EMP0${Math.floor(10 + Math.random() * 90)}`,
         full_name: form.full_name,
-        department_name: depts.find(d => String(d.id) === String(form.department_id))?.name || 'Nursing',
-        designation_name: desigs.find(d => String(d.id) === String(form.designation_id))?.name || 'Nurse',
-        joining_date: form.joining_date,
-        phone: form.phone || '98xxxxx00',
+        gender: form.gender,
+        dob: form.dob,
+        date_of_joining: form.joining_date,
+        department_id: Number(form.department_id) || undefined,
+        designation_id: Number(form.designation_id) || undefined,
+        shift_id: Number(form.shift_id) || undefined,
+        basic_salary: Number(form.basic_salary) || undefined,
+        per_day_salary: Number(form.per_day_salary) || 0,
+        per_night_salary: Number(form.per_night_salary) || 0,
+        phone: form.phone || null,
+        email: form.email || null,
         salary_type: form.salary_type,
-        basic_salary: Number(form.basic_salary) || 20000,
-        email: form.email || 'employee@hospital.com',
-        bank_account: 'xxxxxxxx1234',
-        ifsc: 'HDFC0001234',
-        uan: 'Pending enrolment',
-        status: 'active',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120&h=120'
+        address: form.address || null,
+        bank_account_no: form.bank_account_no || null,
+        bank_ifsc: form.bank_ifsc || null,
+        uan_number: form.uan_number || null
       };
+
+      const res = await request('/hr/employees', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      
+      const realId = res?.data?.id || Date.now();
+      
+      const newEmp = {
+        id: realId,
+        employee_code: payload.employee_code,
+        full_name: payload.full_name,
+        department_name: departments.find(d => String(d.id) === String(form.department_id))?.name || '',
+        designation_name: designations.find(d => String(d.id) === String(form.designation_id))?.name || '',
+        joining_date: payload.date_of_joining,
+        phone: payload.phone || '—',
+        salary_type: payload.salary_type,
+        basic_salary: payload.basic_salary || 0,
+        per_day_salary: payload.per_day_salary || 0,
+        per_night_salary: payload.per_night_salary || 0,
+        email: payload.email || '—',
+        bank_account: payload.bank_account_no || '—',
+        ifsc: payload.bank_ifsc || '—',
+        uan: payload.uan_number || 'Pending enrolment',
+        status: 'active',
+        avatar: `https://i.pravatar.cc/150?u=emp_${realId}`
+      };
+      
       onSaved(newEmp);
       onClose();
-      await request('/hr/employees', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          department_id: Number(form.department_id) || undefined,
-          designation_id: Number(form.designation_id) || undefined,
-          shift_id: Number(form.shift_id) || undefined,
-          basic_salary: Number(form.basic_salary) || undefined,
-        })
-      });
     } catch (e) { setErr(e.message); }
   };
 
   if (!open) return null;
 
-  const depts = departments.length > 0 ? departments : defaultDepts;
-  const desigs = designations.length > 0 ? designations : defaultDesigs;
-  const sfts = shifts.length > 0 ? shifts : defaultShifts;
-
   return (
     <div className="modal-overlay">
-      <div className="modal-box" style={{ width: 560 }}>
+      <div className="modal-box" style={{ width: 580 }}>
         <div className="modal-header">
-          <h2 className="modal-title">Add New Employee</h2>
+          <h2 className="modal-title font-bold text-slate-800">Add New Employee</h2>
           <button className="modal-close-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-form-body">
-            <div className="modal-grid">
+            <div className="modal-grid grid grid-cols-2 gap-4">
               <div>
-                <label className="field-label">Full Name *</label>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Full Name *</label>
                 <input className="field" required value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Full name" />
               </div>
               <div>
-                <label className="field-label">Employee Code</label>
-                <input className="field" value={form.employee_code} onChange={e => set('employee_code', e.target.value)} placeholder="EMP001" />
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Employee Code</label>
+                <input className="field" value={form.employee_code} onChange={e => set('employee_code', e.target.value)} placeholder="e.g. EMP082" />
               </div>
               <div>
-                <label className="field-label">Phone</label>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Gender *</label>
+                <select className="field" value={form.gender} onChange={e => set('gender', e.target.value)}>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Date of Birth *</label>
+                <input className="field" type="date" required value={form.dob} onChange={e => set('dob', e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Phone</label>
                 <input className="field" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="9XXXXXXXXX" />
               </div>
               <div>
-                <label className="field-label">Email</label>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Email</label>
                 <input className="field" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@hospital.com" />
               </div>
               <div>
-                <label className="field-label">Department</label>
-                <select className="field" value={form.department_id} onChange={e => set('department_id', e.target.value)}>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Department *</label>
+                <select className="field" required value={form.department_id} onChange={e => handleDepartmentChange(e.target.value)}>
                   <option value="">Select...</option>
-                  {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="field-label">Designation</label>
-                <select className="field" value={form.designation_id} onChange={e => set('designation_id', e.target.value)}>
-                  <option value="">Select...</option>
-                  {desigs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Designation (Role) *</label>
+                <select className="field" required value={form.designation_id} onChange={e => handleDesignationChange(e.target.value)}>
+                  {designations.length === 0 ? (
+                    <option value="">Select a department first...</option>
+                  ) : (
+                    <>
+                      <option value="">Select...</option>
+                      {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </>
+                  )}
                 </select>
               </div>
+
               <div>
-                <label className="field-label">Shift</label>
-                <select className="field" value={form.shift_id} onChange={e => set('shift_id', e.target.value)}>
-                  <option value="">Select...</option>
-                  {sfts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Joining Date *</label>
+                <input className="field" type="date" required value={form.joining_date} onChange={e => set('joining_date', e.target.value)} />
+              </div>
+              <div className="col-span-2">
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Address</label>
+                <input className="field" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Residential Address" />
+              </div>
+
+              {/* ── Salary Section ── */}
+              <div className="col-span-2 mt-1 mb-0">
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1">Salary Details</div>
               </div>
               <div>
-                <label className="field-label">Joining Date</label>
-                <input className="field" type="date" value={form.joining_date} onChange={e => set('joining_date', e.target.value)} />
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Monthly Salary (₹) *</label>
+                <input className="field" type="number" required value={form.basic_salary} onChange={e => set('basic_salary', e.target.value)} placeholder="e.g. 22500" />
+              </div>
+
+              {/* ── Banking & PF Section ── */}
+              <div className="col-span-2 mt-1 mb-0">
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1">Banking & PF Details</div>
               </div>
               <div>
-                <label className="field-label">Salary Type</label>
-                <select className="field" value={form.salary_type} onChange={e => set('salary_type', e.target.value)}>
-                  <option value="monthly">Monthly Fixed</option>
-                  <option value="daily">Daily Rate</option>
-                  <option value="hourly">Hourly Rate</option>
-                </select>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">Bank Account No *</label>
+                <input className="field" required value={form.bank_account_no} onChange={e => set('bank_account_no', e.target.value)} placeholder="e.g. 1234567890" />
               </div>
               <div>
-                <label className="field-label">Basic Salary (₹)</label>
-                <input className="field" type="number" value={form.basic_salary} onChange={e => set('basic_salary', e.target.value)} placeholder="0" />
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">IFSC Code *</label>
+                <input className="field" required value={form.bank_ifsc} onChange={e => set('bank_ifsc', e.target.value)} placeholder="e.g. HDFC0001234" />
+              </div>
+              <div>
+                <label className="field-label font-semibold text-slate-700 block mb-0.5">UAN / PF No <span className="text-slate-400 font-normal">(Optional)</span></label>
+                <input className="field" value={form.uan_number} onChange={e => set('uan_number', e.target.value)} placeholder="e.g. 100987654321" />
               </div>
             </div>
-            {err && <p className="modal-error">{err}</p>}
+            {err && <p className="modal-error text-red-500 text-xs mt-2">{err}</p>}
           </div>
           <div className="modal-footer">
             <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
@@ -546,15 +667,21 @@ export function Employees() {
                         <div className="info-value">{selectedEmp.phone}</div>
                       </div>
                       <div>
-                        <div className="info-label">Salary Basis</div>
+                        <div className="info-label">Monthly Salary</div>
                         <div className="info-value">
-                          {selectedEmp.salary_type === 'monthly' ? 'Monthly Fixed' : selectedEmp.salary_type}
+                          ₹{Number(selectedEmp.basic_salary).toLocaleString('en-IN')} / month
                         </div>
                       </div>
                       <div>
-                        <div className="info-label">Fixed Salary</div>
+                        <div className="info-label">Per Day Shift</div>
                         <div className="info-value">
-                          ₹{Number(selectedEmp.basic_salary).toLocaleString('en-IN')} / month
+                          ₹{Number(selectedEmp.per_day_salary || 0).toLocaleString('en-IN')} / day
+                        </div>
+                      </div>
+                      <div>
+                        <div className="info-label">Per Night Shift</div>
+                        <div className="info-value">
+                          ₹{Number(selectedEmp.per_night_salary || 0).toLocaleString('en-IN')} / night
                         </div>
                       </div>
                       <div>

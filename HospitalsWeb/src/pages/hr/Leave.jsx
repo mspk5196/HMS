@@ -1,17 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { 
-  Clock, FileMinus, CalendarCheck, BarChart2,
-  Calendar, ChevronDown, Download, Plus, X
+  Users, Search, CheckCircle, AlertCircle, Info
 } from 'lucide-react';
 import './Leave.css';
 
 function fmtDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function daysDiff(start, end) {
+  if (!start || !end) return 0;
+  const s = new Date(start);
+  const e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+  if (s > e) return 0;
+  
+  let count = 0;
+  let temp = new Date(s);
+  temp.setHours(0, 0, 0, 0);
+  const endCompare = new Date(e);
+  endCompare.setHours(0, 0, 0, 0);
+
+  while (temp <= endCompare) {
+    if (temp.getDay() !== 0) { // Skip Sundays
+      count++;
+    }
+    temp.setDate(temp.getDate() + 1);
+  }
+  return count;
 }
 
 function statusBadge(status) {
@@ -23,398 +44,556 @@ function statusBadge(status) {
   }
 }
 
-function leaveTypeBadge(type) {
-  const lower = (type || '').toLowerCase();
-  if (lower.includes('sick'))    return <span className="badge badge-danger-light">{type}</span>;
-  if (lower.includes('casual'))  return <span className="badge badge-warning-light">{type}</span>;
-  if (lower.includes('annual'))  return <span className="badge badge-primary-light">{type}</span>;
-  if (lower.includes('maternity')) return <span className="badge badge-purple-light">{type}</span>;
-  return <span className="badge badge-gray-light">{type}</span>;
-}
+/**
+ * computeLeaveSplit
+ * 
+ * Given total requested days and available balances, returns an array of split portions:
+ *  [{ leaveTypeId, label, days, casual_days, privilege_days, lop_days, type }]
+ * 
+ * Priority: Casual → Privilege → Loss of Pay
+ */
+function computeLeaveSplit({ totalDays, casualAvail, plAvail, casualTypeId, plTypeId, lopTypeId }) {
+  const splits = [];
+  let remaining = totalDays;
 
-function daysDiff(start, end) {
-  if (!start || !end) return 0;
-  const s = new Date(start), e = new Date(end);
-  return Math.ceil((e - s) / 86400000) + 1;
-}
+  // 1. Take from Casual (if selected type is casual, or always if available)
+  if (casualAvail > 0 && remaining > 0 && casualTypeId) {
+    const take = Math.min(casualAvail, remaining);
+    splits.push({
+      leave_type_id: casualTypeId,
+      label: 'Casual Leave',
+      total_days: take,
+      casual_days: take,
+      privilege_days: 0,
+      lop_days: 0,
+      type: 'casual'
+    });
+    remaining -= take;
+  }
 
-function NewRequestModal({ open, onClose, onSaved }) {
-  const { request, loading } = useApi();
-  const [employees, setEmployees] = useState([]);
-  const [leaveTypes, setLeaveTypes] = useState([]);
-  const [form, setForm] = useState({ employee_id: '', leave_type_id: '', start_date: '', end_date: '', reason: '' });
-  const [err, setErr] = useState('');
+  // 2. Overflow → Privilege Leave
+  if (plAvail > 0 && remaining > 0 && plTypeId) {
+    const take = Math.min(plAvail, remaining);
+    splits.push({
+      leave_type_id: plTypeId,
+      label: 'Privilege Leave',
+      total_days: take,
+      casual_days: 0,
+      privilege_days: take,
+      lop_days: 0,
+      type: 'privilege'
+    });
+    remaining -= take;
+  }
 
-  useEffect(() => {
-    if (!open) return;
-    request('/hr/employees?limit=200').then(r => setEmployees(r?.data?.rows || r?.data || [])).catch(() => {});
-    request('/leave/types').then(r => setLeaveTypes(r?.data || [])).catch(() => {});
-  }, [open]);
+  // 3. Remaining → Loss of Pay
+  if (remaining > 0 && lopTypeId) {
+    splits.push({
+      leave_type_id: lopTypeId,
+      label: 'Loss of Pay',
+      total_days: remaining,
+      casual_days: 0,
+      privilege_days: 0,
+      lop_days: remaining,
+      type: 'lop'
+    });
+  }
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSubmit = async (e) => {
-    e.preventDefault(); setErr('');
-    try {
-      await request('/leave/requests', {
-        method: 'POST',
-        body: JSON.stringify({
-          employee_id: Number(form.employee_id),
-          leave_type_id: Number(form.leave_type_id),
-          start_date: form.start_date,
-          end_date: form.end_date,
-          reason: form.reason,
-        })
-      });
-      onSaved(); onClose();
-    } catch (e) { setErr(e.message); }
-  };
-
-  if (!open) return null;
-  return (
-    <div className="modal-overlay">
-      <div className="modal-box" style={{ width: 480 }}>
-        <div className="modal-header">
-          <h2 className="modal-title">Add Leave Request</h2>
-          <button className="modal-close-btn" onClick={onClose}><X size={16} /></button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body space-y-4">
-            <div>
-              <label className="field-label">Employee *</label>
-              <select className="field" required value={form.employee_id} onChange={e => set('employee_id', e.target.value)}>
-                <option value="">Select employee...</option>
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="field-label">Leave Type *</label>
-              <select className="field" required value={form.leave_type_id} onChange={e => set('leave_type_id', e.target.value)}>
-                <option value="">Select type...</option>
-                {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
-              </select>
-            </div>
-            <div className="modal-grid">
-              <div>
-                <label className="field-label">Start Date *</label>
-                <input className="field" type="date" required value={form.start_date} onChange={e => set('start_date', e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">End Date *</label>
-                <input className="field" type="date" required value={form.end_date} onChange={e => set('end_date', e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <label className="field-label">Reason</label>
-              <textarea className="field h-20 resize-none" placeholder="Reason for leave..." value={form.reason} onChange={e => set('reason', e.target.value)} />
-            </div>
-            {err && <p className="modal-error">{err}</p>}
-          </div>
-          <div className="modal-footer">
-            <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" type="submit" disabled={loading}>{loading ? 'Submitting…' : 'Submit Request'}</Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return splits;
 }
 
 export function Leave() {
   const { request, loading } = useApi();
-  const [requests, setRequests] = useState([]);
-  const [onLeaveToday, setOnLeaveToday] = useState([]);
+  
+  const [employees, setEmployees] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState([]);
-  const [leavePolicy, setLeavePolicy] = useState([]);
-  const [typeFilter, setTypeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [stats, setStats] = useState({ pending: 0, on_leave: 0, approved_month: 0, total_days: 0 });
+  const [selectedEmpId, setSelectedEmpId] = useState(null);
+  const [allRequests, setAllRequests] = useState([]);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [selectedEmpRequests, setSelectedEmpRequests] = useState([]);
+  
+  const [leaveForm, setLeaveForm] = useState({
+    start_date: '',
+    end_date: '',
+    reason: ''
+  });
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [byDateFilter, setByDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [toast, setToast] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ limit: 100 });
-      if (statusFilter) params.set('status', statusFilter);
-      const res = await request(`/leave/requests?${params}`);
-      const rows = res?.data?.rows || res?.data || [];
-      setRequests(rows);
-
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      const monthRows = rows.filter(r => {
-        const d = new Date(r.created_at || r.start_date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-      const onLeave = rows.filter(r => r.status === 'approved' && r.start_date <= today && r.end_date >= today);
-      setOnLeaveToday(onLeave);
-      setStats({
-        pending: rows.filter(r => r.status === 'pending').length,
-        on_leave: onLeave.length,
-        approved_month: monthRows.filter(r => r.status === 'approved').length,
-        total_days: monthRows.filter(r => r.status === 'approved').reduce((s, r) => s + daysDiff(r.start_date, r.end_date), 0),
-      });
-    } catch (_) {}
-  }, [statusFilter]);
-
-  useEffect(() => {
-    request('/leave/types').then(r => {
-      const types = r?.data || [];
-      setLeaveTypes(types);
-      setLeavePolicy(types);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleReview = async (id, decision) => {
-    try {
-      await request(`/leave/requests/${id}/review`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: decision })
-      });
-      load();
-    } catch (_) {}
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
   };
 
-  const filtered = typeFilter
-    ? requests.filter(r => String(r.leave_type_id) === typeFilter || (r.leave_type_name || '').includes(typeFilter))
-    : requests;
+  const loadAllRequests = useCallback(async () => {
+    try {
+      const res = await request('/leave/requests?limit=1000');
+      setAllRequests(res?.data?.rows || res?.data || []);
+    } catch (e) { console.error(e); }
+  }, [request]);
 
-  // Leave type breakdown for current month
-  const leaveBreakdown = leaveTypes.map(lt => ({
-    name: lt.name,
-    days: requests.filter(r => r.leave_type_id === lt.id && r.status === 'approved')
-      .reduce((s, r) => s + daysDiff(r.start_date, r.end_date), 0),
-    max_days: lt.max_days_per_year || lt.annual_limit || 15,
-  }));
+  useEffect(() => {
+    request('/hr/employees?limit=200').then(r => {
+      const list = r?.data?.rows || r?.data || [];
+      setEmployees(list);
+      if (list.length > 0) setSelectedEmpId(list[0].id);
+    }).catch(() => {});
+
+    request('/leave/types').then(r => {
+      setLeaveTypes(r?.data || []);
+    }).catch(() => {});
+
+    loadAllRequests();
+  }, [request, loadAllRequests]);
+
+  const loadEmployeeDetails = useCallback(async () => {
+    if (!selectedEmpId) return;
+    try {
+      const empRes = await request(`/hr/employees/${selectedEmpId}`);
+      setSelectedEmp(empRes?.data || null);
+      const reqRes = await request(`/leave/requests?employeeId=${selectedEmpId}`);
+      setSelectedEmpRequests(reqRes?.data?.rows || reqRes?.data || []);
+    } catch (e) { console.error(e); }
+  }, [selectedEmpId, request]);
+
+  useEffect(() => {
+    loadEmployeeDetails();
+  }, [selectedEmpId, loadEmployeeDetails]);
+
+  const filteredEmployees = employees.filter(emp => {
+    const term = searchQuery.toLowerCase();
+    return (
+      emp.full_name.toLowerCase().includes(term) ||
+      (emp.employee_code && emp.employee_code.toLowerCase().includes(term))
+    );
+  });
+
+  // Compute taken leaves
+  const casualTaken = selectedEmpRequests
+    .filter(r => r.status === 'approved' && (r.leave_type_name || '').toLowerCase().includes('casual'))
+    .reduce((sum, r) => sum + daysDiff(r.start_date, r.end_date), 0);
+
+  const privilegeTaken = selectedEmpRequests
+    .filter(r => r.status === 'approved' && (
+      (r.leave_type_name || '').toLowerCase().includes('privilege') ||
+      (r.leave_type_name || '').toLowerCase().includes('annual') ||
+      (r.leave_type_name || '').toLowerCase().includes('pr')
+    ))
+    .reduce((sum, r) => sum + daysDiff(r.start_date, r.end_date), 0);
+
+  // Compute available balances
+  const casualAlloted = selectedEmp?.casual_leave_count || 0;
+  const plAlloted = selectedEmp?.privilege_leave_count || 0;
+  const casualAvail = Math.max(0, casualAlloted - casualTaken);
+  const plAvail = Math.max(0, plAlloted - privilegeTaken);
+
+  // Resolve type IDs from the leave types list
+  const casualType = leaveTypes.find(lt => lt.name.toLowerCase().includes('casual'));
+  const plType = leaveTypes.find(lt =>
+    lt.name.toLowerCase().includes('privilege') ||
+    lt.name.toLowerCase().includes('annual') ||
+    lt.name.toLowerCase().includes('pr')
+  );
+  const lopType = leaveTypes.find(lt =>
+    lt.name.toLowerCase().includes('loss') ||
+    lt.name.toLowerCase().includes('lop') ||
+    lt.name.toLowerCase().includes('unpaid')
+  );
+
+  // Live breakdown computation
+  const totalDays = daysDiff(leaveForm.start_date, leaveForm.end_date);
+  const leaveSplits = useMemo(() => {
+    if (!leaveForm.start_date || !leaveForm.end_date || totalDays <= 0 || !selectedEmp) return [];
+    return computeLeaveSplit({
+      totalDays,
+      casualAvail: casualAlloted > 0 ? casualAvail : 0,
+      plAvail: plAlloted > 0 ? plAvail : 0,
+      casualTypeId: casualType?.id || null,
+      plTypeId: plType?.id || null,
+      lopTypeId: lopType?.id || null,
+    });
+  }, [leaveForm.start_date, leaveForm.end_date, totalDays, casualAvail, plAvail,
+      casualType, plType, lopType, selectedEmp, casualAlloted, plAlloted]);
+
+  const lopDays = leaveSplits.reduce((s, x) => s + x.lop_days, 0);
+  const paidDays = totalDays - lopDays;
+
+  const handleApplyLeave = async (e) => {
+    e.preventDefault();
+    if (!selectedEmpId) return;
+    if (!leaveForm.start_date || !leaveForm.end_date) {
+      showToast('Please select start and end dates.', 'error');
+      return;
+    }
+    if (totalDays <= 0) {
+      showToast('End Date must be on or after Start Date.', 'error');
+      return;
+    }
+    if (leaveSplits.length === 0) {
+      showToast('Unable to compute leave split. Please check leave types are configured.', 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Use the primary leave_type_id for the request (first split's type, or LOP if all LOP)
+      const primaryTypeId = leaveSplits[0]?.leave_type_id;
+
+      await request('/leave/requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id: Number(selectedEmpId),
+          leave_type_id: Number(primaryTypeId),
+          start_date: leaveForm.start_date,
+          end_date: leaveForm.end_date,
+          total_days: totalDays,
+          reason: leaveForm.reason || 'Directly applied',
+          status: 'approved',
+          splits: leaveSplits.map(s => ({
+            leave_type_id: Number(s.leave_type_id),
+            total_days: s.total_days,
+            casual_days: s.casual_days,
+            privilege_days: s.privilege_days,
+            lop_days: s.lop_days,
+          }))
+        })
+      });
+
+      showToast(`Leave applied for ${selectedEmp.full_name}. ${paidDays} paid day(s), ${lopDays} LOP day(s).`);
+      setLeaveForm({ start_date: '', end_date: '', reason: '' });
+      loadEmployeeDetails();
+      loadAllRequests();
+    } catch (err) {
+      showToast(err.message || 'Failed to apply leave', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const leavesOnSelectedDate = allRequests.filter(req => {
+    return req.status === 'approved' && req.start_date <= byDateFilter && req.end_date >= byDateFilter;
+  });
 
   return (
-    <div className="leave-page hr-overview-page">
-      <NewRequestModal open={showModal} onClose={() => setShowModal(false)} onSaved={load} />
+    <div className="leave-page p-6 space-y-6">
+      {/* Toast Alert */}
+      {toast && (
+        <div className={`toast-alert ${toast.type === 'error' ? 'error-toast' : 'success-toast'}`}>
+          {toast.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       <PageHeader 
         breadcrumbs={[
-          { label: 'HR & Payroll', path: '#' },
-          { label: 'Leave Management' }
+          { label: 'Staff Management', path: '#' },
+          { label: 'Leave Center' }
         ]}
-        searchPlaceholder="Search employee..."
-        actions={
-          <div className="leave-actions">
-            <Button variant="outline" className="leave-action-btn leave-action-btn-outline">
-              <Calendar size={16} /> {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })} <ChevronDown size={14} />
-            </Button>
-            <Button variant="outline" className="leave-action-btn leave-action-btn-outline">
-              <Download size={16} /> Export
-            </Button>
-            <Button variant="primary" className="leave-action-btn leave-action-btn-primary" onClick={() => setShowModal(true)}>
-              <Plus size={16} /> Add Leave Request
-            </Button>
-          </div>
-        }
+        title="Leave Management System"
       />
 
-      <div className="page-content leave-page">
-        <div className="leave-heading-block">
-          <h1 className="leave-title">Leave Management</h1>
-          <p className="leave-subtitle">Review and manage employee leave applications. Track leave balances and history.</p>
-        </div>
-
-        <div className="stats-grid mb-6">
-          <Card className="stat-card stat-pending">
-            <div className="stat-card-left">
-              <div className="stat-label">Pending Requests</div>
-              <div className="stat-value">{stats.pending}</div>
-              <div className="stat-sub">Awaiting approval</div>
-            </div>
-            <div className="stat-icon-wrapper orange-bg">
-              <Clock size={16} className="icon-orange" />
-            </div>
-          </Card>
-
-          <Card className="stat-card stat-on-leave">
-            <div className="stat-card-left">
-              <div className="stat-label">On Leave Today</div>
-              <div className="stat-value">{stats.on_leave}</div>
-              <div className="stat-sub">Approved & active</div>
-            </div>
-            <div className="stat-icon-wrapper orange-bg">
-              <FileMinus size={16} className="icon-orange" />
-            </div>
-          </Card>
-
-          <Card className="stat-card stat-approved">
-            <div className="stat-card-left">
-              <div className="stat-label">Approved This Month</div>
-              <div className="stat-value">{stats.approved_month}</div>
-              <div className="stat-sub">
-                <span className="stat-trend-up">Approved <span className="stat-trend-text">in {new Date().toLocaleString('en-GB', { month: 'short' })}</span></span>
+      <div className="leave-layout-grid">
+        {/* Left Sidebar: Employee Search */}
+        <div className="flex flex-col h-[calc(100vh-190px)] min-h-[500px]">
+          <Card className="p-4 flex flex-col h-full shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-xs font-bold text-slate-800 mb-3 uppercase tracking-wider text-slate-500">Search Employee</h3>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Enter name or code..."
+                  className="leave-field pl-9 pr-4 py-1.5 w-full text-xs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
             </div>
-            <div className="stat-icon-wrapper blue-bg">
-              <CalendarCheck size={16} className="icon-blue" />
-            </div>
-          </Card>
 
-          <Card className="stat-card stat-total-days">
-            <div className="stat-card-left">
-              <div className="stat-label">Total Leave Days Used</div>
-              <div className="stat-value">{stats.total_days}</div>
-              <div className="stat-sub">Across all staff this month</div>
-            </div>
-            <div className="stat-icon-wrapper blue-bg">
-              <BarChart2 size={16} className="icon-blue" />
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {filteredEmployees.map((emp) => {
+                const isSelected = emp.id === selectedEmpId;
+                return (
+                  <div
+                    key={emp.id}
+                    className={`emp-search-item p-3 rounded-lg border transition-all flex items-center gap-3 ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50/30 shadow-sm font-semibold'
+                        : 'border-slate-100 hover:bg-slate-50/50'
+                    }`}
+                    onClick={() => setSelectedEmpId(emp.id)}
+                  >
+                    <img
+                      src={emp.avatar || `https://i.pravatar.cc/150?u=emp_${emp.id}`}
+                      alt={emp.full_name}
+                      className="w-9 h-9 rounded-full object-cover border border-slate-100"
+                    />
+                    <div className="min-w-0">
+                      <div className="text-[13px] text-slate-800 truncate">{emp.full_name}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{emp.employee_code || `EMP${emp.id}`} · {emp.designation_name || 'Staff'}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredEmployees.length === 0 && (
+                <div className="text-center text-slate-400 py-10 text-xs">No employees found.</div>
+              )}
             </div>
           </Card>
         </div>
 
-        <div className="dashboard-grid">
-          <div className="main-column">
-            <Card className="h-full">
-              <div className="card-header-flex">
-                <h3 className="section-title">Leave Requests</h3>
-                <div className="leave-filter-row">
-                  <select
-                    value={typeFilter}
-                    onChange={e => setTypeFilter(e.target.value)}
-                    className="leave-filter-select"
-                  >
-                    <option value="">All Types</option>
-                    {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
-                  </select>
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="leave-filter-select"
-                  >
-                    <option value="">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+        {/* Middle Pane: Details, Balance & Leave Form */}
+        <div className="h-[calc(100vh-190px)] min-h-[500px] flex flex-col overflow-y-auto space-y-6 pr-2">
+          {selectedEmp ? (
+            <>
+              {/* Employee Header */}
+              <Card className="p-5 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <img
+                    src={selectedEmp.avatar || `https://i.pravatar.cc/150?u=emp_${selectedEmp.id}`}
+                    alt={selectedEmp.full_name}
+                    className="w-14 h-14 rounded-full object-cover border-2 border-slate-200"
+                  />
+                  <div>
+                    <h2 className="text-base font-bold text-slate-800">{selectedEmp.full_name}</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {selectedEmp.employee_code || `EMP${selectedEmp.id}`} · {selectedEmp.department_name} · {selectedEmp.designation_name}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Leave Balance Cards */}
+              <div className="leave-balance-container">
+                {/* Casual */}
+                <div className="balance-card casual">
+                  <div className="balance-title">Casual Leaves</div>
+                  <div className="balance-metrics">
+                    <div className="metric-box">
+                      <span className="metric-label">Monthly</span>
+                      <span className="metric-val total">{casualAlloted}</span>
+                    </div>
+                    <div className="metric-box">
+                      <span className="metric-label">Taken</span>
+                      <span className="metric-val used">{casualTaken}</span>
+                    </div>
+                    <div className="metric-box">
+                      <span className="metric-label">Available</span>
+                      <span className="metric-val avail">{casualAvail}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Privilege */}
+                <div className="balance-card privilege">
+                  <div className="balance-title">Privilege Leaves</div>
+                  <div className="balance-metrics">
+                    <div className="metric-box">
+                      <span className="metric-label">Monthly</span>
+                      <span className="metric-val total">{plAlloted}</span>
+                    </div>
+                    <div className="metric-box">
+                      <span className="metric-label">Taken</span>
+                      <span className="metric-val used">{privilegeTaken}</span>
+                    </div>
+                    <div className="metric-box">
+                      <span className="metric-label">Available</span>
+                      <span className="metric-val avail">{plAvail}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="leave-list">
-                {loading && <p className="leave-empty">Loading…</p>}
-                {!loading && filtered.length === 0 && (
-                  <p className="leave-empty">No leave requests found.</p>
-                )}
-                {filtered.map((req, i) => {
-                  const days = daysDiff(req.start_date, req.end_date);
-                  const isRejected = req.status === 'rejected';
-                  const statusClass = `leave-request-item status-${(req.status || 'pending').toLowerCase()}`;
-                  return (
-                    <div key={req.id || i} className={statusClass} style={{ opacity: isRejected ? 0.7 : 1 }}>
-                      <div className="leave-request-top">
-                        <div className="leave-request-meta">
-                          <img
-                            src={`https://i.pravatar.cc/150?u=leave_${req.employee_id}`}
-                            className="leave-avatar"
-                            alt="avatar"
-                          />
-                          <div>
-                            <div className="leave-name">{req.employee_name || `Employee ${req.employee_id}`}</div>
-                            <div className="leave-muted">{req.employee_code || ''} {req.department_name ? `• ${req.department_name}` : ''}</div>
-                            <div className="leave-subtext">
-                              {leaveTypeBadge(req.leave_type_name || 'Leave')}
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                <Calendar size={12}/> {fmtDate(req.start_date)} — {fmtDate(req.end_date)}
-                              </span>
-                              <span>{days} {days === 1 ? 'day' : 'days'}</span>
-                              <span>Applied: {fmtDate(req.created_at)}</span>
+              {/* Apply Form + History */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Leave Apply Form */}
+                <Card className="p-5 shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-800 mb-4 uppercase tracking-wider text-slate-500">Apply Leave</h3>
+                  <form onSubmit={handleApplyLeave} className="space-y-4">
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">From Date *</label>
+                        <input
+                          type="date"
+                          required
+                          className="leave-field w-full text-xs"
+                          value={leaveForm.start_date}
+                          onChange={e => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">To Date *</label>
+                        <input
+                          type="date"
+                          required
+                          className="leave-field w-full text-xs"
+                          value={leaveForm.end_date}
+                          onChange={e => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Leave Breakdown Preview */}
+                    {totalDays > 0 && leaveSplits.length > 0 && (
+                      <div className="leave-breakdown-preview">
+                        <div className="breakdown-header">
+                          <Info size={12} />
+                          <span>{totalDays} day(s) — Auto-allocated leave breakdown</span>
+                        </div>
+                        <div className="breakdown-rows">
+                          {leaveSplits.map((split, i) => (
+                            <div key={i} className={`breakdown-row breakdown-row-${split.type}`}>
+                              <span className="breakdown-label">{split.label}</span>
+                              <span className="breakdown-days">{split.total_days} {split.total_days === 1 ? 'day' : 'days'}</span>
                             </div>
+                          ))}
+                        </div>
+                        {lopDays > 0 && (
+                          <div className="breakdown-lop-notice">
+                            ⚠ {lopDays} day(s) will be marked as <strong>Loss of Pay</strong> and deducted from salary.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Warning when no leave types configured */}
+                    {totalDays > 0 && leaveSplits.length === 0 && lopType && (
+                      <div className="leave-breakdown-preview">
+                        <div className="breakdown-header">
+                          <Info size={12} />
+                          <span>{totalDays} day(s) selected</span>
+                        </div>
+                        <div className="breakdown-rows">
+                          <div className="breakdown-row breakdown-row-lop">
+                            <span className="breakdown-label">Loss of Pay</span>
+                            <span className="breakdown-days">{totalDays} day(s)</span>
                           </div>
                         </div>
-                        <div className="leave-request-actions">
-                          {statusBadge(req.status)}
-                          {req.status === 'pending' && (
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <Button variant="outline" size="sm" className="leave-action-btn leave-action-btn-outline" onClick={() => handleReview(req.id, 'approved')}>Approve</Button>
-                              <Button variant="outline" size="sm" className="leave-action-btn leave-action-btn-outline" onClick={() => handleReview(req.id, 'rejected')}>Reject</Button>
-                            </div>
-                          )}
+                        <div className="breakdown-lop-notice">
+                          ⚠ No leave balance available. All days will be Loss of Pay.
                         </div>
                       </div>
-                      {req.reason && (
-                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #eef2f7', fontSize: 12, color: '#64748b' }}>
-                          <span style={{ fontWeight: 600, color: '#374151' }}>Reason: </span>{req.reason}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </div>
+                    )}
 
-          <div className="side-column">
-            {/* Leave Types Breakdown */}
-            <Card>
-              <div className="ui-card-content">
-                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Types — {new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })}</h3>
-                <div className="leave-panel-stack">
-                {leaveBreakdown.length === 0 && <p className="leave-empty">No leave types configured</p>}
-                {leaveBreakdown.map(lt => (
-                  <div key={lt.name}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span className="leave-name">{lt.name}</span>
-                      <span className="leave-name">{lt.days} <span className="leave-muted" style={{ fontWeight: 400 }}>days</span></span>
-                    </div>
-                    <div className="leave-bar-track">
-                      <div
-                        className="leave-bar-fill"
-                        style={{ width: `${Math.min(100, (lt.days / (lt.max_days || 30)) * 100)}%` }}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Reason (Optional)</label>
+                      <textarea
+                        placeholder="Reason for applying leave..."
+                        className="leave-field leave-textarea w-full text-xs"
+                        value={leaveForm.reason}
+                        onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
                       />
                     </div>
-                  </div>
-                ))}
-                </div>
-              </div>
-            </Card>
 
-            {/* On Leave Today */}
-            <Card>
-              <div className="card-header-flex">
-                <h3 className="section-title">On Leave Today</h3>
-                <span className="badge badge-soft-danger">{onLeaveToday.length} absent</span>
-              </div>
-              <div className="ui-card-content" style={{ paddingTop: 0 }}>
-                <div className="leave-panel-stack">
-                {onLeaveToday.length === 0 && <p className="leave-empty">No one on leave today</p>}
-                {onLeaveToday.slice(0, 5).map((r, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <img src={`https://i.pravatar.cc/150?u=today_${r.employee_id}`} className="leave-avatar" alt="avatar" style={{ flexShrink: 0 }}/>
-                    <div style={{ flex: 1 }}>
-                      <div className="leave-name">{r.employee_name || `Employee ${r.employee_id}`}</div>
-                      <div className="leave-muted">{r.leave_type_name || 'Leave'}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Returns</div>
-                      <div className="leave-name" style={{ fontSize: 12 }}>{fmtDate(r.end_date)}</div>
-                    </div>
-                  </div>
-                ))}
-                </div>
-              </div>
-            </Card>
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      className="w-full text-xs py-2"
+                      disabled={submitting || totalDays <= 0}
+                    >
+                      {submitting ? 'Applying...' : 'Apply & Approve Leave'}
+                    </Button>
+                  </form>
+                </Card>
 
-            {/* Leave Policy */}
-            <Card>
-              <div className="ui-card-content">
-                <h3 className="section-title" style={{ marginBottom: 20 }}>Leave Policy Summary</h3>
-                <div className="leave-panel-stack">
-                {leavePolicy.length === 0 && <p className="leave-empty">No policies configured</p>}
-                {leavePolicy.map((lt, i) => (
-                  <div key={lt.id} className={`flex justify-between ${i < leavePolicy.length - 1 ? 'border-b border-gray-50 pb-2' : 'pb-2'}`}>
-                    <span className="leave-name">{lt.name}</span>
-                    <span className="leave-name" style={{ color: '#24428b' }}>
-                      {lt.max_days_per_year || lt.annual_limit || '—'} days/yr
-                    </span>
+                {/* Leave History */}
+                <Card className="p-5 shadow-sm flex flex-col h-full">
+                  <h3 className="text-xs font-bold text-slate-800 mb-4 uppercase tracking-wider text-slate-500">Leave History</h3>
+                  <div className="flex-1 overflow-y-auto space-y-2 history-list">
+                    {selectedEmpRequests.length === 0 ? (
+                      <div className="text-center py-10 text-xs text-slate-400">No leaves taken yet.</div>
+                    ) : (
+                      selectedEmpRequests.map((req, idx) => {
+                        const days = daysDiff(req.start_date, req.end_date);
+                        const isLop = (req.lop_days || 0) > 0;
+                        return (
+                          <div key={req.id || idx} className="history-item">
+                            <div>
+                              <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                {req.leave_type_name || 'Leave'}
+                                {isLop && <span className="badge badge-danger-light" style={{fontSize:'9px'}}>LOP</span>}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {fmtDate(req.start_date)} — {fmtDate(req.end_date)} ({days} {days === 1 ? 'day' : 'days'})
+                              </div>
+                              {/* Show split detail if this record has split data */}
+                              {(req.casual_days > 0 || req.privilege_days > 0 || req.lop_days > 0) && (
+                                <div className="history-split-detail">
+                                  {req.casual_days > 0 && <span className="split-tag split-casual">{req.casual_days}d Casual</span>}
+                                  {req.privilege_days > 0 && <span className="split-tag split-privilege">{req.privilege_days}d PL</span>}
+                                  {req.lop_days > 0 && <span className="split-tag split-lop">{req.lop_days}d LOP</span>}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5">
+                              {statusBadge(req.status)}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
-                ))}
-                </div>
+                </Card>
               </div>
+            </>
+          ) : (
+            <Card className="flex-1 flex flex-col items-center justify-center text-center p-8 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-4 border border-dashed">
+                <Users size={28} />
+              </div>
+              <h3 className="text-sm font-bold text-slate-700">No Employee Selected</h3>
+              <p className="text-xs text-slate-400 mt-2 max-w-[320px]">
+                Please select an employee from the left panel to view leave details or apply leaves.
+              </p>
             </Card>
-          </div>
+          )}
+        </div>
+
+        {/* Right Sidebar: Leaves by Date */}
+        <div className="flex flex-col h-[calc(100vh-190px)] min-h-[500px]">
+          <Card className="p-4 flex flex-col h-full shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-xs font-bold text-slate-800 mb-3 uppercase tracking-wider text-slate-500">Leaves by Date</h3>
+              <div className="relative">
+                <input
+                  type="date"
+                  className="leave-field w-full text-xs font-medium"
+                  value={byDateFilter}
+                  onChange={(e) => setByDateFilter(e.target.value)}
+                />
+              </div>
+              <div className="mt-3 text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+                Total Absent: <span className="text-red-600 text-xs font-bold ml-1">{leavesOnSelectedDate.length}</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {leavesOnSelectedDate.map((r, i) => (
+                <div key={r.id || i} className="p-3 border border-slate-100 rounded-lg bg-slate-50/30 flex items-center gap-3">
+                  <img
+                    src={`https://i.pravatar.cc/150?u=date_leave_${r.employee_id}`}
+                    alt="avatar"
+                    className="w-8 h-8 rounded-full border border-slate-100 object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-slate-800 truncate">{r.employee_name || r.full_name || `Employee ${r.employee_id}`}</div>
+                    <div className="text-[10px] text-slate-400 truncate mt-0.5">{r.leave_type_name || 'Leave'}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] text-slate-400 font-bold uppercase">Ends</div>
+                    <div className="text-[11.5px] font-semibold text-slate-700 mt-0.5">{fmtDate(r.end_date)}</div>
+                  </div>
+                </div>
+              ))}
+              {leavesOnSelectedDate.length === 0 && (
+                <div className="text-center text-slate-400 py-10 text-xs">No one is on leave on this date.</div>
+              )}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
