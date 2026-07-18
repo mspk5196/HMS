@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Card } from '../../components/ui/Card';
@@ -6,7 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { 
   Users, Sun, Moon, Coffee, 
   Calendar, ChevronDown, Wand2, Send,
-  Filter, Check, RefreshCw, AlertCircle
+  Filter, Check, RefreshCw, AlertCircle,
+  ChevronLeft, ChevronRight
+  , Shield
 } from 'lucide-react';
 import './Roster.css';
 
@@ -32,6 +34,12 @@ export function Roster() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const rosterScrollRef = useRef(null);
+  const [showLeftShadow, setShowLeftShadow] = useState(false);
+  const [showRightShadow, setShowRightShadow] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const calendarRef = useRef(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Compute days in selected month
   const [year, mon] = month.split('-').map(Number);
@@ -131,6 +139,44 @@ export function Roster() {
     loadRoster();
   }, [loadRoster]);
 
+  // Scroll shadow handlers
+  const handleScroll = (e) => {
+    const el = e.target;
+    setShowLeftShadow(el.scrollLeft > 8);
+    setShowRightShadow(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  };
+
+  useEffect(() => {
+    const el = rosterScrollRef.current;
+    if (!el) return;
+    // initial
+    setShowLeftShadow(el.scrollLeft > 8);
+    setShowRightShadow(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+    const onResize = () => {
+      setShowLeftShadow(el.scrollLeft > 8);
+      setShowRightShadow(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+    };
+    el.addEventListener('scroll', handleScroll);
+    window.addEventListener('resize', onResize);
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [rosterScrollRef.current]);
+
+  // close calendar on outside click
+  useEffect(() => {
+    if (!showCalendar) return;
+    const onDoc = (e) => {
+      if (!calendarRef.current) return;
+      if (!calendarRef.current.contains(e.target)) {
+        setShowCalendar(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showCalendar]);
+
   // Cycle shift type on click
   const handleCellClick = (empId, day) => {
     const current = gridData[empId]?.[day] || '';
@@ -209,13 +255,110 @@ export function Roster() {
           { label: 'Shift & Roster' }
         ]}
         actions={
-          <div className="roster-actions">
-            <input
-              type="month"
-              value={month}
-              onChange={e => setMonth(e.target.value)}
-              className="roster-month-input"
-            />
+          <div className="roster-actions" style={{ position: 'relative' }}>
+            <button type="button" className="roster-action-btn roster-month-toggle" onClick={() => setShowCalendar(s => !s)} aria-expanded={showCalendar}>
+              <Calendar size={16} />
+              <span style={{ marginLeft: 8, fontWeight: 700 }}>{selectedDate ? selectedDate.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : monthLabel}</span>
+              <ChevronDown size={14} style={{ marginLeft: 8 }} />
+            </button>
+            {showCalendar && (
+              <div className="calendar-popup" ref={calendarRef} role="dialog">
+                    <div className="calendar-head">
+                      <button className="cal-nav" onClick={() => {
+                        const [y, m] = month.split('-').map(Number);
+                        const d = new Date(y, m - 2, 1);
+                        setMonth(d.toISOString().slice(0,7));
+                        // adjust selectedDate month if needed
+                        setSelectedDate(prev => {
+                          const day = Math.min(prev.getDate(), new Date(y, m - 2 + 1, 0).getDate());
+                          return new Date(y, m - 2, day);
+                        });
+                      }} aria-label="Prev month"><ChevronLeft size={16} /></button>
+
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <select className="calendar-select month-select" value={mon} onChange={e => {
+                          const newM = Number(e.target.value);
+                          const newY = year;
+                          // clamp day to month's max
+                          setMonth(`${newY}-${String(newM).padStart(2,'0')}`);
+                          setSelectedDate(prev => {
+                            const day = Math.min(prev.getDate(), new Date(newY, newM, 0).getDate());
+                            return new Date(newY, newM - 1, day);
+                          });
+                        }}>
+                          {Array.from({length:12},(_,i)=>i+1).map(mv => (
+                            <option key={mv} value={mv}>{new Date(0, mv-1).toLocaleString('en-GB', { month: 'short' })}</option>
+                          ))}
+                        </select>
+
+                        <select className="calendar-select year-select" value={year} onChange={e => {
+                          const newY = Number(e.target.value);
+                          const newM = mon;
+                          setMonth(`${newY}-${String(newM).padStart(2,'0')}`);
+                          setSelectedDate(prev => {
+                            const day = Math.min(prev.getDate(), new Date(newY, newM, 0).getDate());
+                            return new Date(newY, newM - 1, day);
+                          });
+                        }}>
+                          {(() => {
+                            const y0 = new Date().getFullYear();
+                            const years = [];
+                            const start = y0 - 20; // show 20 years back
+                            const end = y0 + 10;   // show 10 years forward
+                            for (let y = start; y <= end; y++) years.push(y);
+                            return years;
+                          })().map(yv => (
+                            <option key={yv} value={yv}>{yv}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button className="cal-nav" onClick={() => {
+                        const [y, m] = month.split('-').map(Number);
+                        const d = new Date(y, m, 1);
+                        setMonth(d.toISOString().slice(0,7));
+                        setSelectedDate(prev => {
+                          const day = Math.min(prev.getDate(), new Date(y, m + 1, 0).getDate());
+                          return new Date(y, m, day);
+                        });
+                      }} aria-label="Next month"><ChevronRight size={16} /></button>
+                    </div>
+                <div className="calendar-weeklabels">
+                  {['Mo','Tu','We','Th','Fr','Sa','Su'].map(w => <div key={w} className="calendar-weekcell">{w}</div>)}
+                </div>
+                <div className="calendar-grid">
+                  {(() => {
+                    const [y, m] = month.split('-').map(Number);
+                    const first = new Date(y, m - 1, 1);
+                    const startDay = (first.getDay() + 6) % 7; // shift so Monday=0
+                    const total = new Date(y, m, 0).getDate();
+                    const cells = [];
+                    // previous month's tail
+                    for (let i = 0; i < startDay; i++) {
+                      cells.push(<div key={`p${i}`} className="calendar-cell empty" />);
+                    }
+                    for (let d = 1; d <= total; d++) {
+                        const isToday = (() => {
+                          const td = new Date();
+                          return td.getFullYear() === y && td.getMonth() === (m-1) && td.getDate() === d;
+                        })();
+                        const isSelected = selectedDate && selectedDate.getFullYear() === y && (selectedDate.getMonth() + 1) === m && selectedDate.getDate() === d;
+                        cells.push(
+                          <button key={d} className={`calendar-cell day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`} onClick={() => {
+                            const newDate = new Date(y, m-1, d);
+                            setSelectedDate(newDate);
+                            setMonth(`${y}-${String(m).padStart(2,'0')}`);
+                            setShowCalendar(false);
+                          }}>{d}</button>
+                        );
+                    }
+                    // fill remaining to end of grid (optional)
+                    while (cells.length % 7 !== 0) cells.push(<div key={`t${cells.length}`} className="calendar-cell empty" />);
+                    return cells;
+                  })()}
+                </div>
+              </div>
+            )}
             <Button 
               variant="primary" 
               onClick={handleSaveAll}
@@ -370,7 +513,10 @@ export function Roster() {
               <p>There are no active employees assigned to the selected Department and Designation.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto roster-scroll-container">
+            <div className="roster-grid-card-inner">
+              <div className={`scroll-shadow left ${showLeftShadow ? 'visible' : ''}`} />
+              <div className={`scroll-shadow right ${showRightShadow ? 'visible' : ''}`} />
+              <div className="overflow-x-auto roster-scroll-container" ref={rosterScrollRef} onScroll={handleScroll}>
               <table className="roster-table">
                 <thead>
                   <tr className="roster-th-row">
@@ -405,11 +551,7 @@ export function Roster() {
                       <tr key={emp.employee_id} className="roster-td-row">
                         <td className="roster-td roster-td-sticky">
                           <div className="roster-employee-cell">
-                            <img
-                              src={`https://api.dicebear.com/7.x/initials/svg?seed=${emp.full_name}&backgroundColor=24428b,0369a1,4f46e5`}
-                              className="roster-avatar"
-                              alt="avatar"
-                            />
+                            <div className="roster-logo"><Shield size={20} /></div>
                             <div className="roster-info-block">
                               <div className="roster-name">{emp.full_name}</div>
                               <div className="roster-muted">{emp.employee_code}</div>
@@ -441,6 +583,7 @@ export function Roster() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </Card>

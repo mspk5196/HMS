@@ -474,10 +474,9 @@ export function Attendance() {
                         }>
                           <td className="attendance-td">
                             <div className="attendance-employee-cell">
-                              <img
-                                src={`https://i.pravatar.cc/150?u=${r.employee_id}`}
-                                className="attendance-avatar" alt="avatar"
-                              />
+                              <div className="attendance-logo">
+                                <Shield size={20} />
+                              </div>
                               <div>
                                 <div className="attendance-employee-name">{r.employee_name || r.full_name || `EMP${r.employee_id}`}</div>
                                 <div className="attendance-employee-code">{r.employee_code || `EMP${String(r.employee_id).padStart(3,'0')}`}</div>
@@ -548,10 +547,7 @@ export function Attendance() {
               <div className="absent-list">
                 {records.filter(r => r.status === 'absent').slice(0, 5).map((r, i) => (
                   <div key={i} className="absent-item">
-                    <img
-                      src={`https://i.pravatar.cc/150?u=abs_${r.employee_id}`}
-                      className="attendance-avatar attendance-avatar-md" alt="avatar"
-                    />
+                    <div className="attendance-logo attendance-logo-md"><Shield size={20} /></div>
                     <div className="absent-meta">
                       <div className="absent-name">{r.employee_name || r.full_name || `EMP${r.employee_id}`}</div>
                       <div className="absent-sub">{r.department_name || '—'} • {r.shift_name || '—'}</div>

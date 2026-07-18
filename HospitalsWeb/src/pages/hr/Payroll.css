@@ -239,6 +239,16 @@
   gap: 12px;
 }
 
+/* Logo placeholder for payroll employee */
+.payroll-page .payroll-logo {
+  width: 40px; height: 40px; border-radius: 8px; background:#f8fafc; display:flex; align-items:center; justify-content:center; color:#1e40af; border:1px solid #e6eef8; flex-shrink:0;
+}
+
+/* Payroll logo spacing */
+.payroll-employee-cell { gap:14px }
+.payroll-logo svg { display:block }
+.payroll-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
 .payroll-page .payroll-avatar {
   width: 34px;
   height: 34px;

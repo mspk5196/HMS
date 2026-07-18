@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { 
   AlertCircle, AlertOctagon, MinusCircle, Banknote,
-  Calendar, ChevronDown, Download, Plus, User
+  Calendar, ChevronDown, Download, Plus, User, Shield
 } from 'lucide-react';
 import './Fine.css';
 
@@ -231,7 +231,7 @@ export function Fine() {
                       <tr key={f.id || i} className="fine-row">
                         <td>
                           <div className="fine-employee-cell">
-                            <img src={`https://i.pravatar.cc/150?u=fine_${f.employee_id}`} className="fine-avatar" alt="avatar"/>
+                            <div className="fine-logo"><Shield size={18} /></div>
                             <div>
                               <div className="fine-name">{f.employee_name || `EMP${f.employee_id}`}</div>
                               <div className="fine-dept">{f.department_name || f.department || '—'}</div>

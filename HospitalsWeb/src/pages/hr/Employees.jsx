@@ -4,7 +4,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { Button } from '../../components/ui/Button';
 import { 
   Users, Clock, FileMinus, Banknote, 
-  Briefcase, Calendar, X, Plus, TrendingUp, RefreshCw, Check
+  Briefcase, Calendar, X, Plus, TrendingUp, RefreshCw, Check, Shield
 } from 'lucide-react';
 import './Employees.css'; 
 
@@ -605,7 +605,7 @@ export function Employees() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="emp-avatar">
-                      <img src={emp.avatar} alt={emp.full_name} />
+                      <div className="emp-logo"><Shield size={20} /></div>
                     </div>
                     <div>
                       <div className="emp-name">{emp.full_name}</div>
@@ -643,7 +643,7 @@ export function Employees() {
                   <div className="emp-detail-header">
                     <div className="emp-detail-avatar-container">
                       <div className="emp-detail-avatar">
-                        <img src={selectedEmp.avatar} alt={selectedEmp.full_name} className="w-full h-full object-cover" />
+                        <div className="emp-logo emp-logo-lg"><Shield size={40} /></div>
                       </div>
                       <span className={`status-badge ${selectedEmp.status}`}>
                         {selectedEmp.status === 'active' ? 'Active' : 'Inactive'}

@@ -742,12 +742,12 @@ export function Departments() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <div className="flex items-center justify-between mt-3 text-[11px] text-[var(--mute)]">
+                <div className="flex items-center justify-between mt-3 text-[11px] text-[var(--mute)]">
                 <span>Status:</span>
                 <div className="flex gap-2">
-                  <button className={`px-2 py-0.5 rounded ${statusFilter === 'all' ? 'bg-slate-200 text-slate-800 font-semibold' : ''}`} onClick={() => setStatusFilter('all')}>All</button>
-                  <button className={`px-2 py-0.5 rounded ${statusFilter === 'active' ? 'bg-emerald-100 text-emerald-800 font-semibold' : ''}`} onClick={() => setStatusFilter('active')}>Active</button>
-                  <button className={`px-2 py-0.5 rounded ${statusFilter === 'inactive' ? 'bg-rose-100 text-rose-800 font-semibold' : ''}`} onClick={() => setStatusFilter('inactive')}>Inactive</button>
+                  <button className={`status-btn ${statusFilter === 'all' ? 'status-btn-active' : ''}`} onClick={() => setStatusFilter('all')}>All</button>
+                  <button className={`status-btn ${statusFilter === 'active' ? 'status-btn-active' : ''}`} onClick={() => setStatusFilter('active')}>Active</button>
+                  <button className={`status-btn ${statusFilter === 'inactive' ? 'status-btn-active' : ''}`} onClick={() => setStatusFilter('inactive')}>Inactive</button>
                 </div>
               </div>
             </div>
@@ -787,23 +787,27 @@ export function Departments() {
           {selectedDept ? (
             <Card className="p-6 flex flex-col h-full overflow-hidden shadow-sm">
               {/* Dept Header */}
-              <div className="flex justify-between items-center border-b pb-4 mb-4">
+              <div className="dept-card-header flex justify-between items-center border-b pb-4 mb-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-slate-800">{selectedDept.name}</h2>
-                    <span className={`badge ${selectedDept.is_active === 1 || selectedDept.is_active === true ? 'badge-success' : 'badge-danger'}`}>
-                      {selectedDept.is_active === 1 || selectedDept.is_active === true ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                    <Users size={11} /> {deptRoles.length} role(s) configured
+                  <div className="dept-title-block">
+                    <div className="flex items-center gap-3">
+                      <h2 className="dept-title">{selectedDept.name}</h2>
+                      <span className={`dept-badge badge ${selectedDept.is_active === 1 || selectedDept.is_active === true ? 'badge-success' : 'badge-danger'}`}>
+                        {selectedDept.is_active === 1 || selectedDept.is_active === true ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="dept-meta">
+                      <div className="text-[12px] text-slate-400 mt-1 flex items-center gap-1">
+                        <Users size={12} /> {deptRoles.length} role(s) configured
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleOpenEditDept(selectedDept)} className="text-xs py-1">
+                  <Button variant="outline" size="sm" onClick={() => handleOpenEditDept(selectedDept)} className="dept-action-btn text-xs py-1">
                     <Edit2 size={12} className="mr-1" /> Rename
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setDeleteConfirm({ id: selectedDept.id, type: 'dept' })} className="text-xs py-1 text-rose-600 hover:bg-rose-50 border-rose-200">
+                  <Button variant="outline" size="sm" onClick={() => setDeleteConfirm({ id: selectedDept.id, type: 'dept' })} className="dept-action-btn text-xs py-1 text-rose-600 hover:bg-rose-50 border-rose-200">
                     <Trash2 size={12} className="mr-1" /> Delete
                   </Button>
                 </div>
@@ -811,11 +815,11 @@ export function Departments() {
 
               {/* Roles Panel */}
               <div className="flex-grow flex flex-col overflow-hidden">
-                <div className="flex justify-between items-center mb-4">
+                <div className="roles-header flex justify-between items-center mb-4">
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Shield size={14} className="text-slate-500" /> Staff Roles & Configurations
                   </h3>
-                  <Button variant="primary" size="sm" onClick={handleOpenAddRole} className="text-xs py-1 flex items-center gap-1">
+                  <Button variant="primary" size="sm" onClick={handleOpenAddRole} className="dept-addrole-btn text-xs py-1 flex items-center gap-1">
                     <Plus size={12} /> Add Role
                   </Button>
                 </div>

@@ -208,6 +208,21 @@
   display: block;
 }
 
+/* Logo placeholder when photos are removed */
+.emp-avatar .emp-logo,
+.emp-detail-avatar .emp-logo {
+  width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; color:#1e3a8a;
+}
+.emp-logo { font-size: 18px }
+.emp-logo-lg { width: 72px; height: 72px; border-radius: 12px; background:#f8fafc; display:flex; align-items:center; justify-content:center }
+
+/* Prevent logo/icon overlap and ensure consistent spacing */
+.emp-avatar, .emp-detail-avatar, .emp-logo, .emp-logo-lg { flex-shrink: 0 }
+.emp-avatar .emp-logo svg, .emp-detail-avatar .emp-logo svg { display:block }
+.emp-list-item .emp-avatar { margin-right: 12px }
+.emp-detail-avatar .emp-logo { margin-right: 12px }
+.emp-list-item .emp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
 .emp-name {
   font-size: 13px;
   font-weight: 600;

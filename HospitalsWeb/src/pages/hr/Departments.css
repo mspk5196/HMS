@@ -2,14 +2,33 @@
 
 .dept-roles-master-page {
   animation: fadeIn 0.25s ease-out;
+  padding: 36px 28px;
+  background: linear-gradient(180deg, #f6f8fb 0%, #f8fafc 100%);
 }
+
+/* Header band style to match HR pages */
+.dept-roles-master-page .page-header {
+  padding: 26px 44px !important;
+  min-height: 88px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  margin: -44px -28px 26px -28px !important;
+  box-shadow: 0 1px 0 rgba(14,38,77,0.03);
+}
+.dept-roles-master-page .page-header-left { font-size: 14px !important; font-weight: 600 !important }
+.dept-roles-master-page .breadcrumb-link { color: #64748b !important }
+.dept-roles-master-page .breadcrumb-current { color: #0f172a !important; font-weight:700 !important }
 
 /* Split Pane Grid Layout */
 .dept-roles-layout-grid {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 20px;
+  grid-template-columns: 380px 1fr;
+  gap: 28px;
   align-items: stretch;
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 20px;
 }
 
 @media (max-width: 900px) {
@@ -32,12 +51,174 @@
 .dept-list-item {
   border: 1px solid var(--line-lt, #f1f5f9);
   background-color: #fff;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 14px 16px;
+  border-radius: 12px;
 }
 
 .dept-list-item:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   border-color: #cbd5e1;
+  box-shadow: 0 8px 20px rgba(11,18,32,0.04);
+}
+
+/* Ensure list items align content neatly */
+.dept-list-item .flex {
+  width: 100%;
+  align-items: center;
+}
+.dept-list-item .text-[13px] {
+  font-weight: 600;
+}
+
+/* Search input tweaks in left panel */
+.dept-list-panel .field {
+  height: 48px;
+  padding-left: 42px;
+  border-radius: 10px;
+  border: 1px solid #e6eef8;
+  background: #fbfdff;
+}
+.dept-list-panel .Search {
+  color: #94a3b8;
+}
+
+/* Badge styles more prominent */
+.dept-roles-master-page .badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 13px;
+}
+.dept-roles-master-page .badge-success { background: #ecfdf5; color: #059669; border: 1px solid #bbf0d1 }
+.dept-roles-master-page .badge-danger { background: #fff1f2; color: #ef4444; border: 1px solid #fecaca }
+
+/* Detail header action buttons (Rename/Delete) */
+.dept-detail-panel .flex > button {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  height: 36px;
+}
+.dept-detail-panel .flex > button[aria-pressed], .dept-detail-panel .flex > button:hover {
+  box-shadow: 0 6px 18px rgba(11,18,32,0.06);
+}
+
+/* Empty-state large dashed box */
+.dept-empty-state {
+  padding: 64px 32px;
+  border-radius: 14px;
+  background: #fbfdff;
+  border-style: dashed;
+  border-color: #e6eef8;
+  min-height: 220px;
+}
+
+/* Center and broaden empty-state content for better alignment */
+.dept-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  max-width: 760px;
+  margin: 16px auto;
+}
+
+/* Department card header alignment */
+.dept-card-header { gap: 16px; }
+.dept-card-header .flex > div { min-width: 0 }
+.dept-card-header .text-base { font-size: 18px }
+
+/* Roles header: align title and action button */
+.roles-header { align-items: center; }
+.roles-header h3 { margin: 0 }
+.roles-header .dept-addrole-btn { margin-left: 12px }
+
+/* Tighter layout for right panel content */
+.dept-detail-panel .role-cards-grid { padding-top: 6px }
+
+/* Make empty-state icon larger and softer */
+.dept-empty-state .w-14 { width: 56px; height: 56px }
+.dept-empty-state h4 { font-size: 16px }
+.dept-empty-state p { max-width: 560px }
+
+/* Larger header box and better alignment */
+.dept-card-header { padding: 18px 0; min-height: 96px; }
+.dept-title-block { display:flex; flex-direction:column; gap:6px }
+.dept-title { font-size: 20px; font-weight: 800; color: #0b1220 }
+.dept-badge { padding: 8px 12px; border-radius: 999px; font-weight:800; font-size:13px }
+.dept-meta { margin-top: 4px }
+
+/* Align action buttons vertically and size them */
+.dept-card-header .dept-action-btn { height: 40px; padding: 8px 12px; display:inline-flex; align-items:center }
+.dept-card-header .dept-action-btn .mr-1 { margin-right: 8px }
+
+/* Give the header a subtle inner padding and visual separation */
+.dept-card-header { border-radius: 10px; }
+
+/* Expand header box to span full card width and appear larger */
+.dept-card-header {
+  padding: 20px 28px !important;
+  margin: -18px -28px 18px -28px !important;
+  background: #ffffff;
+  border: 1px solid #e6eef8;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(11,18,32,0.03);
+}
+
+/* Icon spacing inside header buttons and badges */
+.dept-action-btn svg, .dept-addrole-btn svg, .dept-badge svg { margin-right: 8px; display:block }
+.dept-action-btn, .dept-addrole-btn { gap:8px; align-items:center; flex-shrink:0 }
+.dept-title-block { gap:8px }
+
+/* Professional button styles for Departments page */
+.dept-roles-master-page .status-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e6eef8;
+  color: #475569;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  box-shadow: 0 4px 8px rgba(11,18,32,0.03);
+}
+.dept-roles-master-page .status-btn:hover { transform: translateY(-2px); background:#f8fbff }
+.dept-roles-master-page .status-btn.status-btn-active { background: linear-gradient(90deg,#eef2ff,#f8fbff); border-color:#dbeafe; color:#1d4ed8 }
+
+.dept-roles-master-page .dept-action-btn {
+  display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px;
+  background: #ffffff; border:1px solid #e6eef8; color:#334155; font-weight:700; cursor:pointer;
+}
+.dept-roles-master-page .dept-action-btn:hover { background:#fbfdff; box-shadow:0 10px 26px rgba(11,18,32,0.06) }
+
+.dept-roles-master-page .dept-addrole-btn {
+  background: linear-gradient(180deg,#1e40af,#24428b); color:#fff; border:none; padding:10px 16px; border-radius:12px; font-weight:800; font-size:14px;
+  box-shadow: 0 12px 36px rgba(36,66,139,0.16);
+}
+.dept-roles-master-page .dept-addrole-btn:hover { transform: translateY(-2px) }
+
+/* Ensure header action aligns vertically */
+.dept-detail-panel .flex { align-items:center }
+
+/* Role cards grid spacing and min card width */
+.role-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 22px;
+}
+
+/* Make modal headers consistent */
+.modal-header .modal-title {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .dept-list-item.selected {
@@ -56,10 +237,10 @@
 
 .role-card {
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border: 1px solid #e8eef8;
+  border-radius: 16px;
   overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 
@@ -85,7 +266,7 @@
 }
 
 .role-card-body {
-  padding: 16px;
+  padding: 22px;
 }
 
 .role-card-header {
@@ -96,9 +277,9 @@
 }
 
 .role-card-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0b1220;
   letter-spacing: -0.01em;
 }
 
@@ -146,8 +327,8 @@
 /* Role card info sections */
 .role-info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
 }
 
 .role-info-block {
@@ -164,39 +345,39 @@
   color: #94a3b8;
 }
 
+.role-info-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
 .role-info-value {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: #334155;
 }
-
-.role-info-sub {
-  font-size: 10px;
-  color: #94a3b8;
-  font-weight: 500;
-}
-
 /* Shift timing strip */
 .role-shift-strip {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fbfdff;
+  border: 1px solid #eef4ff;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .role-card.night-role .role-shift-strip {
-  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
-  border-color: #ddd6fe;
+  background: linear-gradient(135deg, #f5f3ff, #efe8ff);
+  border-color: #e9defe;
 }
 
 .shift-icon-box {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -204,8 +385,8 @@
 }
 
 .shift-icon-box.day {
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-  color: #2563eb;
+  background: linear-gradient(135deg, #dbeafe, #c7ddff);
+  color: #1d4ed8;
 }
 
 .shift-icon-box.night {
@@ -216,27 +397,27 @@
 .shift-details-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
 }
 
 .shift-name-row {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  color: #334155;
+  color: #111827;
 }
 
+.shift-name-row {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+}
 .shift-time-row {
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
 }
-
-/* Biometric strip */
-.biometric-strip {
-  margin-top: 8px;
-  display: flex;
   gap: 8px;
 }
 

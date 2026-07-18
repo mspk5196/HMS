@@ -295,18 +295,20 @@ export function Leave() {
         title="Leave Management System"
       />
 
+      
+
       <div className="leave-layout-grid">
         {/* Left Sidebar: Employee Search */}
         <div className="flex flex-col h-[calc(100vh-190px)] min-h-[500px]">
           <Card className="p-4 flex flex-col h-full shadow-sm">
             <div className="mb-4">
               <h3 className="text-xs font-bold text-slate-800 mb-3 uppercase tracking-wider text-slate-500">Search Employee</h3>
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <div className="relative search-box">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Enter name or code..."
-                  className="leave-field pl-9 pr-4 py-1.5 w-full text-xs"
+                  className="leave-field pr-4 py-1.5 w-full text-xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -326,11 +328,9 @@ export function Leave() {
                     }`}
                     onClick={() => setSelectedEmpId(emp.id)}
                   >
-                    <img
-                      src={emp.avatar || `https://i.pravatar.cc/150?u=emp_${emp.id}`}
-                      alt={emp.full_name}
-                      className="w-9 h-9 rounded-full object-cover border border-slate-100"
-                    />
+                    <div className="emp-initials" aria-hidden>
+                      {emp.full_name.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase()}
+                    </div>
                     <div className="min-w-0">
                       <div className="text-[13px] text-slate-800 truncate">{emp.full_name}</div>
                       <div className="text-[10px] text-slate-400 truncate">{emp.employee_code || `EMP${emp.id}`} · {emp.designation_name || 'Staff'}</div>
@@ -352,11 +352,9 @@ export function Leave() {
               {/* Employee Header */}
               <Card className="p-5 shadow-sm">
                 <div className="flex items-center gap-4">
-                  <img
-                    src={selectedEmp.avatar || `https://i.pravatar.cc/150?u=emp_${selectedEmp.id}`}
-                    alt={selectedEmp.full_name}
-                    className="w-14 h-14 rounded-full object-cover border-2 border-slate-200"
-                  />
+                  <div className="selected-emp-initials">
+                    {selectedEmp.full_name.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase()}
+                  </div>
                   <div>
                     <h2 className="text-base font-bold text-slate-800">{selectedEmp.full_name}</h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -574,11 +572,9 @@ export function Leave() {
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
               {leavesOnSelectedDate.map((r, i) => (
                 <div key={r.id || i} className="p-3 border border-slate-100 rounded-lg bg-slate-50/30 flex items-center gap-3">
-                  <img
-                    src={`https://i.pravatar.cc/150?u=date_leave_${r.employee_id}`}
-                    alt="avatar"
-                    className="w-8 h-8 rounded-full border border-slate-100 object-cover"
-                  />
+                  <div className="emp-initials small">
+                    {(r.employee_name || r.full_name || '').split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase()}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold text-slate-800 truncate">{r.employee_name || r.full_name || `Employee ${r.employee_id}`}</div>
                     <div className="text-[10px] text-slate-400 truncate mt-0.5">{r.leave_type_name || 'Leave'}</div>

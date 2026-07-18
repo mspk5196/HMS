@@ -5,12 +5,46 @@
   animation: fadeIn 0.25s ease-out;
 }
 
+.leave-page { padding: 28px 20px; background: linear-gradient(180deg, #f6f8fb 0%, #f8fafc 100%); }
+
 .leave-heading-block {
   margin-bottom: 20px;
 }
 
+/* Match roster/HR header style: white band with breadcrumb and actions */
+.leave-page .page-header {
+  padding: 22px 36px !important;
+  min-height: 72px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  margin: -40px -28px 22px -28px !important; /* pull header to page edges */
+  box-shadow: 0 1px 0 rgba(14,38,77,0.03);
+}
+
+.leave-page .page-header-left {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.leave-page .breadcrumb-link { color: #64748b !important }
+.leave-page .breadcrumb-separator { color: #d1d5db !important; margin: 0 8px !important }
+.leave-page .breadcrumb-current { color: #0f172a !important; font-weight: 700 !important }
+
+.leave-page .page-header-right { display:flex; align-items:center; gap:14px }
+.leave-page .search-box input { height:40px; border-radius:10px; background:#f8fafc; border:1px solid #e6eef8; padding-left:44px }
+
+/* Ensure the search icon is vertically centered and doesn't overlap */
+.leave-page .search-box svg, .leave-page .search-box .lucide-react {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  width: 16px; height: 16px;
+}
+
 .leave-title {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.5px;
@@ -29,8 +63,12 @@
 .leave-layout-grid {
   display: grid;
   grid-template-columns: 260px 1fr 300px;
-  gap: 16px;
+  gap: 20px;
   align-items: stretch;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 20px;
 }
 
 @media (max-width: 1200px) {
@@ -51,6 +89,10 @@
   background-color: #ffffff;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
+  padding: 10px 12px;
+  gap: 10px;
+  display: flex;
+  align-items: center;
 }
 
 .emp-search-item:hover {
@@ -68,12 +110,12 @@
 .leave-balance-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .balance-card {
   border-radius: 12px;
-  padding: 16px;
+  padding: 18px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   position: relative;
@@ -162,7 +204,7 @@
 .history-item {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   background: #ffffff;
   display: flex;
   justify-content: space-between;
@@ -213,7 +255,7 @@
   height: 36px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12.5px;
   color: #334155;
   outline: none;
@@ -236,13 +278,52 @@
 .leave-breakdown-preview {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 8px;
   animation: fadeIn 0.2s ease;
 }
+
+/* Initials badge styles */
+.emp-initials {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(180deg,#eef2ff,#ffffff);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#0b1220;
+  font-weight:700;
+  font-size:13px;
+  border:1px solid rgba(14,38,77,0.04);
+}
+.emp-initials.small { width:32px; height:32px; border-radius:8px; font-size:12px }
+.selected-emp-initials {
+  width:56px;
+  height:56px;
+  border-radius:10px;
+  background: linear-gradient(180deg,#ffffff,#fbfdff);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#0b1220;
+  font-weight:800;
+  font-size:18px;
+  border:1px solid rgba(14,38,77,0.05);
+  box-shadow: 0 8px 24px rgba(11,18,32,0.04);
+  margin-right: 8px;
+}
+
+.leave-balance-container { margin-top: 6px }
+
+.leave-breakdown-preview .breakdown-header { gap: 10px }
+
+.history-list { padding-right: 6px }
+
+.emp-search-item .min-w-0 { min-width: 0 }
 
 .breakdown-header {
   display: flex;

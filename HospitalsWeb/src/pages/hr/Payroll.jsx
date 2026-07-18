@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { 
   Banknote, MinusCircle, Wallet, Clock, 
   Calendar, ChevronDown, Download, Play,
-  Mail, FileText, Landmark
+  Mail, FileText, Landmark, Shield
 } from 'lucide-react';
 import './Payroll.css';
 
@@ -262,7 +262,7 @@ export function Payroll() {
                       <tr key={it.id || i} className="payroll-row">
                         <td>
                           <div className="payroll-employee-cell">
-                            <img src={`https://i.pravatar.cc/150?u=pay_${it.employee_id}`} className="payroll-avatar" alt="avatar"/>
+                            <div className="payroll-logo"><Shield size={18} /></div>
                             <div>
                               <div className="payroll-name">{it.employee_name || `EMP${it.employee_id}`}</div>
                               <div className="payroll-muted">{it.department_name || '—'}</div>
