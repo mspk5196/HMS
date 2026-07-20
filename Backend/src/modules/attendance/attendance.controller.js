@@ -12,11 +12,13 @@ const { success, created, paginated, fail } = require('../../utils/response');
    DAILY SUMMARIES
 ───────────────────────────────────────────── */
 
-/** GET /api/attendance?fromDate=&toDate=&employeeId=&departmentId=&page=&limit= */
+/** GET /api/attendance?date=YYYY-MM-DD  OR  ?fromDate=&toDate= */
 const listSummaries = asyncHandler(async (req, res) => {
-  const { fromDate, toDate, employeeId, departmentId, page = 1, limit = 50 } = req.query;
+  let { date, fromDate, toDate, employeeId, departmentId, page = 1, limit = 50 } = req.query;
+  // Allow shorthand: ?date=YYYY-MM-DD  (single day)
+  if (date && !fromDate) { fromDate = date; toDate = date; }
   if (!fromDate || !toDate) {
-    return res.status(400).json(fail('fromDate and toDate are required'));
+    return res.status(400).json(fail('date (or fromDate + toDate) is required'));
   }
   const result = await svc.listDailySummaries({
     fromDate, toDate,
@@ -146,6 +148,25 @@ const getBufferSummary = asyncHandler(async (req, res) => {
   return res.json(success(rows));
 });
 
+const manualPunch = asyncHandler(async (req, res) => {
+  const { employee_id, date, check_in, check_out, overtime_minutes } = req.body;
+  if (!employee_id || !date || !check_in) {
+    return res.status(400).json(fail('employee_id, date and check_in are required'));
+  }
+  await svc.addManualPunch(Number(employee_id), date, check_in, check_out || null, Number(overtime_minutes) || 0);
+  return res.json(success(null, 'Manual timing recorded and attendance calculated'));
+});
+
+/** GET /api/attendance/buffer/employee/:id?month=&year= */
+const getEmployeeBuffer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { month, year } = req.query;
+  const m = Number(month) || new Date().getMonth() + 1;
+  const y = Number(year) || new Date().getFullYear();
+  const buffer = await svc.getEmployeeBuffer(Number(id), m, y);
+  return res.json(success(buffer));
+});
+
 module.exports = {
   listSummaries,
   getSummary,
@@ -158,4 +179,6 @@ module.exports = {
   createCorrection,
   reviewCorrection,
   getBufferSummary,
+  manualPunch,
+  getEmployeeBuffer,
 };

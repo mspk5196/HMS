@@ -56,7 +56,7 @@ const createHoliday = async (data) => {
 /* ─── LEAVE BALANCES ─── */
 const getLeaveBalances = async (employeeId, year) => {
   const [rows] = await db.execute(
-    `SELECT lb.*, lt.name AS leave_type_name, lt.is_paid
+    `SELECT lb.*, lt.name AS leave_type_name
      FROM leave_balances lb
      JOIN leave_types lt ON lt.id = lb.leave_type_id
      WHERE lb.employee_id = ? AND lb.year = ?`,
@@ -66,15 +66,14 @@ const getLeaveBalances = async (employeeId, year) => {
 };
 
 const upsertLeaveBalance = async (data) => {
-  const { employee_id, leave_type_id, year, allocated_days, used_days, carried_forward_days } = data;
+  const { employee_id, leave_type_id, year, allocated_days, used_days } = data;
   await db.execute(
-    `INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days, carried_forward_days)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days)
+     VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        allocated_days = VALUES(allocated_days),
-       used_days = VALUES(used_days),
-       carried_forward_days = VALUES(carried_forward_days)`,
-    [employee_id, leave_type_id, year, allocated_days ?? 0, used_days ?? 0, carried_forward_days ?? 0]
+       used_days = VALUES(used_days)`,
+    [employee_id, leave_type_id, year, allocated_days ?? 0, used_days ?? 0]
   );
 };
 
@@ -89,12 +88,13 @@ const listLeaveRequests = async ({ employeeId, status, page = 1, limit = 50 }) =
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await db.query(
-    `SELECT lr.*, e.full_name, e.employee_code, lt.name AS leave_type_name, 
+    `SELECT lr.*, lr.from_date AS start_date, lr.to_date AS end_date, lr.hr_status AS status, 
+            e.full_name, e.employee_code, lt.name AS leave_type_name, 
             ap.username AS approved_by_name
      FROM leave_requests lr
      JOIN employees e ON e.id = lr.employee_id
      JOIN leave_types lt ON lt.id = lr.leave_type_id
-     LEFT JOIN users ap ON ap.id = lr.approved_by
+     LEFT JOIN users ap ON ap.id = lr.hr_user_id
      ${where}
      ORDER BY lr.created_at DESC
      LIMIT ? OFFSET ?`,
@@ -106,7 +106,8 @@ const listLeaveRequests = async ({ employeeId, status, page = 1, limit = 50 }) =
 
 const getLeaveRequest = async (id) => {
   const [rows] = await db.execute(
-    `SELECT lr.*, e.full_name, lt.name AS leave_type_name 
+    `SELECT lr.*, lr.from_date AS start_date, lr.to_date AS end_date, lr.hr_status AS status, 
+            e.full_name, lt.name AS leave_type_name 
      FROM leave_requests lr 
      JOIN employees e ON e.id = lr.employee_id
      JOIN leave_types lt ON lt.id = lr.leave_type_id
@@ -117,20 +118,33 @@ const getLeaveRequest = async (id) => {
 };
 
 const createLeaveRequest = async (data) => {
-  const { employee_id, leave_type_id, start_date, end_date, total_days, reason, document_path } = data;
+  const { employee_id, leave_type_id, start_date, end_date, reason, status,
+          casual_days, privilege_days, lop_days } = data;
+  const dbStatus = status === 'approved' ? 'approved' : 'pending';
+  // Determine result: if lop_days > 0 and no paid days, mark as loss_of_pay
+  const hasPaidDays = (casual_days || 0) > 0 || (privilege_days || 0) > 0;
+  const resultEnum = dbStatus === 'approved'
+    ? (hasPaidDays ? 'paid_leave' : 'loss_of_pay')
+    : 'pending';
+
   const [result] = await db.execute(
-    `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, total_days, reason, document_path, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-    [employee_id, leave_type_id, start_date, end_date, total_days, reason, document_path ?? null]
+    `INSERT INTO leave_requests 
+     (employee_id, leave_type_id, from_date, to_date, is_half_day, reason, reporting_person_status, hr_status, result,
+      casual_days, privilege_days, lop_days)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [employee_id, leave_type_id, start_date, end_date, 0, reason || null, dbStatus, dbStatus, resultEnum,
+     casual_days || 0, privilege_days || 0, lop_days || 0]
   );
   return result.insertId;
 };
 
 const updateLeaveRequestStatus = async (id, status, { approved_by, rejection_reason }) => {
+  const resultEnum = status === 'approved' ? 'paid_leave' : (status === 'rejected' ? 'rejected' : 'pending');
   await db.execute(
-    `UPDATE leave_requests SET status = ?, approved_by = ?, approved_at = NOW(), rejection_reason = ?
+    `UPDATE leave_requests 
+     SET hr_status = ?, hr_user_id = ?, hr_acted_at = NOW(), result = ?
      WHERE id = ?`,
-    [status, approved_by ?? null, rejection_reason ?? null, id]
+    [status, approved_by ?? null, resultEnum, id]
   );
 };
 

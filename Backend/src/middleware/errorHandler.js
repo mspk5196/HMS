@@ -20,7 +20,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   console.error('[UNHANDLED ERROR]', err);
-  return res.status(500).json(fail('Internal server error'));
+  return res.status(500).json(fail(`Internal server error: ${err.message}`));
 };
 
 module.exports = errorHandler;
