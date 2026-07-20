@@ -2,8 +2,8 @@ const q = require('./hr.queries');
 const { AppError } = require('../../utils/errors');
 
 const createEmployee = async (data) => {
-  if (!data.employee_code || !data.full_name || !data.gender || !data.dob || !data.date_of_joining || !data.department_id || !data.designation_id) {
-    throw new AppError('employee_code, full_name, gender, dob, date_of_joining, department_id, and designation_id are required', 400);
+  if (!data.employee_code || !data.full_name || !data.date_of_joining || !data.department_id || !data.designation_id) {
+    throw new AppError('employee_code, full_name, date_of_joining, department_id, and designation_id are required', 400);
   }
   return q.createEmployee(data);
 };

@@ -579,6 +579,16 @@ function AddDepartmentForm({ onBack, onSubmit, initialData }) {
 }
 
 
+const mapEmployeeToMember = (emp) => ({
+  id: emp.id,
+  name: emp.full_name,
+  position: emp.designation_name || 'Staff',
+  qualification: emp.qualification || '—',
+  dateOfJoining: emp.date_of_joining ? new Date(emp.date_of_joining).toISOString().split('T')[0] : '—',
+  experienceDescription: emp.experience_description || '—'
+});
+
+
 // ─── Department List (main view) ─────────────────────────────────────────────
 export default function DepartmentRole() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add-dept' | 'members-list' | 'add-member'
@@ -718,33 +728,81 @@ export default function DepartmentRole() {
   };
 
   // Submit Handler for Add Member
-  const handleAddMemberSubmit = (memberData, targetDept) => {
+  const handleAddMemberSubmit = async (memberData, targetDept) => {
     const deptToUpdate = targetDept || selectedDept || departments[0];
     if (!deptToUpdate) return;
 
-    setDepartments(prev => prev.map(d => {
-      if ((d.id && d.id === deptToUpdate.id) || d.name === deptToUpdate.name) {
-        const updatedMembers = [...(d.members || []), memberData];
-        const updatedDept = {
-          ...d,
-          members: updatedMembers,
-          staffCount: updatedMembers.length
-        };
-        if (selectedDept && ((selectedDept.id && selectedDept.id === d.id) || selectedDept.name === d.name)) {
-          setSelectedDept(updatedDept);
-        }
-        return updatedDept;
-      }
-      return d;
-    }));
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
 
-    setSuccessMsg(`Member "${memberData.name}" added successfully to ${deptToUpdate.name} as ${memberData.position}.`);
-    if (selectedDept) {
-      setViewMode('members-list');
-    } else {
-      setViewMode('list');
+      // Find the designation/staff role ID
+      const matchingRole = (deptToUpdate.roles || []).find(
+        r => r.roleName === memberData.position || (typeof r === 'object' && r.roleName === memberData.position)
+      );
+      const designationId = matchingRole && typeof matchingRole === 'object' ? matchingRole.id : null;
+      if (!designationId) {
+        throw new Error(`The role "${memberData.position}" was not found or has no ID in this department.`);
+      }
+
+      // Generate a unique employee code
+      const employeeCode = `EMP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+
+      const payload = {
+        employee_code: employeeCode,
+        full_name: memberData.name,
+        date_of_joining: memberData.dateOfJoining,
+        department_id: deptToUpdate.id,
+        designation_id: designationId,
+        qualification: memberData.qualification,
+        experience_description: memberData.experienceDescription,
+        basic_salary: matchingRole && typeof matchingRole === 'object' ? Number(matchingRole.basicSalary) : 0
+      };
+
+      // Call the API to create the employee in the DB
+      const result = await apiFetch('/hr/employees', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      // Map the returned employee back for local state update
+      const newMember = {
+        id: result.id,
+        name: memberData.name,
+        position: memberData.position,
+        qualification: memberData.qualification,
+        dateOfJoining: memberData.dateOfJoining,
+        experienceDescription: memberData.experienceDescription
+      };
+
+      setDepartments(prev => prev.map(d => {
+        if (d.id === deptToUpdate.id) {
+          const updatedMembers = [...(d.members || []), newMember];
+          const updatedDept = {
+            ...d,
+            members: updatedMembers,
+            staffCount: updatedMembers.length
+          };
+          if (selectedDept && selectedDept.id === d.id) {
+            setSelectedDept(updatedDept);
+          }
+          return updatedDept;
+        }
+        return d;
+      }));
+
+      setSuccessMsg(`Member "${memberData.name}" added successfully to ${deptToUpdate.name} as ${memberData.position}.`);
+      if (selectedDept) {
+        setViewMode('members-list');
+      } else {
+        setViewMode('list');
+      }
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to add member.');
+    } finally {
+      setIsLoading(false);
     }
-    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const handleDeleteDepartment = async (id, name) => {
@@ -761,6 +819,7 @@ export default function DepartmentRole() {
       setDepartments(prev => prev.filter(d => d.id !== id));
       setSuccessMsg(`Department "${name}" deleted successfully.`);
       setTimeout(() => setSuccessMsg(''), 4000);
+      await fetchDepartments();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to delete department.');
     } finally {
@@ -773,9 +832,28 @@ export default function DepartmentRole() {
     setViewMode('add-dept');
   };
 
-  const handleOpenMembers = (dept) => {
-    setSelectedDept(dept);
-    setViewMode('members-list');
+  const handleOpenMembers = async (dept) => {
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      const empData = await apiFetch(`/hr/employees?departmentId=${dept.id}&limit=200`);
+      const members = (empData || []).map(mapEmployeeToMember);
+      
+      const updatedDept = {
+        ...dept,
+        members,
+        staffCount: members.length
+      };
+      
+      // Update this department in our local departments state
+      setDepartments(prev => prev.map(d => d.id === dept.id ? updatedDept : d));
+      setSelectedDept(updatedDept);
+      setViewMode('members-list');
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to load department members.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ── Render Views ─────────────────────────────────────────────────────────────

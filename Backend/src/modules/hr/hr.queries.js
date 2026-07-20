@@ -59,14 +59,16 @@ const createEmployee = async (data) => {
     employee_code, full_name, gender, dob, date_of_joining,
     department_id, designation_id, mobile, phone, address, status,
     bank_account_no, bank_ifsc, bank_name, uan_number,
-    salary_type, basic_salary, per_day_salary, per_night_salary
+    salary_type, basic_salary, per_day_salary, per_night_salary,
+    qualification, experience_description
   } = data;
   const [result] = await db.execute(
     `INSERT INTO employees (employee_code, full_name, gender, date_of_birth, date_of_joining,
        department_id, designation_id, phone, address, status,
        bank_account_no, bank_ifsc, bank_name, uan_number,
-       salary_type, basic_salary, per_day_salary, per_night_salary)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       salary_type, basic_salary, per_day_salary, per_night_salary,
+       qualification, experience_description)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       employee_code,
       full_name,
@@ -85,7 +87,9 @@ const createEmployee = async (data) => {
       salary_type || 'monthly',
       basic_salary ?? 0,
       per_day_salary ?? 0,
-      per_night_salary ?? 0
+      per_night_salary ?? 0,
+      qualification || null,
+      experience_description || null
     ]
   );
   return result.insertId;
@@ -96,7 +100,8 @@ const updateEmployee = async (id, data) => {
     'full_name', 'gender', 'date_of_joining', 'department_id', 'designation_id',
     'address', 'status', 'date_of_leaving',
     'bank_account_no', 'bank_ifsc', 'bank_name', 'uan_number',
-    'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary'
+    'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary',
+    'qualification', 'experience_description'
   ];
   const fields = [];
   const vals = [];

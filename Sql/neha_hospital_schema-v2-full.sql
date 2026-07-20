@@ -529,6 +529,12 @@ CREATE TABLE `employees`  (
   `pf_enrolled` tinyint(1) NOT NULL DEFAULT 0,
   `esi_number` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
   `esi_enrolled` tinyint(1) NOT NULL DEFAULT 0,
+  `qualification` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
+  `experience_description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
+  `salary_type` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT 'monthly',
+  `basic_salary` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `per_day_salary` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `per_night_salary` decimal(10, 2) NOT NULL DEFAULT 0.00,
   `status` enum('active','inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -538,7 +544,7 @@ CREATE TABLE `employees`  (
   INDEX `ix_employees_designation`(`designation_id` ASC) USING BTREE,
   INDEX `fk_employees_reporting_person`(`reporting_person_id` ASC) USING BTREE,
   CONSTRAINT `fk_employees_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT `fk_employees_designation` FOREIGN KEY (`designation_id`) REFERENCES `designations` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_employees_designation` FOREIGN KEY (`designation_id`) REFERENCES `staff_roles` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `fk_employees_reporting_person` FOREIGN KEY (`reporting_person_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = Compact;
 
