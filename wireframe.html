@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Neha Hospital Management System — Wireframes</title>
+<style>
+  :root{
+    --page:#e9ebee; --panel:#ffffff; --line:#b9bfc6; --line-lt:#dde1e5;
+    --text:#262a2e; --mute:#767c83; --nav-bg:#20242a; --nav-text:#aeb4bb;
+    --nav-active-bg:#33393f; --nav-active-text:#ffffff; --accent:#525a63;
+    --badge-bg:#eceeef; --badge-text:#4a5058; --chrome:#f1f2f4;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--page);color:var(--text);}
+  .app{display:flex;min-height:100vh;}
+
+  /* meta navigation — jumps between wireframe screens, not part of the product itself */
+  .nav{width:220px;flex-shrink:0;background:var(--nav-bg);color:var(--nav-text);padding:18px 0;}
+  .nav-title{font-size:13px;font-weight:bold;color:#fff;padding:0 16px 14px;border-bottom:1px solid #3a4048;margin-bottom:10px;}
+  .nav-group{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#6b7178;padding:14px 16px 6px;}
+  .nav-item{padding:8px 16px;font-size:13px;cursor:pointer;border-left:3px solid transparent;}
+  .nav-item:hover{background:#2a2f36;color:#fff;}
+  .nav-item.active{background:var(--nav-active-bg);color:var(--nav-active-text);border-left-color:#fff;}
+
+  .main{flex:1;padding:26px;overflow:auto;}
+  .chrome{background:var(--chrome);border:1px solid var(--line);border-radius:8px 8px 0 0;padding:8px 12px;display:flex;align-items:center;gap:8px;}
+  .dot{width:9px;height:9px;border-radius:50%;background:#c7cbcf;}
+  .chrome-url{margin-left:10px;font-size:12px;color:var(--mute);background:#fff;border:1px solid var(--line-lt);border-radius:4px;padding:3px 10px;flex:1;}
+
+  .screen{display:none;background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;min-height:640px;padding:22px;}
+  .screen.active{display:block;}
+
+  /* product's own in-app chrome, shown inside each screen for realism */
+  .app-top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line-lt);padding-bottom:12px;margin-bottom:18px;}
+  .app-logo{font-weight:bold;font-size:14px;}
+  .app-top-right{display:flex;align-items:center;gap:10px;}
+  .pill{font-size:11px;background:var(--badge-bg);color:var(--badge-text);border:1px solid var(--line-lt);border-radius:20px;padding:3px 10px;}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--badge-bg);border:1px solid var(--line);}
+
+  h1.scr-title{font-size:17px;margin:0 0 4px;}
+  p.scr-sub{font-size:12px;color:var(--mute);margin:0 0 18px;}
+  h2.sec{font-size:13px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line-lt);}
+
+  .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .box{border:1px solid var(--line-lt);border-radius:6px;padding:14px;}
+  .box-title{font-size:12px;font-weight:bold;margin-bottom:8px;}
+
+  label{display:block;font-size:11px;color:var(--mute);margin:10px 0 3px;}
+  .field,input,select,textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px 8px;font-size:12px;font-family:inherit;color:var(--text);background:#fff;}
+  textarea{resize:none;height:50px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .checkrow{display:flex;align-items:center;gap:6px;font-size:12px;margin-top:8px;}
+
+  .btn{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:7px 14px;font-size:12px;background:#fff;color:var(--text);cursor:default;}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn-row{display:flex;gap:8px;margin-top:14px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--mute);border-bottom:1px solid var(--line);padding:6px 8px;}
+  td{border-bottom:1px solid var(--line-lt);padding:8px;}
+  .badge{font-size:10px;padding:2px 8px;border-radius:20px;background:var(--badge-bg);color:var(--badge-text);border:1px solid var(--line-lt);white-space:nowrap;}
+
+  .metric{border:1px solid var(--line-lt);border-radius:6px;padding:12px;}
+  .metric-label{font-size:11px;color:var(--mute);}
+  .metric-value{font-size:20px;font-weight:bold;margin-top:4px;}
+
+  .icon-rail{display:flex;gap:14px;font-size:10px;color:var(--mute);margin-top:10px;flex-wrap:wrap;}
+  .icon-rail span{border:1px solid var(--line-lt);border-radius:4px;padding:4px 8px;}
+
+  .imgph{background:repeating-linear-gradient(45deg,#f4f5f6,#f4f5f6 8px,#eceeef 8px,#eceeef 16px);border:1px dashed var(--line);border-radius:6px;}
+
+  .cal{display:grid;grid-template-columns:120px repeat(14,1fr);border:1px solid var(--line-lt);font-size:10px;}
+  .cal div{border-right:1px solid var(--line-lt);border-bottom:1px solid var(--line-lt);padding:5px 4px;text-align:center;}
+  .cal .name{text-align:left;font-weight:bold;background:#fafafa;}
+  .cal .hd{background:#fafafa;font-weight:bold;color:var(--mute);}
+
+  .bedgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+  .bed{border:1px solid var(--line);border-radius:5px;padding:8px;font-size:10px;text-align:center;}
+  .bed.occ{background:#f2f2f2;}
+  .bed .b-label{font-weight:bold;margin-bottom:3px;}
+
+  .timeline-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-lt);font-size:12px;}
+  .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex-shrink:0;}
+
+  .note{font-size:11px;color:var(--mute);font-style:italic;margin-top:8px;}
+
+  /* RBAC / settings screen */
+  .set-head{background:#f4f5f6;margin:-22px -22px 0;padding:18px 22px 0;}
+  .set-head h1{font-size:19px;margin:0;}
+  .set-head p{font-size:12px;color:var(--mute);margin:2px 0 0;}
+  .tabs{display:flex;gap:22px;margin-top:16px;border-bottom:1px solid var(--line-lt);}
+  .tab{font-size:12px;color:var(--mute);padding:0 0 10px;}
+  .tab.active{color:var(--text);font-weight:bold;border-bottom:2px solid var(--accent);}
+  .sec-block{padding-top:20px;}
+  .sec-h{font-size:14px;font-weight:bold;color:#2f5fa8;margin:0 0 2px;}
+  .sec-p{font-size:11px;color:var(--mute);margin:0 0 14px;}
+
+  .prio-row{display:flex;align-items:center;gap:12px;border:1px solid var(--line-lt);border-radius:5px;padding:9px 12px;margin-bottom:6px;font-size:12px;}
+  .prio-rank{font-size:10px;color:var(--mute);width:22px;}
+  .prio-name{font-weight:bold;width:150px;}
+  .tag{font-size:10px;background:#eef2fb;color:#3457a6;border-radius:3px;padding:2px 7px;margin-right:4px;}
+  .prio-arrows{margin-left:auto;color:var(--mute);font-size:11px;}
+
+  .legend{display:flex;gap:26px;font-size:11px;color:var(--mute);margin:14px 0;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .sw{width:11px;height:11px;border-radius:2px;display:inline-block;border:1px solid var(--line);}
+  .sw.blue{background:#dbe6fb;border-color:#3457a6;}
+  .sw.amber{background:#fbe9cf;border-color:#b9781a;}
+
+  .warn-banner{background:#fbf3e3;border:1px solid #ecd7ab;border-radius:6px;padding:10px 14px;font-size:12px;margin-bottom:16px;}
+  .warn-banner b{color:#8a5a10;}
+  .warn-banner .sec-p{margin:2px 0 0;}
+
+  .grp-title{font-size:10px;letter-spacing:.05em;color:var(--mute);text-transform:uppercase;margin:18px 0 6px;}
+  .perm-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .perm-table th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--mute);padding:5px 8px;border-bottom:1px solid var(--line);}
+  .perm-table td{padding:6px 8px;border-bottom:1px solid var(--line-lt);vertical-align:middle;}
+  .perm-table tr.skip-row td{background:#fdf8ef;border-bottom:1px solid #f1e4c7;}
+  .perm-table tr.skip-row{color:#8a5a10;}
+  .mod-name{display:flex;align-items:center;gap:6px;}
+  .skip-label{display:flex;align-items:center;gap:6px;padding-left:16px;font-size:11px;}
+  .cb{width:13px;height:13px;}
+  .cb.amber{accent-color:#b9781a;}
+  .special-pill{font-size:10px;border:1px solid var(--line-lt);border-radius:20px;padding:2px 9px;margin:0 4px 4px 0;display:inline-block;background:#fff;}
+  .special-pill.amber{background:#fbe9cf;border-color:#ecd7ab;color:#8a5a10;}
+  .dash{color:var(--line);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="nav">
+    <div class="nav-title">NEHA HOSPITAL — WIREFRAMES</div>
+
+    <div class="nav-group">Global</div>
+    <div class="nav-item active" data-target="scr-login">Login</div>
+    <div class="nav-item" data-target="scr-dashboard">Dashboard</div>
+
+    <div class="nav-group">Staff &amp; salary side</div>
+    <div class="nav-item" data-target="scr-hr">2.1 HR &amp; employee mgmt</div>
+    <div class="nav-item" data-target="scr-roster">2.2 Shift &amp; roster</div>
+    <div class="nav-item" data-target="scr-attendance">2.3 Attendance</div>
+    <div class="nav-item" data-target="scr-leave">2.4 Leave</div>
+    <div class="nav-item" data-target="scr-fine">2.5 Fine</div>
+    <div class="nav-item" data-target="scr-payroll">2.6 Payroll</div>
+
+    <div class="nav-group">Patient &amp; hospital side</div>
+    <div class="nav-item" data-target="scr-patient">3.1 Patient records</div>
+    <div class="nav-item" data-target="scr-appointment">3.2 Appointment / token</div>
+    <div class="nav-item" data-target="scr-consultation">3.3 Consultation &amp; Rx</div>
+    <div class="nav-item" data-target="scr-pharmacy">3.4 Pharmacy</div>
+    <div class="nav-item" data-target="scr-admission">3.5 Admission &amp; beds</div>
+    <div class="nav-item" data-target="scr-discharge">3.6 Discharge &amp; history</div>
+
+    <div class="nav-group">Admin &amp; settings</div>
+    <div class="nav-item" data-target="scr-rbac">Roles &amp; permissions</div>
+  </div>
+
+  <div class="main">
+    <div class="chrome">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="chrome-url" id="chrome-url">nehahospital.local/login</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="screen active" id="scr-login">
+      <div style="max-width:340px;margin:60px auto;text-align:center;">
+        <div style="font-weight:bold;font-size:16px;margin-bottom:2px;">Neha Hospital</div>
+        <div style="font-size:12px;color:var(--mute);margin-bottom:24px;">Management system — staff login</div>
+        <div class="box" style="text-align:left;">
+          <label>Username</label><input class="field" placeholder="e.g. r.receptionist">
+          <label>Password</label><input class="field" placeholder="••••••••">
+          <div class="btn-row"><div class="btn btn-primary" style="width:100%;text-align:center;">Log in</div></div>
+          <div class="note" style="text-align:center;">Forgot password?</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="screen" id="scr-dashboard">
+      <div class="app-top">
+        <div class="app-logo">Neha Hospital</div>
+        <div class="app-top-right"><span class="pill">Role: Administrator</span><div class="avatar"></div></div>
+      </div>
+      <h1 class="scr-title">Dashboard</h1>
+      <p class="scr-sub">Widgets shown here change based on the logged-in role — a pharmacist sees stock/billing widgets, a receptionist sees the queue, HR sees attendance/leave widgets.</p>
+
+      <div class="grid4">
+        <div class="metric"><div class="metric-label">Today's patients</div><div class="metric-value">42</div></div>
+        <div class="metric"><div class="metric-label">Today's revenue</div><div class="metric-value">₹1,18,400</div></div>
+        <div class="metric"><div class="metric-label">Staff present today</div><div class="metric-value">86 / 94</div></div>
+        <div class="metric"><div class="metric-label">Beds available</div><div class="metric-value">11 / 40</div></div>
+      </div>
+
+      <div class="grid2" style="margin-top:20px;">
+        <div class="box">
+          <div class="box-title">Today's appointment queue</div>
+          <table>
+            <tr><th>Token</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
+            <tr><td>1</td><td>Rajesh Kumar</td><td>Dr. Meera</td><td><span class="badge">Completed</span></td></tr>
+            <tr><td>2</td><td>Lakshmi R.</td><td>Dr. Meera</td><td><span class="badge">In consultation</span></td></tr>
+            <tr><td>3</td><td>Kavin S.</td><td>Dr. Arjun</td><td><span class="badge">Waiting</span></td></tr>
+          </table>
+        </div>
+        <div class="box">
+          <div class="box-title">Pending approvals</div>
+          <table>
+            <tr><th>Type</th><th>From</th><th>Detail</th></tr>
+            <tr><td>Leave</td><td>Priya N.</td><td>2 days, Sick Leave</td></tr>
+            <tr><td>Correction</td><td>Sundar M.</td><td>Missed out-punch, 7 Jul</td></tr>
+            <tr><td>Leave</td><td>Ravi T.</td><td>1 day, Casual Leave</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.1 HR & EMPLOYEE MANAGEMENT -->
+    <div class="screen" id="scr-hr">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: HR</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">HR &amp; employee management</h1>
+      <p class="scr-sub">Master record for every staff member — profile, bank details, PF/ESI enrolment, and salary structure.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">Employees</div>
+          <input class="field" placeholder="Search by name or employee code" style="margin-bottom:10px;">
+          <table>
+            <tr><th>Code</th><th>Name</th><th>Department</th><th>Designation</th><th>Status</th></tr>
+            <tr style="background:#fafafa;"><td>EMP014</td><td>Priya Nandhini</td><td>Nursing</td><td>Nurse</td><td><span class="badge">Active</span></td></tr>
+            <tr><td>EMP021</td><td>Sundar M.</td><td>Lab</td><td>Technician</td><td><span class="badge">Active</span></td></tr>
+            <tr><td>EMP033</td><td>Ravi T.</td><td>Pharmacy</td><td>Pharmacist</td><td><span class="badge">Active</span></td></tr>
+          </table>
+          <div class="btn-row"><div class="btn btn-primary">+ Add employee</div></div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Employee: Priya Nandhini (EMP014)</div>
+          <div class="row2"><div><label>Full name</label><input class="field" value="Priya Nandhini"></div><div><label>Date of joining</label><input class="field" value="01 Jun 2026"></div></div>
+          <div class="row2"><div><label>Department</label><select class="field"><option>Nursing</option></select></div><div><label>Designation</label><select class="field"><option>Nurse</option></select></div></div>
+          <div class="row2"><div><label>Reporting person</label><select class="field"><option>HOD — Nursing</option></select></div><div><label>Phone</label><input class="field" value="98xxxxxx10"></div></div>
+
+          <label style="margin-top:14px;">Bank account no.</label><input class="field" value="xxxxxxxx4213">
+          <div class="row2"><div><label>IFSC</label><input class="field" value="HDFC0001234"></div><div><label>UAN (PF)</label><input class="field" value="Pending enrolment"></div></div>
+
+          <label style="margin-top:14px;">Salary basis</label>
+          <select class="field"><option>Monthly fixed</option><option>Per day</option><option>Per shift</option></select>
+          <div class="row2"><div><label>Fixed salary</label><input class="field" value="₹22,500"></div><div><label>Effective from</label><input class="field" value="01 Oct 2026"></div></div>
+          <div class="btn-row"><div class="btn btn-primary">Save changes</div><div class="btn">View salary history</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.2 SHIFT & ROSTER -->
+    <div class="screen" id="scr-roster">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: HR</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Shift &amp; roster management</h1>
+      <p class="scr-sub">Calendar-style roster — click a cell to set a shift, week-off, or holiday for that person, that day.</p>
+
+      <div class="row3" style="margin-bottom:14px;">
+        <div><label>Month</label><select class="field"><option>July 2026</option></select></div>
+        <div><label>Department</label><select class="field"><option>Nursing</option></select></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;"><div class="btn">Suggest with AI</div><div class="btn btn-primary">Publish roster</div></div>
+      </div>
+
+      <div class="cal">
+        <div class="hd name">Employee</div>
+        <div class="hd">1</div><div class="hd">2</div><div class="hd">3</div><div class="hd">4</div><div class="hd">5</div><div class="hd">6</div><div class="hd">7</div><div class="hd">8</div><div class="hd">9</div><div class="hd">10</div><div class="hd">11</div><div class="hd">12</div><div class="hd">13</div><div class="hd">14</div>
+
+        <div class="name">Priya N.</div>
+        <div>M</div><div>M</div><div>WO</div><div>M</div><div>E</div><div>N</div><div>WO</div><div>M</div><div>M</div><div>E</div><div>E</div><div>N</div><div>WO</div><div>M</div>
+
+        <div class="name">Sundar M.</div>
+        <div>N</div><div>N</div><div>WO</div><div>E</div><div>M</div><div>WO</div><div>M</div><div>M</div><div>E</div><div>N</div><div>WO</div><div>M</div><div>E</div><div>E</div>
+
+        <div class="name">Ravi T.</div>
+        <div>M</div><div>WO</div><div>M</div><div>M</div><div>E</div><div>E</div><div>N</div><div>WO</div><div>M</div><div>M</div><div>E</div><div>WO</div><div>N</div><div>M</div>
+      </div>
+      <div class="note">M = Morning, E = Evening, N = Night, WO = Week off. Week-offs are admin-assigned per person, not fixed to Sunday.</div>
+
+      <div class="box" style="margin-top:16px;max-width:420px;">
+        <div class="box-title">Week-off policy</div>
+        <div class="row2"><div><label>Role</label><select class="field"><option>Nurse</option></select></div><div><label>Week-offs / month</label><input class="field" value="3"></div></div>
+      </div>
+    </div>
+
+    <!-- 2.3 ATTENDANCE -->
+    <div class="screen" id="scr-attendance">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: HR</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Attendance</h1>
+      <p class="scr-sub">Built from raw eSSL biometric punches — every punch is kept, but only those inside the valid attendance window count toward a day's record.</p>
+
+      <div class="row3" style="margin-bottom:14px;">
+        <div><label>Date</label><input class="field" value="15 Jul 2026"></div>
+        <div><label>Department</label><select class="field"><option>All</option></select></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;"><div class="btn">Sync biometric now</div><div class="btn">Extend window for today</div></div>
+      </div>
+
+      <table>
+        <tr><th>Employee</th><th>Shift</th><th>First in</th><th>Last out</th><th>Worked</th><th>Late</th><th>Status</th><th>Action</th></tr>
+        <tr><td>Priya N.</td><td>Morning</td><td>09:08</td><td>18:11</td><td>8h 21m</td><td>0m (buffer)</td><td><span class="badge">Present</span></td><td>View punches</td></tr>
+        <tr><td>Sundar M.</td><td>Night</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="badge">Absent</span></td><td>Mark present</td></tr>
+        <tr><td>Ravi T.</td><td>Morning</td><td>09:41</td><td>18:05</td><td>8h 02m</td><td>31m</td><td><span class="badge">Present, late</span></td><td>View punches</td></tr>
+      </table>
+
+      <div class="grid2" style="margin-top:16px;">
+        <div class="box">
+          <div class="box-title">Mark attendance manually</div>
+          <div class="row2"><div><label>Employee</label><select class="field"><option>Sundar M.</option></select></div><div><label>Date</label><input class="field" value="15 Jul 2026"></div></div>
+          <label>Reason</label><textarea class="field" placeholder="e.g. device offline, confirmed by supervisor"></textarea>
+          <div class="btn-row"><div class="btn btn-primary">Mark present</div></div>
+        </div>
+        <div class="box">
+          <div class="box-title">Monthly late buffer — Ravi T.</div>
+          <div style="font-size:12px;margin-bottom:6px;">19 of 30 minutes remaining this month</div>
+          <div style="height:8px;background:var(--badge-bg);border-radius:4px;overflow:hidden;"><div style="height:100%;width:63%;background:var(--accent);"></div></div>
+          <div class="note">Late arrivals are absorbed by this pool until it reaches 0, then lateness becomes chargeable.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.4 LEAVE -->
+    <div class="screen" id="scr-leave">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Staff</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Leave</h1>
+      <p class="scr-sub">Approval flows through the employee's reporting person first, then HR.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">My leave balance</div>
+          <table>
+            <tr><th>Leave type</th><th>Allocated</th><th>Used</th><th>Balance</th></tr>
+            <tr><td>Casual leave</td><td>1 / mo</td><td>1</td><td>0</td></tr>
+            <tr><td>Sick leave</td><td>12 / yr</td><td>2</td><td>10</td></tr>
+            <tr><td>Earned leave</td><td>15 / yr</td><td>4</td><td>11</td></tr>
+          </table>
+
+          <div class="box-title" style="margin-top:16px;">Apply for leave</div>
+          <div class="row2"><div><label>Leave type</label><select class="field"><option>Casual leave</option></select></div><div><label>Half day</label><select class="field"><option>No</option></select></div></div>
+          <div class="row2"><div><label>From date</label><input class="field" value="17 Jul 2026"></div><div><label>To date</label><input class="field" value="17 Jul 2026"></div></div>
+          <label>Reason</label><textarea class="field"></textarea>
+          <div class="btn-row"><div class="btn btn-primary">Submit request</div></div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Approvals (reporting person / HR view)</div>
+          <table>
+            <tr><th>Employee</th><th>Type</th><th>Dates</th><th>Status</th><th>Action</th></tr>
+            <tr><td>Priya N.</td><td>Sick leave</td><td>16–17 Jul</td><td><span class="badge">Pending reporting</span></td><td>Approve · Reject</td></tr>
+            <tr><td>Ravi T.</td><td>Casual leave</td><td>20 Jul</td><td><span class="badge">Pending HR</span></td><td>Approve · Reject</td></tr>
+            <tr><td>Meena K.</td><td>Casual leave</td><td>19 Jul</td><td><span class="badge">Approved — LOP</span></td><td>—</td></tr>
+          </table>
+          <div class="note">"Approved — LOP" means the request was properly submitted but the leave type's balance was already at zero, so the day is unpaid rather than fined.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.5 FINE -->
+    <div class="screen" id="scr-fine">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: HR</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Fine</h1>
+      <p class="scr-sub">Auto-generated when leave is neither applied for nor covered by balance; manual fine types stay available for other cases.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">Fines this month</div>
+          <table>
+            <tr><th>Employee</th><th>Type</th><th>Date</th><th>Amount</th><th>Source</th><th>Action</th></tr>
+            <tr><td>Meena K.</td><td>Unapproved absence</td><td>12 Jul</td><td>₹200</td><td><span class="badge">Auto</span></td><td>Waive</td></tr>
+            <tr><td>Sundar M.</td><td>Uniform</td><td>10 Jul</td><td>₹50</td><td><span class="badge">Manual</span></td><td>Waive</td></tr>
+          </table>
+
+          <div class="box-title" style="margin-top:16px;">Add manual fine</div>
+          <div class="row2"><div><label>Employee</label><select class="field"><option>Select…</option></select></div><div><label>Fine type</label><select class="field"><option>ID card</option></select></div></div>
+          <div class="row2"><div><label>Amount</label><input class="field" value="₹50"></div><div><label>Date</label><input class="field" value="15 Jul 2026"></div></div>
+          <label>Reason</label><textarea class="field"></textarea>
+          <div class="btn-row"><div class="btn btn-primary">Add fine</div></div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Fine types (admin-editable)</div>
+          <table>
+            <tr><th>Name</th><th>Default amount</th><th>Trigger</th><th></th></tr>
+            <tr><td>Unapproved absence</td><td>₹200</td><td>Automatic</td><td>Edit</td></tr>
+            <tr><td>Late-in time</td><td>₹50</td><td>Manual</td><td>Edit</td></tr>
+            <tr><td>Uniform</td><td>₹50</td><td>Manual</td><td>Edit</td></tr>
+            <tr><td>ID card</td><td>₹50</td><td>Manual</td><td>Edit</td></tr>
+          </table>
+          <div class="btn-row"><div class="btn">+ Add fine type</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.6 PAYROLL -->
+    <div class="screen" id="scr-payroll">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: HR</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Payroll</h1>
+      <p class="scr-sub">Combines attendance, leave, fines, overtime and PF/ESI into a final payslip for every salary basis.</p>
+
+      <div class="row3" style="margin-bottom:14px;">
+        <div><label>Payroll run</label><select class="field"><option>July 2026</option></select></div>
+        <div><label>Status</label><div class="field" style="background:#fafafa;"><span class="badge">Draft</span></div></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;"><div class="btn">Run calculation</div><div class="btn btn-primary">Lock payroll</div></div>
+      </div>
+
+      <table>
+        <tr><th>Employee</th><th>Basis</th><th>Present</th><th>LOP</th><th>OT</th><th>PF</th><th>ESI</th><th>Fines</th><th>Net pay</th><th></th></tr>
+        <tr><td>Priya N.</td><td>Monthly</td><td>26</td><td>2</td><td>₹180</td><td>₹1,800</td><td>₹169</td><td>₹0</td><td>₹23,334</td><td>Payslip</td></tr>
+        <tr><td>Kumar V.</td><td>Per day</td><td>24</td><td>—</td><td>₹0</td><td>—</td><td>—</td><td>₹0</td><td>₹16,800</td><td>Payslip</td></tr>
+        <tr><td>Anitha R.</td><td>Per shift</td><td>9 shifts</td><td>—</td><td>₹0</td><td>—</td><td>—</td><td>₹0</td><td>₹4,500</td><td>Payslip</td></tr>
+      </table>
+
+      <div class="box" style="margin-top:18px;max-width:420px;">
+        <div class="box-title">Payslip preview — Priya Nandhini, July 2026</div>
+        <table>
+          <tr><td>Basic + DA</td><td style="text-align:right;">₹15,750</td></tr>
+          <tr><td>HRA</td><td style="text-align:right;">₹6,750</td></tr>
+          <tr><td>Overtime</td><td style="text-align:right;">₹180</td></tr>
+          <tr><td>PF (employee)</td><td style="text-align:right;">−₹1,800</td></tr>
+          <tr><td>ESI (employee)</td><td style="text-align:right;">−₹169</td></tr>
+          <tr><td>Fines</td><td style="text-align:right;">₹0</td></tr>
+          <tr><td style="font-weight:bold;">Net pay</td><td style="text-align:right;font-weight:bold;">₹23,334</td></tr>
+        </table>
+        <div class="btn-row"><div class="btn">Download PDF</div></div>
+      </div>
+    </div>
+
+    <!-- 3.1 PATIENT RECORDS -->
+    <div class="screen" id="scr-patient">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Receptionist</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Patient records</h1>
+      <p class="scr-sub">Reception always starts here, searching by mobile number.</p>
+
+      <div class="row2" style="align-items:flex-end;max-width:520px;">
+        <div><label>Mobile number</label><input class="field" value="98765 43210"></div>
+        <div class="btn btn-primary" style="text-align:center;">Search</div>
+      </div>
+
+      <div class="box" style="margin-top:16px;max-width:640px;">
+        <div class="box-title">Patients linked to 98765 43210</div>
+        <table>
+          <tr><th>Name</th><th>Age</th><th>Gender</th><th></th></tr>
+          <tr><td>Rajesh Kumar</td><td>42</td><td>Male</td><td>Select</td></tr>
+          <tr><td>Lakshmi R.</td><td>39</td><td>Female</td><td>Select</td></tr>
+          <tr><td>Kavin S.</td><td>12</td><td>Male</td><td>Select</td></tr>
+        </table>
+        <div class="note">Selecting anywhere in the app always shows name + age together, so family members are never confused.</div>
+      </div>
+
+      <div class="box" style="margin-top:16px;max-width:520px;">
+        <div class="box-title">+ Add new patient</div>
+        <div class="row2"><div><label>Full name</label><input class="field"></div><div><label>Date of birth / age</label><input class="field"></div></div>
+        <div class="row2"><div><label>Gender</label><select class="field"><option>Female</option><option>Male</option><option>Other</option></select></div><div><label>Mobile number</label><input class="field" value="98765 43210"></div></div>
+        <div class="btn-row"><div class="btn btn-primary">Save patient</div></div>
+      </div>
+    </div>
+
+    <!-- 3.2 APPOINTMENT / TOKEN -->
+    <div class="screen" id="scr-appointment">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Receptionist</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Appointment / token</h1>
+      <p class="scr-sub">No fixed time slots — a token number simply increases for each patient created that day.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">Today's queue — 15 Jul 2026</div>
+          <table>
+            <tr><th>Token</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
+            <tr><td>1</td><td>Rajesh Kumar</td><td>Dr. Meera</td><td><span class="badge">Completed</span></td></tr>
+            <tr><td>2</td><td>Lakshmi R.</td><td>Dr. Meera</td><td><span class="badge">In consultation</span></td></tr>
+            <tr><td>3</td><td>Kavin S.</td><td>Dr. Arjun</td><td><span class="badge">Waiting</span></td></tr>
+          </table>
+        </div>
+        <div class="box">
+          <div class="box-title">New appointment</div>
+          <label>Patient</label><div class="field" style="background:#fafafa;">Rajesh Kumar, 42 (change)</div>
+          <label>Doctor</label><select class="field"><option>Dr. Meera — General Medicine</option></select>
+          <div class="row2"><div><label>Date</label><input class="field" value="15 Jul 2026 (today)"></div><div><label>Future booking</label><select class="field" disabled><option>Off — not enabled yet</option></select></div></div>
+          <div class="btn-row"><div class="btn btn-primary">Create appointment — assigns Token 4</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3.3 CONSULTATION & PRESCRIPTION -->
+    <div class="screen" id="scr-consultation">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Doctor</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Consultation &amp; prescription</h1>
+      <p class="scr-sub">Structured prescription lines, not free text, so pharmacy can suggest stock directly from this.</p>
+
+      <div class="box" style="margin-bottom:14px;">
+        <div class="box-title">Token 2 — Lakshmi R., 39, Female · Dr. Meera</div>
+      </div>
+
+      <div class="row2">
+        <div><label>Diagnosis</label><textarea class="field">Viral fever</textarea></div>
+        <div><label>Complaints</label><textarea class="field">Fever, body ache, 2 days</textarea></div>
+      </div>
+      <label>Follow-up date</label><input class="field" style="max-width:200px;" value="22 Jul 2026">
+
+      <div class="box-title" style="margin-top:16px;">Prescription</div>
+      <table>
+        <tr><th>Medicine</th><th>Morning</th><th>Afternoon</th><th>Night</th><th>Days</th><th>Food</th></tr>
+        <tr><td>Paracetamol 650</td><td>✓</td><td>—</td><td>✓</td><td>5</td><td>After food</td></tr>
+        <tr><td>ORS sachet</td><td>✓</td><td>✓</td><td>✓</td><td>3</td><td>Anytime</td></tr>
+      </table>
+      <div class="btn-row"><div class="btn">+ Add medicine</div><div class="btn btn-primary">Save prescription</div></div>
+    </div>
+
+    <!-- 3.4 PHARMACY -->
+    <div class="screen" id="scr-pharmacy">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Pharmacist</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Pharmacy</h1>
+      <p class="scr-sub">Stock management and billing — a bill always ties back to the patient's visit or stay.</p>
+
+      <h2 class="sec">Stock</h2>
+      <table>
+        <tr><th>Medicine</th><th>Category</th><th>Stock</th><th>Price</th><th></th></tr>
+        <tr><td>Paracetamol 650</td><td>Tablet</td><td>420</td><td>₹2.50</td><td>Edit</td></tr>
+        <tr><td>ORS sachet</td><td>Sachet</td><td>180</td><td>₹8.00</td><td>Edit</td></tr>
+        <tr><td>Amoxicillin syrup</td><td>Syrup</td><td>34</td><td>₹65.00</td><td>Edit</td></tr>
+      </table>
+      <div class="btn-row"><div class="btn">+ Add medicine</div></div>
+
+      <h2 class="sec" style="margin-top:22px;">Billing — Token 2, Lakshmi R.</h2>
+      <table>
+        <tr><th></th><th>Medicine</th><th>Qty</th><th>Price</th><th>Source</th></tr>
+        <tr><td><input type="checkbox" checked></td><td>Paracetamol 650</td><td>10</td><td>₹25.00</td><td><span class="badge">From prescription</span></td></tr>
+        <tr><td><input type="checkbox" checked></td><td>ORS sachet</td><td>3</td><td>₹24.00</td><td><span class="badge">From prescription</span></td></tr>
+        <tr><td><input type="checkbox"></td><td>Cotton roll</td><td>1</td><td>₹15.00</td><td><span class="badge">Manual</span></td></tr>
+      </table>
+      <div class="btn-row"><div class="btn">+ Add item manually</div></div>
+      <div style="text-align:right;font-size:13px;font-weight:bold;margin-top:10px;">Total: ₹49.00</div>
+      <div class="btn-row"><div class="btn btn-primary">Generate bill</div></div>
+    </div>
+
+    <!-- 3.5 ADMISSION & BED MANAGEMENT -->
+    <div class="screen" id="scr-admission">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Receptionist</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Admission &amp; bed management</h1>
+      <p class="scr-sub">Rooms and beds are managed as their own page; an admission can hold more than one bed.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">ICU — 2nd floor, Main building</div>
+          <div class="bedgrid">
+            <div class="bed"><div class="b-label">201-A</div>Available</div>
+            <div class="bed occ"><div class="b-label">201-B</div>Occupied</div>
+            <div class="bed"><div class="b-label">202-A</div>Available</div>
+            <div class="bed occ"><div class="b-label">202-B</div>Occupied</div>
+            <div class="bed"><div class="b-label">203-A</div>Available</div>
+            <div class="bed"><div class="b-label">203-B</div>Available</div>
+          </div>
+          <div class="note">Rooms/beds are configured on a separate admin page: Building → Floor → Ward → Room → Bed.</div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Convert appointment to admission</div>
+          <label>Patient / appointment</label><div class="field" style="background:#fafafa;">Rajesh Kumar — Token 1, 15 Jul</div>
+          <label>Admitting doctor</label><select class="field"><option>Dr. Meera — General Medicine</option></select>
+          <label>Beds (multiple allowed)</label>
+          <div class="checkrow"><input type="checkbox" checked> ICU 201-A</div>
+          <div class="checkrow"><input type="checkbox"> ICU 203-A</div>
+          <div class="btn-row"><div class="btn btn-primary">Admit patient</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3.6 DISCHARGE & HISTORY -->
+    <div class="screen" id="scr-discharge">
+      <div class="app-top"><div class="app-logo">Neha Hospital</div><div class="app-top-right"><span class="pill">Role: Receptionist</span><div class="avatar"></div></div></div>
+      <h1 class="scr-title">Discharge &amp; patient history</h1>
+      <p class="scr-sub">Closing the stay releases the bed and finalises the bill; history is always one click away.</p>
+
+      <div class="grid2">
+        <div class="box">
+          <div class="box-title">Discharge summary — Rajesh Kumar, ICU 201-A</div>
+          <label>Diagnosis summary</label><textarea class="field">Acute gastritis, stabilised</textarea>
+          <label>Treatment given</label><textarea class="field">IV fluids, antibiotics, 4-day observation</textarea>
+          <label>Doctor's advice</label><textarea class="field">Soft diet for 1 week, review if pain recurs</textarea>
+          <div class="row2"><div><label>Follow-up date</label><input class="field" value="22 Jul 2026"></div><div><label>Final bill amount</label><input class="field" value="₹18,400"></div></div>
+          <label>Amount paid</label><input class="field" value="₹18,400">
+          <div class="btn-row"><div class="btn btn-primary">Complete discharge</div></div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Patient history — Rajesh Kumar</div>
+          <div class="timeline-item"><div class="tl-dot"></div><div><b>15–19 Jul 2026</b> — Admission, ICU 201-A, Dr. Meera<br><span style="color:var(--mute);">Acute gastritis · 2 pharmacy bills · discharged</span></div></div>
+          <div class="timeline-item"><div class="tl-dot"></div><div><b>02 Jun 2026</b> — Appointment, Token 8, Dr. Arjun<br><span style="color:var(--mute);">Routine check-up · 1 pharmacy bill</span></div></div>
+          <div class="timeline-item"><div class="tl-dot"></div><div><b>14 Mar 2026</b> — Appointment, Token 3, Dr. Meera<br><span style="color:var(--mute);">Seasonal flu</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROLES & PERMISSIONS (RBAC) -->
+    <div class="screen" id="scr-rbac">
+      <div class="set-head">
+        <h1>Settings</h1>
+        <p>Hospital configuration and administration</p>
+        <div class="tabs">
+          <div class="tab active">Role permissions</div>
+          <div class="tab">Approval workflows</div>
+          <div class="tab">Settings access</div>
+        </div>
+      </div>
+
+      <div class="sec-block">
+        <div class="sec-h">Role permissions</div>
+        <div class="sec-p">Set what each role can do, module by module — view, modify, delete, and each module's own special actions.</div>
+
+        <div class="box-title">Role priority order</div>
+        <p class="sec-p" style="margin-bottom:10px;">Drag or use the arrows to reorder. Higher position = higher priority when a staff member's permissions are being resolved.</p>
+
+        <div class="prio-row"><span class="prio-rank">#1</span><span class="prio-name">Administrator</span><span class="tag">All modules — full access</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#2</span><span class="prio-name">HR</span><span class="tag">Staff &amp; salary side</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#3</span><span class="prio-name">Doctor</span><span class="tag">Consultation</span><span class="tag">Admission</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#4</span><span class="prio-name">Nurse</span><span class="tag">Attendance</span><span class="tag">Admission</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#5</span><span class="prio-name">Receptionist</span><span class="tag">Patient</span><span class="tag">Appointment</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#6</span><span class="prio-name">Pharmacist</span><span class="tag">Pharmacy</span><span class="prio-arrows">▲ ▼</span></div>
+        <div class="prio-row"><span class="prio-rank">#7</span><span class="prio-name">Accountant</span><span class="tag">Payroll</span><span class="prio-arrows">▲ ▼</span></div>
+
+        <div class="btn-row"><div class="btn btn-primary">Save priority order</div></div>
+
+        <label style="margin-top:20px;">Configure role</label>
+        <select class="field" style="max-width:240px;"><option>#2 — HR</option></select>
+
+        <div class="legend">
+          <span><span class="sw blue"></span>Permission — role can perform this action</span>
+          <span><span class="sw amber"></span>Skip approval — bypasses the approval workflow for this action</span>
+        </div>
+
+        <div class="warn-banner">
+          <label class="skip-label" style="padding-left:0;"><input type="checkbox" class="cb amber"> <b>Select all — skip approval for every action</b></label>
+          <p class="sec-p">When fully checked, HR bypasses all approval workflows globally, regardless of what's configured below.</p>
+        </div>
+
+        <div class="grp-title">Staff &amp; salary side</div>
+        <table class="perm-table">
+          <tr><th>Module / action</th><th>View</th><th>Modify</th><th>Delete</th><th>Special</th></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> HR &amp; employee mgmt</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Approve increment</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><input type="checkbox" class="cb amber"></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Approve increment</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Shift &amp; roster</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Publish roster</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><input type="checkbox" class="cb amber" checked></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Publish roster</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Attendance</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Approve correction</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><input type="checkbox" class="cb amber"></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Approve correction</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Leave</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Approve (reporting)</span><span class="special-pill">Approve (HR)</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><input type="checkbox" class="cb amber" checked></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Approve (reporting)</span><span class="special-pill amber">Approve (HR)</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Fine</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Waive fine</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Waive fine</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Payroll</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Lock payroll</span><span class="special-pill">Generate payslip</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><input type="checkbox" class="cb amber"></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Lock payroll</span><span class="special-pill amber">Generate payslip</span></td></tr>
+        </table>
+
+        <div class="grp-title">Patient &amp; hospital side</div>
+        <table class="perm-table">
+          <tr><th>Module / action</th><th>View</th><th>Modify</th><th>Delete</th><th>Special</th></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Patient records</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="dash">—</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb" checked> Appointment / token</td><td><input type="checkbox" class="cb" checked></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Close appointment</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="special-pill amber">Close appointment</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb"> Consultation &amp; prescription</td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="dash">—</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb"> Pharmacy</td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Generate bill</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb"> Admission &amp; beds</td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Convert to admission</span><span class="special-pill">Assign bed</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td></tr>
+
+          <tr><td class="mod-name"><input type="checkbox" class="cb"> Discharge &amp; history</td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><input type="checkbox" class="cb"></td><td><span class="special-pill">Discharge patient</span></td></tr>
+          <tr class="skip-row"><td class="skip-label">Skip approval</td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td><td><span class="dash">—</span></td></tr>
+        </table>
+
+        <div class="note">This shows role-level permissions. A specific staff member can still be individually granted or denied any one of these, overriding their role — see the schema's user_permission_overrides.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  var items = document.querySelectorAll('.nav-item');
+  var screens = document.querySelectorAll('.screen');
+  var urlBar = document.getElementById('chrome-url');
+  items.forEach(function(el){
+    el.addEventListener('click', function(){
+      items.forEach(function(i){ i.classList.remove('active'); });
+      screens.forEach(function(s){ s.classList.remove('active'); });
+      el.classList.add('active');
+      var target = document.getElementById(el.dataset.target);
+      target.classList.add('active');
+      urlBar.textContent = 'nehahospital.local/' + el.dataset.target.replace('scr-','');
+    });
+  });
+</script>
+</body>
+</html>
