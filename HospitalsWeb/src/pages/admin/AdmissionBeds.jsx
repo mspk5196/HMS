@@ -12,11 +12,9 @@ export default function AdmissionBeds() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="text-xs text-gray-400 font-medium mb-1">
-            Patient & Hospital &nbsp;&gt;&nbsp; <span className="text-gray-700 font-semibold">Admission & Beds</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">In-Patient Admission & Bed Matrix</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Real-time bed availability, ward assignments, and IPD transfers.</p>
+          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
+            Patient & Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Admission & Beds</span>
+          </h1>
         </div>
         <button className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer">
           + Admit Patient

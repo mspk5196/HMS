@@ -88,15 +88,9 @@ export default function HREmployees() {
       {/* Top Header Bar with Breadcrumb and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="text-xs text-gray-400 font-medium mb-1">
-            Staff & Salary &nbsp;&gt;&nbsp; <span className="text-gray-700 font-semibold">HR & Employees</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            HR & Employee Management
+          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
+            Staff & Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">HR & Employees</span>
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage staff records, attendance, leave, and payroll from one unified dashboard.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">

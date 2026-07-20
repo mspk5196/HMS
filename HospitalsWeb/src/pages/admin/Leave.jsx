@@ -4,11 +4,9 @@ export default function Leave() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-xs text-gray-400 font-medium mb-1">
-          Staff & Salary &nbsp;&gt;&nbsp; <span className="text-gray-700 font-semibold">Leave</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Leave Applications & Approval</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Approve or reject medical leave, casual leave, and earned leave requests.</p>
+        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
+          Staff & Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Leave</span>
+        </h1>
       </div>
 
       <div className="bg-white p-6 rounded-xl border border-gray-200/80 shadow-sm space-y-4">
