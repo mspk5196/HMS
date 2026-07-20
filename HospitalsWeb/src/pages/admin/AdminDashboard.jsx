@@ -16,8 +16,19 @@ import Discharge from './Discharge';
 import RolesPermissions from './RolesPermissions';
 import Settings from './Settings';
 
-export default function AdminDashboard({ onLogout }) {
+export default function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('hr-employees');
+
+  const handleLogoutClick = async () => {
+    try {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/logout`, {
+        method: 'POST',
+      });
+    } catch (e) {
+      // Ignore failures
+    }
+    onLogout();
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -62,7 +73,8 @@ export default function AdminDashboard({ onLogout }) {
       <Navbar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
-        onLogout={onLogout} 
+        onLogout={handleLogoutClick} 
+        user={user}
       />
 
       {/* Main Content Area */}

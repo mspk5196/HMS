@@ -119,8 +119,35 @@ const updateEmployee = async (id, data) => {
 
 /* ─── DEPARTMENTS ─── */
 const listDepartments = async () => {
-  const [rows] = await db.execute(`SELECT * FROM departments ORDER BY name`);
-  return rows;
+  // Query departments with their staff counts
+  const [departments] = await db.execute(`
+    SELECT d.id, d.name, d.description, d.head, d.is_active, d.created_at, d.updated_at,
+           COUNT(e.id) AS staffCount
+    FROM departments d
+    LEFT JOIN employees e ON e.department_id = d.id
+    GROUP BY d.id
+    ORDER BY d.name
+  `);
+
+  // Query all active staff roles
+  const [roles] = await db.execute(`
+    SELECT id, department_id, name AS roleName, basic_salary AS basicSalary
+    FROM staff_roles
+    ORDER BY name
+  `);
+
+  // Map roles to their respective departments
+  return departments.map(dept => ({
+    id: dept.id,
+    name: dept.name,
+    description: dept.description,
+    head: dept.head || '—',
+    is_active: dept.is_active,
+    staffCount: dept.staffCount,
+    roles: roles
+      .filter(r => r.department_id === dept.id)
+      .map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary }))
+  }));
 };
 
 /* ─── DESIGNATIONS ─── */
@@ -176,26 +203,102 @@ const deleteShift = async (id) => {
   await db.execute(`DELETE FROM shifts WHERE id = ?`, [id]);
 };
 
-/* ─── DEPARTMENTS ─── */
 const createDepartment = async (data) => {
-  const { name, description, is_active } = data;
-  const [result] = await db.execute(
-    `INSERT INTO departments (name, description, is_active) VALUES (?, ?, ?)`,
-    [name, description ?? null, is_active ?? 1]
-  );
-  return result.insertId;
+  const { name, description, head, is_active, roles } = data;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [deptResult] = await conn.execute(
+      `INSERT INTO departments (name, description, head, is_active) VALUES (?, ?, ?, ?)`,
+      [name, description ?? null, head ?? null, is_active ?? 1]
+    );
+    const departmentId = deptResult.insertId;
+
+    if (Array.isArray(roles) && roles.length > 0) {
+      for (const r of roles) {
+        if (!r.roleName) continue;
+        await conn.execute(
+          `INSERT INTO staff_roles (department_id, name, basic_salary) VALUES (?, ?, ?)`,
+          [departmentId, r.roleName, r.basicSalary ?? 0.00]
+        );
+      }
+    }
+
+    await conn.commit();
+    return departmentId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 const updateDepartment = async (id, data) => {
-  const { name, description, is_active } = data;
-  const fields = [];
-  const params = [];
-  if (name !== undefined) { fields.push('name = ?'); params.push(name); }
-  if (description !== undefined) { fields.push('description = ?'); params.push(description); }
-  if (is_active !== undefined) { fields.push('is_active = ?'); params.push(is_active ? 1 : 0); }
-  if (!fields.length) return;
-  params.push(id);
-  await db.execute(`UPDATE departments SET ${fields.join(', ')} WHERE id = ?`, params);
+  const { name, description, head, is_active, roles } = data;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Update department table fields
+    const fields = [];
+    const params = [];
+    if (name !== undefined) { fields.push('name = ?'); params.push(name); }
+    if (description !== undefined) { fields.push('description = ?'); params.push(description); }
+    if (head !== undefined) { fields.push('head = ?'); params.push(head); }
+    if (is_active !== undefined) { fields.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+    if (fields.length > 0) {
+      params.push(id);
+      await conn.execute(`UPDATE departments SET ${fields.join(', ')} WHERE id = ?`, params);
+    }
+
+    // 2. Handle nested roles updates if provided
+    if (Array.isArray(roles)) {
+      // Get all current roles for this department
+      const [currentRoles] = await conn.execute(
+        `SELECT id FROM staff_roles WHERE department_id = ?`,
+        [id]
+      );
+      const currentIds = currentRoles.map(r => r.id);
+
+      const keepIds = [];
+
+      for (const r of roles) {
+        if (!r.roleName) continue;
+        if (r.id) {
+          // Update existing role
+          await conn.execute(
+            `UPDATE staff_roles SET name = ?, basic_salary = ? WHERE id = ? AND department_id = ?`,
+            [r.roleName, r.basicSalary ?? 0.00, r.id, id]
+          );
+          keepIds.push(r.id);
+        } else {
+          // Insert new role
+          const [insResult] = await conn.execute(
+            `INSERT INTO staff_roles (department_id, name, basic_salary) VALUES (?, ?, ?)`,
+            [id, r.roleName, r.basicSalary ?? 0.00]
+          );
+          // (No need to track new ids as they are not in currentIds)
+        }
+      }
+
+      // Delete roles that were removed
+      const deleteIds = currentIds.filter(cid => !keepIds.includes(cid));
+      if (deleteIds.length > 0) {
+        for (const did of deleteIds) {
+          await conn.execute(`DELETE FROM staff_roles WHERE id = ?`, [did]);
+        }
+      }
+    }
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 const deleteDepartment = async (id) => {

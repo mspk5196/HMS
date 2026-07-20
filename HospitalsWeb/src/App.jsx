@@ -1,16 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('user');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+  };
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      handleLogout();
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('auth-expired', handleAuthExpired);
+    };
+  }, []);
 
   return (
     <main className="w-full min-h-screen bg-[#f1f4f8]">
-      {isLoggedIn ? (
-        <AdminDashboard onLogout={() => setIsLoggedIn(false)} />
+      {user ? (
+        <AdminDashboard user={user} onLogout={handleLogout} />
       ) : (
-        <Login onLogin={() => setIsLoggedIn(true)} />
+        <Login onLogin={handleLogin} />
       )}
     </main>
   );

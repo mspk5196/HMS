@@ -48,10 +48,6 @@ const deleteDepartment = async (id) => {
   if (empCount > 0) {
     throw new AppError(`Cannot delete department: ${empCount} employee(s) are assigned to it.`, 400);
   }
-  const roleCount = await q.countStaffRolesInDepartment(id);
-  if (roleCount > 0) {
-    throw new AppError(`Cannot delete department: ${roleCount} staff role(s) exist under it.`, 400);
-  }
   await q.deleteDepartment(id);
 };
 

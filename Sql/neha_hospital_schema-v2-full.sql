@@ -374,6 +374,8 @@ DROP TABLE IF EXISTS `departments`;
 CREATE TABLE `departments`  (
   `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
+  `head` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1355,8 +1357,37 @@ CREATE TABLE `salary_structures`  (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = Compact;
 
 -- ----------------------------
--- Records of salary_structures
 -- ----------------------------
+-- Table structure for staff_roles
+-- ----------------------------
+DROP TABLE IF EXISTS `staff_roles`;
+CREATE TABLE `staff_roles`  (
+  `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT,
+  `department_id` bigint UNSIGNED NOT NULL,
+  `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `basic_salary` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `hra` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `da` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `lop_deduction` decimal(10, 2) NOT NULL DEFAULT 0.00,
+  `casual_leave_count` int NOT NULL DEFAULT 0,
+  `privilege_leave_count` int NOT NULL DEFAULT 0,
+  `weekly_off_count` int NOT NULL DEFAULT 0,
+  `shift_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL DEFAULT NULL,
+  `shift_start_time` time NULL DEFAULT NULL,
+  `shift_end_time` time NULL DEFAULT NULL,
+  `biometric_in_start` time NULL DEFAULT NULL,
+  `biometric_in_end` time NULL DEFAULT NULL,
+  `biometric_out_start` time NULL DEFAULT NULL,
+  `biometric_out_end` time NULL DEFAULT NULL,
+  `is_night_shift` tinyint(1) NOT NULL DEFAULT 0,
+  `grace_period_minutes` int NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  CONSTRAINT `fk_staff_roles_dept` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = Compact;
 
 -- ----------------------------
 -- Table structure for shift_rate_history

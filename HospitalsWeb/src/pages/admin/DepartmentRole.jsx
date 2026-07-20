@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../util/api';
 
-// ─── Add Department Form ──────────────────────────────────────────────────────
-function AddDepartmentForm({ onBack, onSubmit }) {
-  const [deptName, setDeptName] = useState('');
-  const [roles, setRoles] = useState([
-    { roleName: '', basicSalary: '' }
-  ]);
+// ─── Add/Edit Department Form ──────────────────────────────────────────────────
+function AddDepartmentForm({ onBack, onSubmit, initialData }) {
+  const [deptName, setDeptName] = useState(initialData ? initialData.name : '');
+  const [roles, setRoles] = useState(
+    initialData && initialData.roles && initialData.roles.length > 0
+      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary }))
+      : [{ roleName: '', basicSalary: '' }]
+  );
   const [errors, setErrors] = useState({});
 
   // Force uppercase as user types
@@ -64,11 +67,15 @@ function AddDepartmentForm({ onBack, onSubmit }) {
         <div>
           <div className="text-xs text-gray-400 font-medium">
             Staff & Salary &nbsp;&gt;&nbsp; Department & Role &nbsp;&gt;&nbsp;
-            <span className="text-gray-700 font-semibold"> Add Department</span>
+            <span className="text-gray-700 font-semibold">{initialData ? ' Edit Department' : ' Add Department'}</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Add New Department</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+            {initialData ? 'Edit Department' : 'Add New Department'}
+          </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Define a new department and configure its roles with respective basic salaries.
+            {initialData
+              ? 'Modify department information and its roles with respective basic salaries.'
+              : 'Define a new department and configure its roles with respective basic salaries.'}
           </p>
         </div>
       </div>
@@ -269,7 +276,7 @@ function AddDepartmentForm({ onBack, onSubmit }) {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
-            Save Department
+            {initialData ? 'Save Changes' : 'Save Department'}
           </button>
         </div>
       </form>
@@ -281,33 +288,113 @@ function AddDepartmentForm({ onBack, onSubmit }) {
 // ─── Department List (main view) ─────────────────────────────────────────────
 export default function DepartmentRole() {
   const [showForm, setShowForm] = useState(false);
-  const [departments, setDepartments] = useState([
-    { name: 'NURSING', head: 'Sr. Mary Joseph', staffCount: 24, roles: [{ roleName: 'Head Nurse', basicSalary: '35000' }, { roleName: 'Staff Nurse', basicSalary: '25000' }, { roleName: 'Junior Nurse', basicSalary: '18000' }] },
-    { name: 'LABORATORY', head: 'Dr. Rajesh Kumar', staffCount: 12, roles: [{ roleName: 'Chief Technician', basicSalary: '40000' }, { roleName: 'Lab Analyst', basicSalary: '28000' }, { roleName: 'Phlebotomist', basicSalary: '20000' }] },
-    { name: 'PHARMACY', head: 'Pharmacist Ravi T.', staffCount: 8, roles: [{ roleName: 'Chief Pharmacist', basicSalary: '45000' }, { roleName: 'Dispensing Pharmacist', basicSalary: '30000' }] },
-    { name: 'GENERAL MEDICINE', head: 'Dr. Meera R.', staffCount: 18, roles: [{ roleName: 'Senior Consultant', basicSalary: '90000' }, { roleName: 'Resident Doctor', basicSalary: '60000' }, { roleName: 'Intern', basicSalary: '15000' }] },
-    { name: 'ADMINISTRATION', head: 'Admin Kavitha S.', staffCount: 15, roles: [{ roleName: 'HR Manager', basicSalary: '38000' }, { roleName: 'Receptionist', basicSalary: '20000' }, { roleName: 'Billing Executive', basicSalary: '22000' }] }
-  ]);
+  const [departments, setDepartments] = useState([]);
+  const [editingDept, setEditingDept] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const handleFormSubmit = ({ deptName, roles }) => {
-    const newDept = {
-      name: deptName,
-      head: '—',
-      staffCount: 0,
-      roles
-    };
-    setDepartments(prev => [...prev, newDept]);
+  const fetchDepartments = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      const data = await apiFetch('/hr/departments');
+      setDepartments(data || []);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to fetch departments.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDepartments();
+  }, []);
+
+  const handleFormSubmit = async ({ deptName, roles }) => {
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      if (editingDept) {
+        // Edit flow: PATCH request
+        await apiFetch(`/hr/departments/${editingDept.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: deptName,
+            description: `Department of ${deptName}`,
+            is_active: 1,
+            roles: roles.map(r => ({
+              id: r.id,
+              roleName: r.roleName,
+              basicSalary: Number(r.basicSalary)
+            }))
+          })
+        });
+        setSuccessMsg(`Department "${deptName}" updated successfully.`);
+      } else {
+        // Create flow: POST request
+        await apiFetch('/hr/departments', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: deptName,
+            description: `Department of ${deptName}`,
+            head: '—',
+            is_active: 1,
+            roles: roles.map(r => ({
+              roleName: r.roleName,
+              basicSalary: Number(r.basicSalary)
+            }))
+          })
+        });
+        setSuccessMsg(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
+      }
+      await fetchDepartments();
+      setEditingDept(null);
+      setShowForm(false);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to save department.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteDepartment = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete the department "${name}"?`)) {
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setErrorMsg('');
+      await apiFetch(`/hr/departments/${id}`, {
+        method: 'DELETE'
+      });
+      setSuccessMsg(`Department "${name}" deleted successfully.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+      await fetchDepartments();
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to delete department.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditClick = (dept) => {
+    setEditingDept(dept);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    setEditingDept(null);
     setShowForm(false);
-    setSuccessMsg(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
-    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   if (showForm) {
     return (
       <AddDepartmentForm
-        onBack={() => setShowForm(false)}
+        onBack={handleCancelForm}
         onSubmit={handleFormSubmit}
+        initialData={editingDept}
       />
     );
   }
@@ -324,6 +411,16 @@ export default function DepartmentRole() {
         </div>
       )}
 
+      {/* Error Banner */}
+      {errorMsg && (
+        <div className="flex items-center gap-3 bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl shadow-sm">
+          <svg className="w-4 h-4 flex-shrink-0 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          {errorMsg}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -335,7 +432,8 @@ export default function DepartmentRole() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm self-start sm:self-auto cursor-pointer transition-colors flex items-center gap-1.5"
+          disabled={isLoading}
+          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm self-start sm:self-auto cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -344,41 +442,96 @@ export default function DepartmentRole() {
         </button>
       </div>
 
+      {/* Loading Spinner */}
+      {isLoading && departments.length === 0 && (
+        <div className="flex items-center justify-center py-12">
+          <svg className="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      )}
+
       {/* Department Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {departments.map((dept, idx) => (
-          <div key={idx} className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm tracking-wide">{dept.name}</h3>
-              <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
-                {dept.staffCount} Staff
-              </span>
-            </div>
-            {dept.head !== '—' && (
-              <div className="text-xs text-gray-500">
-                Department Head: <span className="font-medium text-gray-800">{dept.head}</span>
-              </div>
-            )}
-            <div className="pt-2 border-t border-gray-100">
-              <div className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Roles</div>
-              <div className="space-y-1.5">
-                {dept.roles.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between text-[11px]">
-                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">
-                      {typeof r === 'string' ? r : r.roleName}
-                    </span>
-                    {typeof r !== 'string' && r.basicSalary && (
-                      <span className="text-gray-400 font-medium">
-                        ₹{Number(r.basicSalary).toLocaleString('en-IN')} / mo
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+      {!isLoading && departments.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-8 text-center max-w-md mx-auto space-y-4">
+          <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mx-auto">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
           </div>
-        ))}
-      </div>
+          <div className="space-y-1">
+            <h3 className="font-bold text-gray-900 text-sm">No departments configured</h3>
+            <p className="text-xs text-gray-500">Add a department to configure roles and salaries.</p>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Department
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {departments.map((dept, idx) => (
+            <div key={idx} className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-sm space-y-3 relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-gray-900 text-sm tracking-wide">{dept.name}</h3>
+                  <button
+                    onClick={() => handleEditClick(dept)}
+                    disabled={isLoading}
+                    className="p-1 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer disabled:opacity-50"
+                    title={`Edit ${dept.name}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                    disabled={isLoading}
+                    className="p-1 text-gray-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
+                    title={`Delete ${dept.name}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
+                <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                  {dept.staffCount || 0} Staff
+                </span>
+              </div>
+              {dept.head && dept.head !== '—' && (
+                <div className="text-xs text-gray-500">
+                  Department Head: <span className="font-medium text-gray-800">{dept.head}</span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[10px] font-bold text-gray-400 uppercase mb-1.5">Roles</div>
+                <div className="space-y-1.5">
+                  {dept.roles && dept.roles.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between text-[11px]">
+                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">
+                        {typeof r === 'string' ? r : r.roleName}
+                      </span>
+                      {typeof r !== 'string' && r.basicSalary && (
+                        <span className="text-gray-400 font-medium">
+                          ₹{Number(r.basicSalary).toLocaleString('en-IN')} / mo
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

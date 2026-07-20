@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../util/api';
 
 export default function Login({ onLogin }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -17,13 +18,24 @@ export default function Login({ onLogin }) {
 
     setIsLoading(true);
     
-    // Simulate login action
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const data = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+      
+      const { token, user } = data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
       if (onLogin) {
-        onLogin();
+        onLogin(user);
       }
-    }, 400);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Navbar({ activeTab, setActiveTab, onLogout }) {
+export default function Navbar({ activeTab, setActiveTab, onLogout, user }) {
   // Navigation structure based on system modules
   const navSections = [
     {
@@ -209,14 +209,14 @@ export default function Navbar({ activeTab, setActiveTab, onLogout }) {
       <div className="p-3 border-t border-white/5 bg-[#163270]/60 flex items-center justify-between">
         <div className="flex items-center gap-2.5 overflow-hidden">
           <div className="w-8 h-8 rounded-full bg-blue-500/80 text-white flex items-center justify-center font-bold text-xs shadow-inner flex-shrink-0">
-            A
+            {user?.username?.charAt(0).toUpperCase() || 'A'}
           </div>
           <div className="truncate">
             <div className="text-xs font-semibold text-white leading-tight truncate">
-              admin
+              {user?.username || 'admin'}
             </div>
             <div className="text-[10px] text-blue-200/70 truncate">
-              Administrator
+              {user?.role_name || 'Administrator'}
             </div>
           </div>
         </div>
