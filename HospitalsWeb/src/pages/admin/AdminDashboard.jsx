@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Navbar from '../../components/Navbar';
 import HREmployees from './HREmployees';
 import DepartmentRole from './departmentrole/DepartmentRole';
-import ShiftRoster from './ShiftRoster';
+import ShiftRoster from './shiftroster/ShiftRoster';
 import Attendance from './Attendance';
 import Leave from './Leave';
 import Fine from './Fine';
