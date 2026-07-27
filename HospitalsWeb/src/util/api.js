@@ -1,10 +1,18 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+/**
+ * Call the API and unwrap the standard { success, message, data, meta } envelope.
+ *
+ * Returns `result.data` by default. Pass `withMeta: true` to get
+ * `{ data, meta }` instead — needed for paginated endpoints, whose
+ * meta block carries { total, page, limit, pages }.
+ */
 export async function apiFetch(endpoint, options = {}) {
+  const { withMeta = false, ...fetchOptions } = options;
   const token = localStorage.getItem('token');
   const headers = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...fetchOptions.headers,
   };
 
   if (token) {
@@ -12,7 +20,7 @@ export async function apiFetch(endpoint, options = {}) {
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
+    ...fetchOptions,
     headers,
   });
 
@@ -32,5 +40,5 @@ export async function apiFetch(endpoint, options = {}) {
     throw new Error(result?.message || `HTTP error! status: ${response.status}`);
   }
 
-  return result.data;
+  return withMeta ? { data: result.data, meta: result.meta ?? null } : result.data;
 }

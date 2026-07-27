@@ -37,7 +37,15 @@ const ctrl = require('./salary.controller');
 // Salary Structures
 router.get('/structures', ctrl.listStructures);
 router.post('/structures', ctrl.createStructure);
+router.post('/structures/revision', ctrl.addRevision);
 router.patch('/structures/:id', ctrl.updateStructure);
+
+// What payroll will actually use for an employee in a period
+router.get('/effective/:employeeId', ctrl.getEffectiveSalary);
+
+// Payroll constants (PF/ESI percentages and ceilings)
+router.get('/config', ctrl.getConfig);
+router.patch('/config', ctrl.updateConfig);
 
 // Night-shift rates
 router.get('/night-shift-rates/:shiftId', ctrl.listNightShiftRates);
@@ -50,6 +58,12 @@ router.post('/payroll-runs', ctrl.createRun);
 router.post('/payroll-runs/:id/calculate', ctrl.calculateRun);
 router.post('/payroll-runs/:id/lock', ctrl.lockRun);
 router.get('/payroll-runs/:id/items', ctrl.listItems);
+router.get('/payroll-runs/:id/payslip/:employeeId', ctrl.getPayslip);
+
+// Fine Types
+router.get('/fine-types', ctrl.listFineTypes);
+router.post('/fine-types', ctrl.createFineType);
+router.patch('/fine-types/:id', ctrl.updateFineType);
 
 // Fines
 router.get('/fines', ctrl.listFines);

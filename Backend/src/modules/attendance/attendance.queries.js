@@ -10,17 +10,52 @@ const db = require('../../config/db');
    RAW PUNCHES (eSSL biometric import)
 ───────────────────────────────────────────── */
 
-/** Bulk-insert raw punches coming from eTimeTracker export.
- *  Uses INSERT IGNORE to safely skip duplicate device+timestamp pairs. */
+/**
+ * Bulk-insert raw punches from the eSSL / eTimeTracker export.
+ *
+ * The device only knows employee_code, so that is the authoritative key and is
+ * NOT NULL; employee_id is resolved alongside it for convenience and may be
+ * null if the code doesn't match anyone yet. INSERT IGNORE makes re-importing
+ * the same export a no-op (see uq_raw_punch).
+ */
 const bulkInsertPunches = async (rows) => {
-  if (!rows.length) return;
-  const values = rows.map((r) => [r.employee_id, r.device_id ?? null, r.punch_time, r.punch_type ?? 'in']);
-  await db.query(
+  if (!rows.length) return { inserted: 0 };
+  const values = rows.map((r) => [
+    r.employee_code,
+    r.employee_id ?? null,
+    r.device_id ?? null,
+    r.punch_time,
+    r.punch_type ?? null,
+  ]);
+  const [result] = await db.query(
     `INSERT IGNORE INTO attendance_raw_punches
-       (employee_id, device_id, punch_time, punch_type)
+       (employee_code, employee_id, device_id, punch_time, punch_type)
      VALUES ?`,
     [values]
   );
+  return { inserted: result.affectedRows };
+};
+
+/** Resolve employee_code → id for a batch of codes. Returns a Map. */
+const resolveEmployeeCodes = async (codes) => {
+  if (!codes.length) return new Map();
+  const placeholders = codes.map(() => '?').join(',');
+  const [rows] = await db.query(
+    `SELECT id, employee_code FROM employees WHERE employee_code IN (${placeholders})`,
+    codes
+  );
+  return new Map(rows.map((r) => [r.employee_code, r.id]));
+};
+
+/** Backfill employee_id on any punches whose code has since been registered. */
+const linkOrphanPunches = async () => {
+  const [res] = await db.query(
+    `UPDATE attendance_raw_punches rp
+       JOIN employees e ON e.employee_code = rp.employee_code
+        SET rp.employee_id = e.id
+      WHERE rp.employee_id IS NULL`
+  );
+  return res.affectedRows;
 };
 
 /** Fetch unprocessed raw punches for a given date range. */
@@ -32,6 +67,21 @@ const getUnprocessedPunches = async (fromDate, toDate) => {
      WHERE DATE(arp.punch_time) BETWEEN ? AND ?
        AND arp.is_processed = 0
      ORDER BY arp.employee_id, arp.punch_time`,
+    [fromDate, toDate]
+  );
+  return rows;
+};
+
+/** Punches whose employee_code matches no employee — surfaced to the admin. */
+const getUnmatchedPunches = async (fromDate, toDate) => {
+  const [rows] = await db.execute(
+    `SELECT employee_code, COUNT(*) AS punch_count,
+            MIN(punch_time) AS first_seen, MAX(punch_time) AS last_seen
+     FROM attendance_raw_punches
+     WHERE employee_id IS NULL
+       AND DATE(punch_time) BETWEEN ? AND ?
+     GROUP BY employee_code
+     ORDER BY punch_count DESC`,
     [fromDate, toDate]
   );
   return rows;
@@ -141,30 +191,63 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
 const upsertDailySummary = async (data) => {
   const {
     employee_id, attendance_date, shift_id, status,
-    first_punch_in, last_punch_out, worked_minutes,
-    late_minutes, is_missed_punch, overtime_minutes,
+    first_punch_in, last_punch_out, worked_minutes, break_minutes,
+    late_minutes, early_leave_minutes, is_missed_punch,
+    biometric_window_extended, overtime_minutes,
   } = data;
 
   await db.execute(
     `INSERT INTO attendance_daily_summary
        (employee_id, attendance_date, shift_id, status,
-        first_in_time, last_out_time, worked_minutes,
-        late_minutes, is_missed_punch, overtime_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_in_time, last_out_time, worked_minutes, break_minutes,
+        late_minutes, early_leave_minutes, is_missed_punch,
+        biometric_window_extended, overtime_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        shift_id = VALUES(shift_id),
        status = VALUES(status),
        first_in_time = VALUES(first_in_time),
        last_out_time = VALUES(last_out_time),
        worked_minutes = VALUES(worked_minutes),
+       break_minutes = VALUES(break_minutes),
        late_minutes = VALUES(late_minutes),
+       early_leave_minutes = VALUES(early_leave_minutes),
        is_missed_punch = VALUES(is_missed_punch),
+       biometric_window_extended = VALUES(biometric_window_extended),
        overtime_minutes = VALUES(overtime_minutes)`,
     [employee_id, attendance_date, shift_id ?? null, status,
      first_punch_in ?? null, last_punch_out ?? null,
-     worked_minutes ?? 0, late_minutes ?? 0, is_missed_punch ? 1 : 0,
-     overtime_minutes ?? 0]
+     worked_minutes ?? 0, break_minutes ?? 0,
+     late_minutes ?? 0, early_leave_minutes ?? 0, is_missed_punch ? 1 : 0,
+     biometric_window_extended ? 1 : 0, overtime_minutes ?? 0]
   );
+};
+
+/**
+ * Overlay a leave/LOP status onto a date range without disturbing any punch
+ * data already recorded for those days (a partial update — only `status` and
+ * the leave flag change). Used by leave approval, not the punch engine.
+ */
+const markLeaveDays = async (employeeId, dates, status) => {
+  if (!dates.length) return;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const date of dates) {
+      await conn.execute(
+        `INSERT INTO attendance_daily_summary (employee_id, attendance_date, status)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status)`,
+        [employeeId, date, status]
+      );
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 /** Admin manually marks an employee present/absent for a date. */
@@ -201,9 +284,10 @@ const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) =
   const allocMinutes = roleRows[0]?.alloc ?? defaultMinutes;
 
   await db.execute(
+    // buffer_remaining_minutes is a generated column — never write to it.
     `INSERT IGNORE INTO employee_attendance_buffers
-       (employee_id, period_month, period_year, buffer_allocated_minutes)
-     VALUES (?, ?, ?, ?)`,
+       (employee_id, period_month, period_year, buffer_allocated_minutes, buffer_used_minutes)
+     VALUES (?, ?, ?, ?, 0)`,
     [employeeId, month, year, allocMinutes]
   );
   const [rows] = await db.execute(
@@ -228,9 +312,10 @@ const getEmployeeBufferWithRole = async (employeeId, month, year) => {
   const roleName = roleRows[0]?.role_name ?? 'Unknown';
 
   await db.execute(
+    // buffer_remaining_minutes is a generated column — never write to it.
     `INSERT IGNORE INTO employee_attendance_buffers
-       (employee_id, period_month, period_year, buffer_allocated_minutes)
-     VALUES (?, ?, ?, ?)`,
+       (employee_id, period_month, period_year, buffer_allocated_minutes, buffer_used_minutes)
+     VALUES (?, ?, ?, ?, 0)`,
     [employeeId, month, year, allocMinutes]
   );
   const [rows] = await db.execute(
@@ -243,7 +328,7 @@ const getEmployeeBufferWithRole = async (employeeId, month, year) => {
   return { ...rows[0], role_name: roleName, role_allocated_minutes: allocMinutes };
 };
 
-/** Deduct lateMinutes from the buffer, update used_minutes. */
+/** Deduct lateMinutes from the pool. buffer_remaining_minutes is generated. */
 const deductFromBuffer = async (bufferId, lateMinutes) => {
   await db.execute(
     `UPDATE employee_attendance_buffers
@@ -316,28 +401,36 @@ const listCorrectionRequests = async ({ status, employeeId, page = 1, limit = 30
   return { rows, total };
 };
 
-const createCorrectionRequest = async ({ employee_id, attendance_date, requested_first_in, requested_last_out, reason }) => {
+const getCorrectionRequest = async (id) => {
+  const [rows] = await db.execute(
+    `SELECT * FROM attendance_correction_requests WHERE id = ?`, [id]
+  );
+  return rows[0] ?? null;
+};
+
+const createCorrectionRequest = async ({ employee_id, attendance_date, requested_in_time, requested_out_time, reason }) => {
   const [result] = await db.execute(
     `INSERT INTO attendance_correction_requests
-       (employee_id, attendance_date, requested_first_in, requested_last_out, reason)
-     VALUES (?, ?, ?, ?, ?)`,
-    [employee_id, attendance_date, requested_first_in ?? null, requested_last_out ?? null, reason]
+       (employee_id, attendance_date, requested_in_time, requested_out_time, reason, status)
+     VALUES (?, ?, ?, ?, ?, 'pending')`,
+    [employee_id, attendance_date, requested_in_time ?? null, requested_out_time ?? null, reason]
   );
   return result.insertId;
 };
 
-const reviewCorrectionRequest = async (id, { status, reviewer_notes, reviewed_by }) => {
+// Note: this table has no reviewer_notes column — the decision is the record.
+const reviewCorrectionRequest = async (id, { status, reviewed_by }) => {
   await db.execute(
     `UPDATE attendance_correction_requests
-     SET status = ?, reviewer_notes = ?, reviewed_by = ?, reviewed_at = NOW()
+     SET status = ?, reviewed_by = ?, reviewed_at = NOW()
      WHERE id = ?`,
-    [status, reviewer_notes ?? null, reviewed_by, id]
+    [status, reviewed_by ?? null, id]
   );
 };
 
 const deleteRawPunches = async (employeeId, date) => {
   await db.execute(
-    `DELETE FROM attendance_raw_punches 
+    `DELETE FROM attendance_raw_punches
      WHERE employee_id = ? AND DATE(punch_time) = ?`,
     [employeeId, date]
   );
@@ -345,13 +438,18 @@ const deleteRawPunches = async (employeeId, date) => {
 
 module.exports = {
   bulkInsertPunches,
+  resolveEmployeeCodes,
+  linkOrphanPunches,
   getUnprocessedPunches,
+  getUnmatchedPunches,
+  getCorrectionRequest,
   getBiometricWindow,
   listBiometricWindows,
   createBiometricWindow,
   getDailySummary,
   listDailySummaries,
   upsertDailySummary,
+  markLeaveDays,
   adminMarkAttendance,
   getOrCreateBuffer,
   getEmployeeBufferWithRole,

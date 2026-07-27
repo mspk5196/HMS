@@ -40,9 +40,27 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
     initialData?.workDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   );
   const [capacity, setCapacity] = useState(initialData?.capacity || 2);
-  const [breakDuration, setBreakDuration] = useState(initialData?.breakDuration || '30 mins');
+  const [breakMinutes, setBreakMinutes] = useState(initialData?.breakMinutes ?? 30);
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [isNightShift, setIsNightShift] = useState(!!initialData?.isNightShift);
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(initialData?.gracePeriodMinutes ?? 10);
+  // Punch-IN must land before the shift start; punch-OUT after the shift end.
+  // The two inner bounds are the shift boundary by definition, so only the outer
+  // bounds — how early you may punch in, how late you may punch out — are set here.
+  const [earliestPunchIn, setEarliestPunchIn] = useState(initialData?.earliestPunchIn || '');
+  const [latestPunchOut, setLatestPunchOut] = useState(initialData?.latestPunchOut || '');
   const [errors, setErrors] = useState({});
+
+  /** Shift a 'HH:MM' string by whole hours, wrapping around midnight. */
+  const shiftHours = (hhmm, delta) => {
+    if (!hhmm) return '';
+    const [h, m] = hhmm.split(':').map(Number);
+    const wrapped = ((h + delta) % 24 + 24) % 24;
+    return `${String(wrapped).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+  const effectiveEarliestIn = earliestPunchIn || shiftHours(startTime, -2);
+  const effectiveLatestOut = latestPunchOut || shiftHours(endTime, 2);
 
   const handleDeptChange = (newDeptId) => {
     setSelectedDeptId(newDeptId);
@@ -90,6 +108,10 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
     setShiftName(preset.name);
     setStartTime(preset.start);
     setEndTime(preset.end);
+    setIsNightShift(preset.end < preset.start);
+    // Let the punch windows fall back to their derived defaults for the new times.
+    setEarliestPunchIn('');
+    setLatestPunchOut('');
     if (errors.shiftName) setErrors(prev => ({ ...prev, shiftName: '' }));
   };
 
@@ -102,6 +124,9 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
     if (!endTime) newErrors.endTime = 'End time is required.';
     if (workDays.length === 0) newErrors.workDays = 'Select at least one work day.';
     if (!capacity || Number(capacity) <= 0) newErrors.capacity = 'Enter a valid staff capacity.';
+    if (Number(breakMinutes) < 0) newErrors.breakMinutes = 'Break cannot be negative.';
+    if (Number(gracePeriodMinutes) < 0) newErrors.gracePeriodMinutes = 'Grace period cannot be negative.';
+    if (startTime === endTime) newErrors.endTime = 'Start and end time cannot be the same.';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -110,18 +135,38 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
     e.preventDefault();
     if (!validate()) return;
 
+    // Two payloads: the shift catalog row, and the per-role defaults it becomes.
     const payload = {
-      id: initialData?.id || Date.now(),
-      deptId: currentDept?.id || selectedDeptId,
+      id: initialData?.id ?? null,
+      deptId: currentDept?.id ?? selectedDeptId,
       deptName: currentDept?.name || 'Department',
       roles: selectedRoles,
-      shiftName,
-      startTime,
-      endTime,
       workDays,
-      capacity: Number(capacity),
-      breakDuration,
-      notes
+      shift: {
+        name: shiftName.trim(),
+        start_time: startTime,
+        end_time: endTime,
+        is_night_shift: isNightShift,
+        grace_period_minutes: Number(gracePeriodMinutes) || 0,
+        biometric_in_start: effectiveEarliestIn,
+        biometric_in_end: startTime,
+        biometric_out_start: endTime,
+        biometric_out_end: effectiveLatestOut,
+      },
+      roleDefaults: {
+        capacity: Number(capacity),
+        break_minutes: Number(breakMinutes) || 0,
+        notes: notes.trim() || null,
+        shift_name: shiftName.trim(),
+        shift_start_time: startTime,
+        shift_end_time: endTime,
+        is_night_shift: isNightShift,
+        grace_period_minutes: Number(gracePeriodMinutes) || 0,
+        biometric_in_start: effectiveEarliestIn,
+        biometric_in_end: startTime,
+        biometric_out_start: endTime,
+        biometric_out_end: effectiveLatestOut,
+      },
     };
 
     onSubmit(payload, currentDept);
@@ -320,15 +365,35 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
             {/* Break Duration */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                Break Duration
+                Break Duration (minutes)
               </label>
               <input
-                type="text"
-                value={breakDuration}
-                onChange={(e) => setBreakDuration(e.target.value)}
-                placeholder="e.g. 30 mins"
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                type="number"
+                min="0"
+                value={breakMinutes}
+                onChange={(e) => setBreakMinutes(e.target.value)}
+                placeholder="e.g. 30"
+                className={`w-full px-3.5 py-2.5 border rounded-lg text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
+                  errors.breakMinutes ? 'border-red-400 bg-red-50/30' : 'border-gray-200'
+                }`}
               />
+              {errors.breakMinutes && <p className="text-[11px] text-red-500">{errors.breakMinutes}</p>}
+            </div>
+
+            {/* Night shift flag */}
+            <div className="space-y-1.5 md:col-span-3">
+              <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isNightShift}
+                  onChange={(e) => setIsNightShift(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                This is a night shift (crosses midnight)
+              </label>
+              <p className="text-[11px] text-gray-400">
+                Night shifts use different clock times but the same punch rules. Night duty also carries its own allowance in payroll.
+              </p>
             </div>
 
             {/* Work Days */}
@@ -370,11 +435,81 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
           </div>
         </div>
 
-        {/* Section 3: Capacity & Notes */}
+        {/* Section 3: Biometric punch window */}
         <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-6">
           <div className="flex items-center gap-2.5 pb-4 border-b border-gray-100">
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1e40af] font-bold text-xs flex items-center justify-center flex-shrink-0">
               3
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Biometric Punch Window</h2>
+              <p className="text-xs text-gray-500">
+                Staff must punch IN before the shift starts and punch OUT after it ends. Punches outside this window are ignored.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50/60 border border-blue-100 rounded-lg px-4 py-3 text-[11px] text-blue-900 font-medium">
+            Punch IN accepted <strong>{effectiveEarliestIn || '—'} → {startTime}</strong>
+            &nbsp;·&nbsp;
+            Punch OUT accepted <strong>{endTime} → {effectiveLatestOut || '—'}</strong>
+            <div className="text-blue-700/80 font-normal mt-1">
+              Arriving within the {gracePeriodMinutes || 0}-minute grace period is not late. Beyond that, the lateness draws from the monthly buffer pool.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Earliest Punch-In
+              </label>
+              <input
+                type="time"
+                value={effectiveEarliestIn}
+                onChange={(e) => setEarliestPunchIn(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+              />
+              <p className="text-[11px] text-gray-400">Defaults to 2 hours before the shift starts.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Latest Punch-Out
+              </label>
+              <input
+                type="time"
+                value={effectiveLatestOut}
+                onChange={(e) => setLatestPunchOut(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+              />
+              <p className="text-[11px] text-gray-400">Defaults to 2 hours after the shift ends.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Daily Grace Period (minutes)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={gracePeriodMinutes}
+                onChange={(e) => setGracePeriodMinutes(e.target.value)}
+                className={`w-full px-3.5 py-2.5 border rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
+                  errors.gracePeriodMinutes ? 'border-red-400 bg-red-50/30' : 'border-gray-200'
+                }`}
+              />
+              {errors.gracePeriodMinutes
+                ? <p className="text-[11px] text-red-500">{errors.gracePeriodMinutes}</p>
+                : <p className="text-[11px] text-gray-400">Arriving inside this is not late at all.</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Capacity & Notes */}
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-gray-100">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1e40af] font-bold text-xs flex items-center justify-center flex-shrink-0">
+              4
             </div>
             <div>
               <h2 className="text-sm font-bold text-gray-900">Staff Capacity & Handover Notes</h2>

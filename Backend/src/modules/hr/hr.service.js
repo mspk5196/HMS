@@ -5,12 +5,40 @@ const createEmployee = async (data) => {
   if (!data.employee_code || !data.full_name || !data.date_of_joining || !data.department_id || !data.designation_id) {
     throw new AppError('employee_code, full_name, date_of_joining, department_id, and designation_id are required', 400);
   }
-  return q.createEmployee(data);
+
+  // employee_code is the join key for every biometric punch, so a collision is a
+  // real conflict rather than something to auto-resolve. Check up front to give a
+  // usable message instead of a bare duplicate-key error.
+  const code = String(data.employee_code).trim();
+  if (!code) throw new AppError('employee_code cannot be blank', 400);
+
+  const existing = await q.getEmployeeByCode(code);
+  if (existing) {
+    throw new AppError(
+      `Employee code "${code}" is already used by ${existing.full_name}.`,
+      409
+    );
+  }
+
+  return q.createEmployee({ ...data, employee_code: code });
 };
 
 const updateEmployee = async (id, data) => {
   const emp = await q.getEmployee(id);
   if (!emp) throw new AppError('Employee not found', 404);
+
+  if (data.employee_code !== undefined) {
+    const code = String(data.employee_code).trim();
+    if (!code) throw new AppError('employee_code cannot be blank', 400);
+    if (code !== emp.employee_code) {
+      const clash = await q.getEmployeeByCode(code);
+      if (clash) {
+        throw new AppError(`Employee code "${code}" is already used by ${clash.full_name}.`, 409);
+      }
+    }
+    data = { ...data, employee_code: code };
+  }
+
   await q.updateEmployee(id, data);
 };
 

@@ -54,6 +54,14 @@ const getEmployee = async (id) => {
   return rows[0] ?? null;
 };
 
+const getEmployeeByCode = async (employeeCode) => {
+  const [rows] = await db.execute(
+    `SELECT id, employee_code, full_name FROM employees WHERE employee_code = ?`,
+    [employeeCode]
+  );
+  return rows[0] ?? null;
+};
+
 const createEmployee = async (data) => {
   const {
     employee_code, full_name, gender, dob, date_of_joining,
@@ -97,21 +105,29 @@ const createEmployee = async (data) => {
 
 const updateEmployee = async (id, data) => {
   const allowed = [
-    'full_name', 'gender', 'date_of_joining', 'department_id', 'designation_id',
-    'address', 'status', 'date_of_leaving',
-    'bank_account_no', 'bank_ifsc', 'bank_name', 'uan_number',
+    'employee_code', 'full_name', 'gender', 'date_of_joining', 'department_id', 'designation_id',
+    'reporting_person_id', 'address', 'status', 'date_of_leaving',
+    'bank_account_no', 'bank_ifsc', 'bank_name',
+    'uan_number', 'esi_number',
     'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary',
     'qualification', 'experience_description'
   ];
+  const booleans = ['pf_enrolled', 'esi_enrolled'];
   const fields = [];
   const vals = [];
   for (const key of allowed) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      vals.push(data[key]);
+      vals.push(data[key] === '' ? null : data[key]);
     }
   }
-  
+  for (const key of booleans) {
+    if (data[key] !== undefined) {
+      fields.push(`${key} = ?`);
+      vals.push(data[key] ? 1 : 0);
+    }
+  }
+
   // Custom mappings for aliases
   if (data.dob !== undefined) { fields.push('date_of_birth = ?'); vals.push(data.dob); }
   if (data.phone !== undefined || data.mobile !== undefined) { fields.push('phone = ?'); vals.push(data.phone || data.mobile); }
@@ -400,7 +416,9 @@ const updateStaffRole = async (id, data) => {
     'basic_salary', 'hra', 'da', 'lop_deduction', 'casual_leave_count', 'privilege_leave_count', 'weekly_off_count',
     'shift_name', 'shift_start_time', 'shift_end_time',
     'biometric_in_start', 'biometric_in_end', 'biometric_out_start', 'biometric_out_end',
-    'is_night_shift', 'grace_period_minutes'
+    'is_night_shift', 'grace_period_minutes',
+    // Shift-definition link + the capacity/break/notes the assign-shift form collects
+    'default_shift_id', 'capacity', 'break_minutes', 'notes', 'monthly_buffer_minutes'
   ];
   const fields = [];
   const vals = [];
@@ -419,29 +437,28 @@ const deleteStaffRole = async (id) => {
   await db.execute(`DELETE FROM staff_roles WHERE id = ?`, [id]);
 };
 
+// employees.designation_id points at staff_roles, not designations — joining
+// designations here made this guard always return 0.
 const countEmployeesWithStaffRole = async (roleName, departmentId) => {
-  // Let's check how employees are assigned to a role. Currently employees table has department_id and designation_id. 
-  // Wait, if staff_roles maps roles under department, let's see how employees map to it. 
-  // For checking if role is used, we can query if any employee designation matches this role name.
   const [[{ count }]] = await db.execute(
-    `SELECT COUNT(*) AS count 
+    `SELECT COUNT(*) AS count
      FROM employees e
-     JOIN designations d ON d.id = e.designation_id
-     WHERE d.name = ? AND e.department_id = ?`,
+     JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE sr.name = ? AND e.department_id = ?`,
     [roleName, departmentId]
   );
   return count;
 };
 
 const isShiftInUse = async (shiftId) => {
-  const [[{ count: c1 }]] = await db.execute(`SELECT COUNT(*) AS count FROM employee_shifts WHERE shift_id = ?`, [shiftId]);
-  const [[{ count: c2 }]] = await db.execute(`SELECT COUNT(*) AS count FROM roster_entries WHERE shift_id = ?`, [shiftId]);
-  const [[{ count: c3 }]] = await db.execute(`SELECT COUNT(*) AS count FROM attendance_daily_summary WHERE shift_id = ?`, [shiftId]);
+  const [[{ count: c1 }]] = await db.execute(`SELECT COUNT(*) AS count FROM roster_entries WHERE shift_id = ?`, [shiftId]);
+  const [[{ count: c2 }]] = await db.execute(`SELECT COUNT(*) AS count FROM attendance_daily_summary WHERE shift_id = ?`, [shiftId]);
+  const [[{ count: c3 }]] = await db.execute(`SELECT COUNT(*) AS count FROM staff_roles WHERE default_shift_id = ?`, [shiftId]);
   return (c1 + c2 + c3) > 0;
 };
 
 module.exports = {
-  listEmployees, getEmployee, createEmployee, updateEmployee,
+  listEmployees, getEmployee, getEmployeeByCode, createEmployee, updateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

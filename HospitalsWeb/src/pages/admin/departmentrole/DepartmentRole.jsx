@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../util/api';
+import { mapEmployeeToMember } from '../../../util/mappers';
 import AddMemberForm from './AddMemberForm';
 import AddDepartmentForm from './AddDepartmentForm';
 import DepartmentMembersView from './DepartmentMembersView';
-
-const mapEmployeeToMember = (emp) => ({
-  id: emp.id,
-  name: emp.full_name,
-  position: emp.designation_name || 'Staff',
-  qualification: emp.qualification || '—',
-  dateOfJoining: emp.date_of_joining ? new Date(emp.date_of_joining).toISOString().split('T')[0] : '—',
-  experienceDescription: emp.experience_description || '—'
-});
 
 export default function DepartmentRole() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add-dept' | 'members-list' | 'add-member'
@@ -37,7 +29,7 @@ export default function DepartmentRole() {
         })));
       }
     } catch (err) {
-      console.error('Error fetching departments:', err.message);
+      setErrorMsg(err.message || 'Failed to load departments.');
     } finally {
       setIsLoading(false);
     }
@@ -53,42 +45,28 @@ export default function DepartmentRole() {
       setIsLoading(true);
       setErrorMsg('');
       if (editingDept) {
-        try {
-          await apiFetch(`/hr/departments/${editingDept.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              name: deptName,
-              roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary) }))
-            })
-          });
-        } catch (e) { /* fallback */ }
-
-        setDepartments(prev => prev.map(d => d.id === editingDept.id ? {
-          ...d,
-          name: deptName,
-          roles
-        } : d));
+        await apiFetch(`/hr/departments/${editingDept.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: deptName,
+            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary) }))
+          })
+        });
         setSuccessMsg(`Department "${deptName}" updated successfully.`);
       } else {
-        const newDeptObj = {
-          id: Date.now(),
-          name: deptName,
-          head: '—',
-          staffCount: 0,
-          roles,
-          members: []
-        };
-        try {
-          await apiFetch('/hr/departments', {
-            method: 'POST',
-            body: JSON.stringify(newDeptObj)
-          });
-        } catch (e) { /* fallback */ }
-
-        setDepartments(prev => [...prev, newDeptObj]);
+        await apiFetch('/hr/departments', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: deptName,
+            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary) }))
+          })
+        });
         setSuccessMsg(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
       }
 
+      // Re-read from the server rather than guessing — the API assigns the real
+      // department and role ids that every later screen depends on.
+      await fetchDepartments();
       setEditingDept(null);
       setViewMode('list');
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -116,10 +94,9 @@ export default function DepartmentRole() {
         throw new Error(`The role "${memberData.position}" was not found or has no ID in this department.`);
       }
 
-      const employeeCode = `EMP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-
       const payload = {
-        employee_code: employeeCode,
+        // Must match the eSSL device's Emp Code — entered by the admin, never generated.
+        employee_code: memberData.employeeCode.trim(),
         full_name: memberData.name,
         date_of_joining: memberData.dateOfJoining,
         department_id: deptToUpdate.id,
@@ -136,6 +113,7 @@ export default function DepartmentRole() {
 
       const newMember = {
         id: result.id,
+        employeeCode: payload.employee_code,
         name: memberData.name,
         position: memberData.position,
         qualification: memberData.qualification,
@@ -180,11 +158,7 @@ export default function DepartmentRole() {
     try {
       setIsLoading(true);
       setErrorMsg('');
-      try {
-        await apiFetch(`/hr/departments/${id}`, { method: 'DELETE' });
-      } catch(e) { /* fallback */ }
-
-      setDepartments(prev => prev.filter(d => d.id !== id));
+      await apiFetch(`/hr/departments/${id}`, { method: 'DELETE' });
       setSuccessMsg(`Department "${name}" deleted successfully.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       await fetchDepartments();

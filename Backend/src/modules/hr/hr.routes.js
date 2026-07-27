@@ -37,10 +37,12 @@ router.post('/shifts', requirePermissions(['manage_hr']), ctrl.createShift);
 router.patch('/shifts/:id', requirePermissions(['manage_hr']), ctrl.updateShift);
 router.delete('/shifts/:id', requirePermissions(['manage_hr']), ctrl.deleteShift);
 
-// Roster
-router.get('/roster', ctrl.getRoster);
+// Roster — static segments must precede any parameterised ones
+router.get('/roster/week', ctrl.getRosterWeek);
 router.get('/roster/employees', ctrl.getEmployeesForRoster);
-router.post('/roster/day', ctrl.saveRosterDay);
-router.post('/roster/bulk', ctrl.bulkSaveRoster);
+router.get('/roster', ctrl.getRoster);
+router.post('/roster/day', requirePermissions(['manage_hr']), ctrl.saveRosterDay);
+router.post('/roster/bulk', requirePermissions(['manage_hr']), ctrl.bulkSaveRoster);
+router.post('/roster/swap', requirePermissions(['manage_hr']), ctrl.swapRosterShifts);
 
 module.exports = router;

@@ -19,15 +19,16 @@
 const router = require('express').Router();
 const ctrl = require('./attendance.controller');
 
-// Daily summaries
+// Daily summaries — the two-segment param route must come after the static
+// multi-segment routes below, so it is registered last.
 router.get('/', ctrl.listSummaries);
-router.get('/:employeeId/:date', ctrl.getSummary);
 
 // Processing engine
 router.post('/process', ctrl.processDay);
 
-// Punch import (eTimeTracker)
+// Punch import (eSSL / eTimeTracker)
 router.post('/punches/import', ctrl.importPunches);
+router.get('/punches/unmatched', ctrl.listUnmatchedPunches);
 
 // Admin manual mark
 router.post('/mark', ctrl.manualMark);
@@ -46,5 +47,7 @@ router.patch('/corrections/:id/review', ctrl.reviewCorrection);
 router.get('/buffer', ctrl.getBufferSummary);
 router.get('/buffer/employee/:id', ctrl.getEmployeeBuffer);
 
+// Registered last so it cannot shadow any static route above.
+router.get('/:employeeId/:date', ctrl.getSummary);
 
 module.exports = router;

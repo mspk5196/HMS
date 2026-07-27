@@ -9,12 +9,16 @@ const db = require('../../config/db');
    SALARY STRUCTURES
 ───────────────────────────────────────────── */
 
-const listSalaryStructures = async () => {
+const listSalaryStructures = async (employeeId = null) => {
+  const where = employeeId ? 'WHERE ss.employee_id = ?' : '';
+  const params = employeeId ? [employeeId] : [];
   const [rows] = await db.execute(
-    `SELECT ss.*, d.name AS designation_name
+    `SELECT ss.*, e.full_name, e.employee_code
      FROM salary_structures ss
-     LEFT JOIN designations d ON d.id = ss.designation_id
-     ORDER BY d.name, ss.salary_type`
+     JOIN employees e ON e.id = ss.employee_id
+     ${where}
+     ORDER BY e.full_name, ss.effective_from DESC`,
+    params
   );
   return rows;
 };
@@ -24,44 +28,167 @@ const getSalaryStructure = async (id) => {
   return rows[0] ?? null;
 };
 
-/** Return the effective salary structure for an employee (by designation or direct override). */
-const getEmployeeSalaryStructure = async (employeeId) => {
-  const [rows] = await db.execute(
+/**
+ * The salary in force for an employee during a given pay period.
+ *
+ * Resolution order:
+ *   1. an employee-specific salary_structures row whose effective range covers
+ *      the period — this is what preserves increment history, and
+ *   2. otherwise the department-role default on staff_roles.
+ *
+ * Previously this joined salary_structures on designation_id (a column it does
+ * not have) and returned null for everyone, so payroll silently skipped every
+ * employee. It must never return null for an active employee whose role has a
+ * salary set.
+ */
+const getEffectiveSalary = async (employeeId, month, year) => {
+  const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+
+  const [override] = await db.execute(
     `SELECT ss.*
      FROM salary_structures ss
-     JOIN employees e ON e.designation_id = ss.designation_id
-     WHERE e.id = ?
+     WHERE ss.employee_id = ?
+       AND ss.effective_from <= ?
+       AND (ss.effective_to IS NULL OR ss.effective_to >= ?)
+     ORDER BY ss.effective_from DESC
      LIMIT 1`,
+    [employeeId, periodEnd, periodStart]
+  );
+
+  if (override.length) {
+    const s = override[0];
+    return {
+      source: 'salary_structure',
+      salary_structure_id: s.id,
+      fixed_salary: Number(s.fixed_salary ?? 0),
+      basic_da_amount: Number(s.basic_da_amount ?? 0),
+      hra_amount: Number(s.hra_amount ?? 0),
+      night_shift_extra_amount: Number(s.night_shift_extra_amount ?? 0),
+      pf_applicable: !!s.pf_applicable,
+      esi_applicable: !!s.esi_applicable,
+    };
+  }
+
+  // Fall back to the role default the Department-Role screen actually writes.
+  const [roleRows] = await db.execute(
+    `SELECT sr.basic_salary, sr.hra, sr.da, e.basic_salary AS employee_basic
+     FROM employees e
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE e.id = ?`,
     [employeeId]
   );
-  return rows[0] ?? null;
+  if (!roleRows.length) return null;
+
+  const r = roleRows[0];
+  // An employee-level override on the employees row wins over the role default.
+  const employeeBasic = Number(r.employee_basic ?? 0);
+  const roleBasic = Number(r.basic_salary ?? 0);
+  const basic = employeeBasic > 0 ? employeeBasic : roleBasic;
+  const hra = Number(r.hra ?? 0);
+  const da = Number(r.da ?? 0);
+
+  // staff_roles.basic_salary is the full monthly figure in this data set; HRA
+  // and DA are held separately and default to 0.
+  const fixed = basic + hra + da;
+  if (fixed <= 0) return null;
+
+  return {
+    source: employeeBasic > 0 ? 'employee' : 'staff_role',
+    salary_structure_id: null,
+    fixed_salary: fixed,
+    basic_da_amount: basic + da,
+    hra_amount: hra,
+    night_shift_extra_amount: 0,
+    pf_applicable: true,
+    esi_applicable: true,
+  };
 };
 
 const createSalaryStructure = async (data) => {
-  const { designation_id, salary_type, gross_monthly, rate_per_day, rate_per_shift, base_salary, night_shift_extra_amount, pf_percent, esi_percent } = data;
+  const {
+    employee_id, salary_basis, fixed_salary, basic_da_amount, hra_amount,
+    night_shift_extra_amount, pf_applicable, esi_applicable,
+    effective_from, effective_to, created_by,
+  } = data;
   const [result] = await db.execute(
     `INSERT INTO salary_structures
-       (designation_id, salary_type, gross_monthly, rate_per_day, rate_per_shift,
-        base_salary, night_shift_extra_amount, pf_percent, esi_percent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [designation_id, salary_type, gross_monthly ?? null, rate_per_day ?? null,
-     rate_per_shift ?? null, base_salary ?? null, night_shift_extra_amount ?? 0,
-     pf_percent ?? 12, esi_percent ?? 0.75]
+       (employee_id, salary_basis, fixed_salary, basic_da_amount, hra_amount,
+        night_shift_extra_amount, pf_applicable, esi_applicable,
+        effective_from, effective_to, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [employee_id, salary_basis ?? 'monthly_fixed', fixed_salary ?? null,
+     basic_da_amount ?? null, hra_amount ?? null, night_shift_extra_amount ?? 0,
+     pf_applicable === false ? 0 : 1, esi_applicable === false ? 0 : 1,
+     effective_from, effective_to ?? null, created_by ?? null]
   );
   return result.insertId;
 };
 
+/** Close the currently-open structure and open a new one — an increment. */
+const addSalaryRevision = async (data) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(
+      `UPDATE salary_structures
+       SET effective_to = DATE_SUB(?, INTERVAL 1 DAY)
+       WHERE employee_id = ? AND effective_to IS NULL`,
+      [data.effective_from, data.employee_id]
+    );
+    const [res] = await conn.execute(
+      `INSERT INTO salary_structures
+         (employee_id, salary_basis, fixed_salary, basic_da_amount, hra_amount,
+          night_shift_extra_amount, pf_applicable, esi_applicable, effective_from, created_by)
+       VALUES (?, 'monthly_fixed', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [data.employee_id, data.fixed_salary ?? null, data.basic_da_amount ?? null,
+       data.hra_amount ?? null, data.night_shift_extra_amount ?? 0,
+       data.pf_applicable === false ? 0 : 1, data.esi_applicable === false ? 0 : 1,
+       data.effective_from, data.created_by ?? null]
+    );
+    await conn.commit();
+    return res.insertId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
 const updateSalaryStructure = async (id, data) => {
+  const allowed = ['salary_basis', 'fixed_salary', 'basic_da_amount', 'hra_amount',
+    'night_shift_extra_amount', 'effective_from', 'effective_to'];
+  const booleans = ['pf_applicable', 'esi_applicable'];
   const fields = [];
   const vals = [];
-  const allowed = ['gross_monthly', 'rate_per_day', 'rate_per_shift', 'base_salary',
-    'night_shift_extra_amount', 'pf_percent', 'esi_percent'];
   for (const key of allowed) {
     if (data[key] !== undefined) { fields.push(`${key} = ?`); vals.push(data[key]); }
+  }
+  for (const key of booleans) {
+    if (data[key] !== undefined) { fields.push(`${key} = ?`); vals.push(data[key] ? 1 : 0); }
   }
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE salary_structures SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+/* ─────────────────────────────────────────────
+   PAYROLL CONFIG
+───────────────────────────────────────────── */
+
+/** All payroll constants as a { key: number } map. Never hardcode these. */
+const getPayrollConfig = async () => {
+  const [rows] = await db.execute(`SELECT config_key, config_value FROM payroll_config`);
+  return Object.fromEntries(rows.map((r) => [r.config_key, Number(r.config_value)]));
+};
+
+const setPayrollConfig = async (key, value) => {
+  await db.execute(
+    `INSERT INTO payroll_config (config_key, config_value) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+    [key, String(value)]
+  );
 };
 
 /* ─────────────────────────────────────────────
@@ -117,14 +244,17 @@ const listNightShiftRates = async (shiftId) => {
    PAYROLL RUNS
 ───────────────────────────────────────────── */
 
+// Note: the columns are period_month / period_year, and there is no created_by.
 const listPayrollRuns = async (page = 1, limit = 12) => {
   const offset = (page - 1) * limit;
   const [rows] = await db.query(
-    `SELECT pr.*, u.username AS created_by_name, c.username AS confirmed_by_name
+    `SELECT pr.*, l.username AS locked_by_name, c.username AS confirmed_by_name,
+            (SELECT COUNT(*) FROM payroll_items pi WHERE pi.payroll_run_id = pr.id) AS item_count,
+            (SELECT COALESCE(SUM(pi.net_pay), 0) FROM payroll_items pi WHERE pi.payroll_run_id = pr.id) AS total_net
      FROM payroll_runs pr
-     LEFT JOIN users u ON u.id = pr.created_by
+     LEFT JOIN users l ON l.id = pr.locked_by
      LEFT JOIN users c ON c.id = pr.confirmed_by
-     ORDER BY pr.pay_year DESC, pr.pay_month DESC
+     ORDER BY pr.period_year DESC, pr.period_month DESC
      LIMIT ? OFFSET ?`,
     [limit, offset]
   );
@@ -134,20 +264,29 @@ const listPayrollRuns = async (page = 1, limit = 12) => {
 
 const getPayrollRun = async (id) => {
   const [rows] = await db.execute(
-    `SELECT pr.*, u.username AS created_by_name
+    `SELECT pr.*, l.username AS locked_by_name, c.username AS confirmed_by_name
      FROM payroll_runs pr
-     LEFT JOIN users u ON u.id = pr.created_by
+     LEFT JOIN users l ON l.id = pr.locked_by
+     LEFT JOIN users c ON c.id = pr.confirmed_by
      WHERE pr.id = ?`,
     [id]
   );
   return rows[0] ?? null;
 };
 
-const createPayrollRun = async ({ pay_month, pay_year, salary_date_type, salary_date, created_by }) => {
+const findPayrollRunByPeriod = async (month, year) => {
+  const [rows] = await db.execute(
+    `SELECT * FROM payroll_runs WHERE period_month = ? AND period_year = ?`,
+    [month, year]
+  );
+  return rows[0] ?? null;
+};
+
+const createPayrollRun = async ({ period_month, period_year, salary_date_type, salary_date }) => {
   const [result] = await db.execute(
-    `INSERT INTO payroll_runs (pay_month, pay_year, status, salary_date_type, salary_date, created_by)
-     VALUES (?, ?, 'draft', ?, ?, ?)`,
-    [pay_month, pay_year, salary_date_type, salary_date ?? null, created_by ?? null]
+    `INSERT INTO payroll_runs (period_month, period_year, status, salary_date_type, salary_date)
+     VALUES (?, ?, 'draft', ?, ?)`,
+    [period_month, period_year, salary_date_type ?? 'last_day_of_month', salary_date ?? null]
   );
   return result.insertId;
 };
@@ -156,11 +295,18 @@ const updatePayrollRunStatus = async (id, status) => {
   await db.execute(`UPDATE payroll_runs SET status = ? WHERE id = ?`, [status, id]);
 };
 
-const confirmPayrollRun = async (id, confirmedBy) => {
+const lockPayrollRun = async (id, lockedBy) => {
   await db.execute(
-    `UPDATE payroll_runs SET status = 'locked', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`,
-    [confirmedBy, id]
+    `UPDATE payroll_runs
+     SET status = 'locked', locked_by = ?, locked_at = NOW(),
+         confirmed_by = ?, confirmed_at = NOW()
+     WHERE id = ?`,
+    [lockedBy ?? null, lockedBy ?? null, id]
   );
+};
+
+const clearPayrollItems = async (runId) => {
+  await db.execute(`DELETE FROM payroll_items WHERE payroll_run_id = ?`, [runId]);
 };
 
 /* ─────────────────────────────────────────────
@@ -187,11 +333,19 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
   return { rows, total };
 };
 
+/**
+ * Write one employee's payslip line.
+ *
+ * The real columns are days_present / days_paid_leave / days_lop — there is no
+ * days_absent or days_half (half-day leave is out of scope by decision).
+ * salary_structure_id is nullable here because a salary may resolve from the
+ * role default rather than an explicit structure row.
+ */
 const upsertPayrollItem = async (data) => {
   const {
     payroll_run_id, employee_id, salary_structure_id,
-    days_present, days_absent, days_half, days_lop,
-    shifts_worked, base_salary_component, night_shift_component, buffer_late_deduction,
+    days_present, days_paid_leave, days_lop, shifts_worked,
+    base_salary_component, night_shift_component, buffer_late_deduction,
     gross_pay, lop_amount, overtime_amount,
     pf_employee_amount, pf_employer_amount, esi_employee_amount, esi_employer_amount,
     fines_amount, net_pay,
@@ -200,17 +354,16 @@ const upsertPayrollItem = async (data) => {
   await db.execute(
     `INSERT INTO payroll_items
        (payroll_run_id, employee_id, salary_structure_id,
-        days_present, days_absent, days_half, days_lop,
-        shifts_worked, base_salary_component, night_shift_component, buffer_late_deduction,
+        days_present, days_paid_leave, days_lop, shifts_worked,
+        base_salary_component, night_shift_component, buffer_late_deduction,
         gross_pay, lop_amount, overtime_amount,
         pf_employee_amount, pf_employer_amount, esi_employee_amount, esi_employer_amount,
         fines_amount, net_pay)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        salary_structure_id = VALUES(salary_structure_id),
        days_present = VALUES(days_present),
-       days_absent = VALUES(days_absent),
-       days_half = VALUES(days_half),
+       days_paid_leave = VALUES(days_paid_leave),
        days_lop = VALUES(days_lop),
        shifts_worked = VALUES(shifts_worked),
        base_salary_component = VALUES(base_salary_component),
@@ -226,9 +379,9 @@ const upsertPayrollItem = async (data) => {
        fines_amount = VALUES(fines_amount),
        net_pay = VALUES(net_pay)`,
     [payroll_run_id, employee_id, salary_structure_id ?? null,
-     days_present ?? 0, days_absent ?? 0, days_half ?? 0, days_lop ?? 0,
-     shifts_worked ?? 0, base_salary_component ?? 0, night_shift_component ?? 0,
-     buffer_late_deduction ?? 0, gross_pay ?? 0, lop_amount ?? 0, overtime_amount ?? 0,
+     days_present ?? 0, days_paid_leave ?? 0, days_lop ?? 0, shifts_worked ?? 0,
+     base_salary_component ?? 0, night_shift_component ?? 0, buffer_late_deduction ?? 0,
+     gross_pay ?? 0, lop_amount ?? 0, overtime_amount ?? 0,
      pf_employee_amount ?? 0, pf_employer_amount ?? 0,
      esi_employee_amount ?? 0, esi_employer_amount ?? 0,
      fines_amount ?? 0, net_pay ?? 0]
@@ -277,11 +430,11 @@ const listFines = async ({ employeeId, status, month, year, page = 1, limit = 30
 
   const [rows] = await db.query(
     `SELECT f.*, e.full_name, e.employee_code, ft.name AS fine_type_name,
-            u.username AS imposed_by_name, w.username AS waived_by_name
+            c.username AS created_by_name, w.username AS waived_by_name
      FROM fines f
      JOIN employees e ON e.id = f.employee_id
      JOIN fine_types ft ON ft.id = f.fine_type_id
-     LEFT JOIN users u ON u.id = f.imposed_by
+     LEFT JOIN users c ON c.id = f.created_by
      LEFT JOIN users w ON w.id = f.waived_by
      ${where}
      ORDER BY f.fine_date DESC
@@ -294,14 +447,52 @@ const listFines = async ({ employeeId, status, month, year, page = 1, limit = 30
   return { rows, total };
 };
 
-const createFine = async (data) => {
-  const { employee_id, fine_type_id, amount, fine_date, reason, imposed_by, is_auto_generated, assigned_month, assigned_year } = data;
+/** The configured fine type for a trigger rule (e.g. unapproved absences). */
+const getFineTypeByTriggerRule = async (triggerRule) => {
+  const [rows] = await db.execute(
+    `SELECT * FROM fine_types WHERE trigger_rule = ? AND is_active = 1 LIMIT 1`,
+    [triggerRule]
+  );
+  return rows[0] ?? null;
+};
+
+const listFineTypes = async () => {
+  const [rows] = await db.execute(`SELECT * FROM fine_types ORDER BY name`);
+  return rows;
+};
+
+const createFineType = async (data) => {
+  const { name, default_amount, trigger_rule, calculation_basis, description, is_active } = data;
   const [result] = await db.execute(
-    `INSERT INTO fines (employee_id, fine_type_id, amount, fine_date, reason, imposed_by,
+    `INSERT INTO fine_types (name, default_amount, trigger_rule, calculation_basis, description, is_active)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [name, default_amount ?? 0, trigger_rule ?? 'manual', calculation_basis ?? 'flat',
+     description ?? null, is_active === false ? 0 : 1]
+  );
+  return result.insertId;
+};
+
+const updateFineType = async (id, data) => {
+  const allowed = ['name', 'default_amount', 'trigger_rule', 'calculation_basis', 'description'];
+  const fields = [];
+  const vals = [];
+  for (const key of allowed) {
+    if (data[key] !== undefined) { fields.push(`${key} = ?`); vals.push(data[key]); }
+  }
+  if (data.is_active !== undefined) { fields.push('is_active = ?'); vals.push(data.is_active ? 1 : 0); }
+  if (!fields.length) return;
+  vals.push(id);
+  await db.execute(`UPDATE fine_types SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+const createFine = async (data) => {
+  const { employee_id, fine_type_id, amount, fine_date, reason, created_by, is_auto_generated, assigned_month, assigned_year } = data;
+  const [result] = await db.execute(
+    `INSERT INTO fines (employee_id, fine_type_id, amount, fine_date, reason, created_by,
        is_auto_generated, assigned_month, assigned_year, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
     [employee_id, fine_type_id, amount, fine_date, reason ?? null,
-     imposed_by ?? null, is_auto_generated ? 1 : 0,
+     created_by ?? null, is_auto_generated ? 1 : 0,
      assigned_month ?? null, assigned_year ?? null]
   );
   return result.insertId;
@@ -319,18 +510,23 @@ const updateFineStatus = async (id, status, { waived_by, waiver_reason }) => {
    OVERTIME
 ───────────────────────────────────────────── */
 
-const listOvertimeEntries = async ({ employeeId, runId, page = 1, limit = 50 }) => {
+// Real columns: entry_date, entry_type ENUM('extra_day','hourly'), hours,
+// computed_amount, notes, created_by. The previous version wrote six names that
+// do not exist, so every overtime write failed.
+const listOvertimeEntries = async ({ employeeId, runId, month, year, page = 1, limit = 50 }) => {
   const offset = (page - 1) * limit;
   const filters = [];
   const params = [];
   if (employeeId) { filters.push('oe.employee_id = ?'); params.push(employeeId); }
   if (runId) { filters.push('oe.payroll_run_id = ?'); params.push(runId); }
+  if (month) { filters.push('MONTH(oe.entry_date) = ?'); params.push(month); }
+  if (year) { filters.push('YEAR(oe.entry_date) = ?'); params.push(year); }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await db.query(
-    `SELECT oe.*, e.full_name FROM overtime_entries oe
+    `SELECT oe.*, e.full_name, e.employee_code FROM overtime_entries oe
      JOIN employees e ON e.id = oe.employee_id
      ${where}
-     ORDER BY oe.overtime_date DESC
+     ORDER BY oe.entry_date DESC
      LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
@@ -340,23 +536,42 @@ const listOvertimeEntries = async ({ employeeId, runId, page = 1, limit = 50 }) 
   return { rows, total };
 };
 
-const createOvertimeEntry = async (data) => {
-  const { employee_id, overtime_date, extra_hours, rate_per_hour, reason, approved_by } = data;
-  const amount = parseFloat(extra_hours) * parseFloat(rate_per_hour || 0);
+const createOvertimeEntry = async ({ employee_id, entry_date, entry_type, hours, computed_amount, notes, created_by }) => {
   const [result] = await db.execute(
-    `INSERT INTO overtime_entries (employee_id, overtime_date, extra_hours, rate_per_hour, amount, reason, approved_by)
+    `INSERT INTO overtime_entries
+       (employee_id, entry_date, entry_type, hours, computed_amount, notes, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [employee_id, overtime_date, extra_hours, rate_per_hour ?? 0, amount, reason ?? null, approved_by ?? null]
+    [employee_id, entry_date, entry_type, hours ?? null, computed_amount ?? 0,
+     notes ?? null, created_by ?? null]
   );
   return result.insertId;
 };
 
+/**
+ * Extra *days* worked in a period. Hourly overtime is deliberately excluded:
+ * it is logged for the record only and carries no pay.
+ */
+const countPaidExtraDays = async (employeeId, month, year) => {
+  const [rows] = await db.execute(
+    `SELECT COUNT(*) AS extra_days
+     FROM overtime_entries
+     WHERE employee_id = ?
+       AND entry_type = 'extra_day'
+       AND MONTH(entry_date) = ? AND YEAR(entry_date) = ?`,
+    [employeeId, month, year]
+  );
+  return Number(rows[0]?.extra_days ?? 0);
+};
+
 module.exports = {
-  listSalaryStructures, getSalaryStructure, getEmployeeSalaryStructure,
-  createSalaryStructure, updateSalaryStructure,
+  listSalaryStructures, getSalaryStructure, getEffectiveSalary,
+  createSalaryStructure, addSalaryRevision, updateSalaryStructure,
+  getPayrollConfig, setPayrollConfig,
   getNightShiftRate, addNightShiftRate, listNightShiftRates,
-  listPayrollRuns, getPayrollRun, createPayrollRun, updatePayrollRunStatus, confirmPayrollRun,
+  listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
+  updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
   getPayrollItems, upsertPayrollItem,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,
-  listOvertimeEntries, createOvertimeEntry,
+  listFineTypes, createFineType, updateFineType, getFineTypeByTriggerRule,
+  listOvertimeEntries, createOvertimeEntry, countPaidExtraDays,
 };
