@@ -10,7 +10,15 @@ import Payroll from './Payroll';
 import PatientRecords from './PatientRecords';
 import Appointments from './Appointments';
 import ConsultationRx from './ConsultationRx';
-import Pharmacy from './Pharmacy';
+import PharmacyStock from './pharmacy/StockList';
+import PharmacyDispense from './pharmacy/DispenseCounter';
+import PharmacyBillHistory from './pharmacy/BillHistory';
+import PharmacyPurchaseOrders from './pharmacy/PurchaseOrders';
+import PharmacyGoodsReceipts from './pharmacy/GoodsReceipts';
+import PharmacySuppliers from './pharmacy/Suppliers';
+import PharmacyExpiryStock from './pharmacy/ExpiryStock';
+import PharmacyNonMovableStock from './pharmacy/NonMovableStock';
+import PharmacyMovements from './pharmacy/StockMovements';
 import AdmissionBeds from './AdmissionBeds';
 import Discharge from './Discharge';
 import RolesPermissions from './RolesPermissions';
@@ -52,8 +60,24 @@ export default function AdminDashboard({ user, onLogout }) {
         return <Appointments />;
       case 'consultation-rx':
         return <ConsultationRx />;
-      case 'pharmacy':
-        return <Pharmacy />;
+      case 'pharmacy-stock':
+        return <PharmacyStock />;
+      case 'pharmacy-dispense':
+        return <PharmacyDispense />;
+      case 'pharmacy-bills':
+        return <PharmacyBillHistory />;
+      case 'pharmacy-purchase-orders':
+        return <PharmacyPurchaseOrders />;
+      case 'pharmacy-goods-receipts':
+        return <PharmacyGoodsReceipts />;
+      case 'pharmacy-suppliers':
+        return <PharmacySuppliers />;
+      case 'pharmacy-expiry':
+        return <PharmacyExpiryStock />;
+      case 'pharmacy-non-movable':
+        return <PharmacyNonMovableStock />;
+      case 'pharmacy-movements':
+        return <PharmacyMovements />;
       case 'admission-beds':
         return <AdmissionBeds />;
       case 'discharge':

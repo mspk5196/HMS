@@ -20,8 +20,12 @@ const listMedicines = async ({ search, page = 1, limit = 50 }) => {
     params.push(s, s, s);
   }
 
+  // Correlated subqueries (not JOIN + GROUP BY) so this stays valid under
+  // strict ONLY_FULL_GROUP_BY sql_mode regardless of how MySQL is configured.
   const [rows] = await db.query(
-    `SELECT m.*, mc.name AS category_name
+    `SELECT m.*, mc.name AS category_name,
+            COALESCE((SELECT SUM(mb.qty_in_stock) FROM medicine_batches mb WHERE mb.medicine_id = m.id), 0) AS total_stock,
+            (SELECT MIN(mb.selling_price) FROM medicine_batches mb WHERE mb.medicine_id = m.id AND mb.qty_in_stock > 0) AS selling_price
      FROM medicines m
      LEFT JOIN medicine_categories mc ON mc.id = m.category_id
      ${whereClause}
@@ -39,12 +43,11 @@ const listMedicines = async ({ search, page = 1, limit = 50 }) => {
 const getMedicineByBarcode = async (barcode) => {
   const [rows] = await db.execute(
     `SELECT m.*, mc.name AS category_name,
-            COALESCE(SUM(mb.qty_in_stock), 0) AS total_stock
+            COALESCE((SELECT SUM(mb.qty_in_stock) FROM medicine_batches mb WHERE mb.medicine_id = m.id), 0) AS total_stock,
+            (SELECT MIN(mb.selling_price) FROM medicine_batches mb WHERE mb.medicine_id = m.id AND mb.qty_in_stock > 0) AS selling_price
      FROM medicines m
      LEFT JOIN medicine_categories mc ON mc.id = m.category_id
-     LEFT JOIN medicine_batches mb ON mb.medicine_id = m.id AND mb.qty_in_stock > 0
      WHERE m.barcode = ?
-     GROUP BY m.id
      LIMIT 1`,
     [barcode]
   );
@@ -54,12 +57,11 @@ const getMedicineByBarcode = async (barcode) => {
 const getMedicine = async (id) => {
   const [rows] = await db.execute(
     `SELECT m.*, mc.name AS category_name,
-            COALESCE(SUM(mb.qty_in_stock), 0) AS total_stock
+            COALESCE((SELECT SUM(mb.qty_in_stock) FROM medicine_batches mb WHERE mb.medicine_id = m.id), 0) AS total_stock,
+            (SELECT MIN(mb.selling_price) FROM medicine_batches mb WHERE mb.medicine_id = m.id AND mb.qty_in_stock > 0) AS selling_price
      FROM medicines m
      LEFT JOIN medicine_categories mc ON mc.id = m.category_id
-     LEFT JOIN medicine_batches mb ON mb.medicine_id = m.id AND mb.qty_in_stock > 0
-     WHERE m.id = ?
-     GROUP BY m.id`,
+     WHERE m.id = ?`,
     [id]
   );
   return rows[0] ?? null;
@@ -91,6 +93,16 @@ const updateMedicine = async (id, data) => {
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE medicines SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+const listCategories = async () => {
+  const [rows] = await db.execute(`SELECT * FROM medicine_categories ORDER BY name`);
+  return rows;
+};
+
+const createCategory = async (name) => {
+  const [result] = await db.execute(`INSERT INTO medicine_categories (name) VALUES (?)`, [name]);
+  return result.insertId;
 };
 
 /* ─────────────────────────────────────────────
@@ -178,10 +190,10 @@ const fifoDeduct = async (medicineId, qty) => {
 };
 
 /* ─────────────────────────────────────────────
-   PHARMACY BILLS
+   PHARMACY BILLS  (dispense / sale-counter flow)
 ───────────────────────────────────────────── */
 
-const listBills = async ({ patientId, appointmentId, admissionId, page = 1, limit = 30 }) => {
+const listBills = async ({ patientId, appointmentId, admissionId, paymentStatus, page = 1, limit = 30 }) => {
   const offset = (page - 1) * limit;
   const filters = [];
   const params = [];
@@ -189,14 +201,15 @@ const listBills = async ({ patientId, appointmentId, admissionId, page = 1, limi
   if (patientId) { filters.push('pb.patient_id = ?'); params.push(patientId); }
   if (appointmentId) { filters.push('pb.appointment_id = ?'); params.push(appointmentId); }
   if (admissionId) { filters.push('pb.admission_id = ?'); params.push(admissionId); }
+  if (paymentStatus) { filters.push('pb.payment_status = ?'); params.push(paymentStatus); }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await db.query(
     `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
-            u.username AS billed_by_name
+            u.username AS generated_by_name
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id
-     LEFT JOIN users u ON u.id = pb.billed_by
+     LEFT JOIN users u ON u.id = pb.generated_by
      ${where}
      ORDER BY pb.bill_date DESC
      LIMIT ? OFFSET ?`,
@@ -211,10 +224,10 @@ const listBills = async ({ patientId, appointmentId, admissionId, page = 1, limi
 const getBill = async (id) => {
   const [rows] = await db.execute(
     `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
-            u.username AS billed_by_name
+            u.username AS generated_by_name
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id
-     LEFT JOIN users u ON u.id = pb.billed_by
+     LEFT JOIN users u ON u.id = pb.generated_by
      WHERE pb.id = ?`,
     [id]
   );
@@ -234,20 +247,29 @@ const getBill = async (id) => {
   return bill;
 };
 
+/**
+ * Insert the bill header, then stamp a human bill_number derived from the
+ * new row's id (PB-000123). Two statements on the same connection so the
+ * number can never collide.
+ */
 const createBill = async (header) => {
-  const { patient_id, appointment_id, admission_id, bill_date, billed_by,
-    total_amount, discount_amount, tax_amount, net_amount,
-    payment_mode, payment_status } = header;
+  const { patient_id, appointment_id, admission_id, bill_date, generated_by,
+    total_amount, discount_amount, tax_amount, net_amount, paid_amount, balance_amount,
+    payment_mode, payment_status, closed_at } = header;
   const [result] = await db.execute(
     `INSERT INTO pharmacy_bills
-       (patient_id, appointment_id, admission_id, bill_date, billed_by,
-        total_amount, discount_amount, tax_amount, net_amount, payment_mode, payment_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [patient_id, appointment_id ?? null, admission_id ?? null, bill_date, billed_by ?? null,
-     total_amount ?? 0, discount_amount ?? 0, tax_amount ?? 0, net_amount ?? 0,
-     payment_mode ?? 'cash', payment_status ?? 'paid']
+       (patient_id, appointment_id, admission_id, bill_number, bill_date, generated_by,
+        total_amount, discount_amount, tax_amount, net_amount, paid_amount, balance_amount,
+        payment_mode, payment_status, closed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [patient_id, appointment_id ?? null, admission_id ?? null, `TMP-${Date.now()}`, bill_date, generated_by ?? null,
+     total_amount ?? 0, discount_amount ?? 0, tax_amount ?? 0, net_amount ?? 0, paid_amount ?? 0, balance_amount ?? 0,
+     payment_mode ?? 'cash', payment_status ?? 'pending', closed_at ?? null]
   );
-  return result.insertId;
+  const id = result.insertId;
+  const billNumber = `PB-${String(id).padStart(6, '0')}`;
+  await db.execute(`UPDATE pharmacy_bills SET bill_number = ? WHERE id = ?`, [billNumber, id]);
+  return id;
 };
 
 const addBillItem = async ({ bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent, total_price }) => {
@@ -256,6 +278,15 @@ const addBillItem = async ({ bill_id, medicine_id, batch_id, quantity, unit_pric
        (bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent, total_price)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [bill_id, medicine_id, batch_id ?? null, quantity, unit_price, discount_percent ?? 0, total_price]
+  );
+};
+
+const updateBillPayment = async (id, { paid_amount, balance_amount, payment_status, closed_at }) => {
+  await db.execute(
+    `UPDATE pharmacy_bills
+     SET paid_amount = ?, balance_amount = ?, payment_status = ?, closed_at = ?
+     WHERE id = ?`,
+    [paid_amount, balance_amount, payment_status, closed_at ?? null, id]
   );
 };
 
@@ -269,7 +300,6 @@ const addBillItem = async ({ bill_id, medicine_id, batch_id, quantity, unit_pric
  */
 const suggestMedicines = async (terms) => {
   if (!terms || !terms.length) return [];
-  const placeholders = terms.map(() => '?').join(',');
   const likeConditions = terms.map(() => '(m.name LIKE ? OR m.generic_name LIKE ?)').join(' OR ');
   const likeParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
 
@@ -287,9 +317,410 @@ const suggestMedicines = async (terms) => {
   return rows;
 };
 
+/* ─────────────────────────────────────────────
+   SUPPLIERS
+───────────────────────────────────────────── */
+
+const listSuppliers = async ({ search, activeOnly } = {}) => {
+  const filters = [];
+  const params = [];
+  if (search) { filters.push('(name LIKE ? OR phone LIKE ? OR gstin LIKE ?)'); const s = `%${search}%`; params.push(s, s, s); }
+  if (activeOnly) filters.push('is_active = 1');
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const [rows] = await db.query(`SELECT * FROM pharmacy_suppliers ${where} ORDER BY name`, params);
+  return rows;
+};
+
+const getSupplier = async (id) => {
+  const [rows] = await db.execute(`SELECT * FROM pharmacy_suppliers WHERE id = ?`, [id]);
+  return rows[0] ?? null;
+};
+
+const createSupplier = async (data) => {
+  const { name, contact_person, phone, email, address, gstin } = data;
+  const [result] = await db.execute(
+    `INSERT INTO pharmacy_suppliers (name, contact_person, phone, email, address, gstin)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [name, contact_person ?? null, phone ?? null, email ?? null, address ?? null, gstin ?? null]
+  );
+  return result.insertId;
+};
+
+const updateSupplier = async (id, data) => {
+  const allowed = ['name', 'contact_person', 'phone', 'email', 'address', 'gstin', 'is_active'];
+  const fields = [];
+  const vals = [];
+  for (const key of allowed) {
+    if (data[key] !== undefined) { fields.push(`${key} = ?`); vals.push(data[key]); }
+  }
+  if (!fields.length) return;
+  vals.push(id);
+  await db.execute(`UPDATE pharmacy_suppliers SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+/* ─────────────────────────────────────────────
+   PURCHASE ORDERS  ("Items to order" -> "Place order")
+───────────────────────────────────────────── */
+
+const listPurchaseOrders = async ({ status, supplierId, page = 1, limit = 30 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+  if (status) { filters.push('po.status = ?'); params.push(status); }
+  if (supplierId) { filters.push('po.supplier_id = ?'); params.push(supplierId); }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT po.*, s.name AS supplier_name,
+            COALESCE((SELECT SUM(poi.ordered_qty) FROM purchase_order_items poi WHERE poi.purchase_order_id = po.id), 0) AS total_ordered_qty,
+            COALESCE((SELECT SUM(poi.received_qty) FROM purchase_order_items poi WHERE poi.purchase_order_id = po.id), 0) AS total_received_qty
+     FROM purchase_orders po
+     JOIN pharmacy_suppliers s ON s.id = po.supplier_id
+     ${where}
+     ORDER BY po.order_date DESC, po.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM purchase_orders po ${where}`, params
+  );
+  return { rows, total };
+};
+
+const getPurchaseOrder = async (id) => {
+  const [rows] = await db.execute(
+    `SELECT po.*, s.name AS supplier_name, s.phone AS supplier_phone
+     FROM purchase_orders po
+     JOIN pharmacy_suppliers s ON s.id = po.supplier_id
+     WHERE po.id = ?`,
+    [id]
+  );
+  const order = rows[0] ?? null;
+  if (!order) return null;
+
+  const [items] = await db.execute(
+    `SELECT poi.*, m.name AS medicine_name, m.generic_name, m.unit
+     FROM purchase_order_items poi
+     JOIN medicines m ON m.id = poi.medicine_id
+     WHERE poi.purchase_order_id = ?`,
+    [id]
+  );
+  order.items = items;
+  return order;
+};
+
+/** Create the PO header + line items, then stamp po_number from the new id. */
+const createPurchaseOrder = async ({ supplier_id, order_date, expected_date, notes, created_by, items }) => {
+  const connection = await db.getConnection();
+  await connection.beginTransaction();
+  try {
+    const [result] = await connection.execute(
+      `INSERT INTO purchase_orders (po_number, supplier_id, order_date, expected_date, status, notes, created_by)
+       VALUES (?, ?, ?, ?, 'placed', ?, ?)`,
+      [`TMP-${Date.now()}`, supplier_id, order_date, expected_date ?? null, notes ?? null, created_by ?? null]
+    );
+    const id = result.insertId;
+    const poNumber = `PO-${String(id).padStart(6, '0')}`;
+    await connection.execute(`UPDATE purchase_orders SET po_number = ? WHERE id = ?`, [poNumber, id]);
+
+    for (const item of items) {
+      await connection.execute(
+        `INSERT INTO purchase_order_items (purchase_order_id, medicine_id, ordered_qty, estimated_price)
+         VALUES (?, ?, ?, ?)`,
+        [id, item.medicine_id, item.ordered_qty, item.estimated_price ?? 0]
+      );
+    }
+
+    await connection.commit();
+    return id;
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+};
+
+const updatePurchaseOrderStatus = async (id, status) => {
+  await db.execute(`UPDATE purchase_orders SET status = ? WHERE id = ?`, [status, id]);
+};
+
+/* Recompute a PO's status from how much of each line item has been received. */
+const recomputePurchaseOrderStatus = async (connection, purchaseOrderId) => {
+  const [items] = await connection.execute(
+    `SELECT ordered_qty, received_qty FROM purchase_order_items WHERE purchase_order_id = ?`,
+    [purchaseOrderId]
+  );
+  if (!items.length) return;
+  const fullyReceived = items.every((i) => i.received_qty >= i.ordered_qty);
+  const anyReceived = items.some((i) => i.received_qty > 0);
+  const status = fullyReceived ? 'received' : anyReceived ? 'partially_received' : 'placed';
+  await connection.execute(`UPDATE purchase_orders SET status = ? WHERE id = ?`, [status, purchaseOrderId]);
+};
+
+/* ─────────────────────────────────────────────
+   GOODS RECEIPT / GRN
+   ("Received with bill" -> "Pharmacy entry (bill number)")
+───────────────────────────────────────────── */
+
+const listGoodsReceipts = async ({ supplierId, purchaseOrderId, paymentStatus, page = 1, limit = 30 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+  if (supplierId) { filters.push('gr.supplier_id = ?'); params.push(supplierId); }
+  if (purchaseOrderId) { filters.push('gr.purchase_order_id = ?'); params.push(purchaseOrderId); }
+  if (paymentStatus) { filters.push('gr.payment_status = ?'); params.push(paymentStatus); }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT gr.*, s.name AS supplier_name, po.po_number
+     FROM goods_receipts gr
+     JOIN pharmacy_suppliers s ON s.id = gr.supplier_id
+     LEFT JOIN purchase_orders po ON po.id = gr.purchase_order_id
+     ${where}
+     ORDER BY gr.received_date DESC, gr.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM goods_receipts gr ${where}`, params
+  );
+  return { rows, total };
+};
+
+const getGoodsReceipt = async (id) => {
+  const [rows] = await db.execute(
+    `SELECT gr.*, s.name AS supplier_name, po.po_number
+     FROM goods_receipts gr
+     JOIN pharmacy_suppliers s ON s.id = gr.supplier_id
+     LEFT JOIN purchase_orders po ON po.id = gr.purchase_order_id
+     WHERE gr.id = ?`,
+    [id]
+  );
+  const grn = rows[0] ?? null;
+  if (!grn) return null;
+
+  const [items] = await db.execute(
+    `SELECT gri.*, m.name AS medicine_name, m.generic_name, m.unit
+     FROM goods_receipt_items gri
+     JOIN medicines m ON m.id = gri.medicine_id
+     WHERE gri.goods_receipt_id = ?`,
+    [id]
+  );
+  grn.items = items;
+  return grn;
+};
+
+/**
+ * Receive stock against a supplier bill:
+ *   - one medicine_batches row per line item (stock actually goes up here)
+ *   - one goods_receipt_items row (audit trail, ties back to the batch + PO line)
+ *   - one stock_movements 'receipt' row per line item
+ *   - rolls the PO's received_qty forward and recomputes its status
+ */
+const createGoodsReceipt = async ({
+  purchase_order_id, supplier_id, supplier_bill_number, supplier_bill_date,
+  received_date, received_by, notes, items,
+}) => {
+  const connection = await db.getConnection();
+  await connection.beginTransaction();
+  try {
+    const totalAmount = items.reduce((s, i) => s + i.qty_received * (i.purchase_price ?? 0), 0);
+
+    const [result] = await connection.execute(
+      `INSERT INTO goods_receipts
+         (grn_number, purchase_order_id, supplier_id, supplier_bill_number, supplier_bill_date,
+          received_date, total_amount, received_by, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [`TMP-${Date.now()}`, purchase_order_id ?? null, supplier_id, supplier_bill_number, supplier_bill_date,
+       received_date, totalAmount, received_by ?? null, notes ?? null]
+    );
+    const grnId = result.insertId;
+    const grnNumber = `GRN-${String(grnId).padStart(6, '0')}`;
+    await connection.execute(`UPDATE goods_receipts SET grn_number = ? WHERE id = ?`, [grnNumber, grnId]);
+
+    for (const item of items) {
+      const [batchResult] = await connection.execute(
+        `INSERT INTO medicine_batches
+           (medicine_id, batch_number, expiry_date, qty_in_stock, purchase_price, selling_price)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [item.medicine_id, item.batch_number, item.expiry_date, item.qty_received,
+         item.purchase_price ?? 0, item.selling_price ?? 0]
+      );
+      const batchId = batchResult.insertId;
+
+      await connection.execute(
+        `INSERT INTO goods_receipt_items
+           (goods_receipt_id, purchase_order_item_id, medicine_id, batch_id, batch_number,
+            expiry_date, qty_received, purchase_price, selling_price)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [grnId, item.purchase_order_item_id ?? null, item.medicine_id, batchId, item.batch_number,
+         item.expiry_date, item.qty_received, item.purchase_price ?? 0, item.selling_price ?? 0]
+      );
+
+      await connection.execute(
+        `INSERT INTO stock_movements (medicine_id, batch_id, movement_type, quantity, reference_type, reference_id, movement_date)
+         VALUES (?, ?, 'receipt', ?, 'goods_receipt', ?, ?)`,
+        [item.medicine_id, batchId, item.qty_received, grnId, received_date]
+      );
+
+      if (item.purchase_order_item_id) {
+        await connection.execute(
+          `UPDATE purchase_order_items SET received_qty = received_qty + ? WHERE id = ?`,
+          [item.qty_received, item.purchase_order_item_id]
+        );
+      }
+    }
+
+    if (purchase_order_id) {
+      await recomputePurchaseOrderStatus(connection, purchase_order_id);
+    }
+
+    await connection.commit();
+    return grnId;
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+};
+
+const updateGoodsReceiptPayment = async (id, { paid_amount, payment_status }) => {
+  await db.execute(
+    `UPDATE goods_receipts SET paid_amount = ?, payment_status = ? WHERE id = ?`,
+    [paid_amount, payment_status, id]
+  );
+};
+
+const closeGoodsReceipt = async (id) => {
+  await db.execute(`UPDATE goods_receipts SET status = 'closed' WHERE id = ?`, [id]);
+};
+
+/* ─────────────────────────────────────────────
+   STOCK MOVEMENT LEDGER (used by billing + reports)
+───────────────────────────────────────────── */
+
+const logStockMovement = async ({ medicine_id, batch_id, movement_type, quantity, reference_type, reference_id, patient_id, movement_date }) => {
+  await db.execute(
+    `INSERT INTO stock_movements
+       (medicine_id, batch_id, movement_type, quantity, reference_type, reference_id, patient_id, movement_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [medicine_id, batch_id ?? null, movement_type, quantity, reference_type ?? null, reference_id ?? null,
+     patient_id ?? null, movement_date]
+  );
+};
+
+const listMovements = async ({ medicineId, patientId, movementType, from, to, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+  if (medicineId) { filters.push('sm.medicine_id = ?'); params.push(medicineId); }
+  if (patientId) { filters.push('sm.patient_id = ?'); params.push(patientId); }
+  if (movementType) { filters.push('sm.movement_type = ?'); params.push(movementType); }
+  if (from) { filters.push('sm.movement_date >= ?'); params.push(from); }
+  if (to) { filters.push('sm.movement_date <= ?'); params.push(to); }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT sm.*, m.name AS medicine_name, m.unit, p.full_name AS patient_name
+     FROM stock_movements sm
+     JOIN medicines m ON m.id = sm.medicine_id
+     LEFT JOIN patients p ON p.id = sm.patient_id
+     ${where}
+     ORDER BY sm.movement_date DESC, sm.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM stock_movements sm ${where}`, params
+  );
+  return { rows, total };
+};
+
+/** Grouped totals per medicine per day — powers the "daily movements" tab. */
+const dailyMovementSummary = async ({ date }) => {
+  const [rows] = await db.execute(
+    `SELECT m.id AS medicine_id, m.name AS medicine_name, m.unit,
+            SUM(CASE WHEN sm.movement_type = 'receipt' THEN sm.quantity ELSE 0 END) AS received_qty,
+            SUM(CASE WHEN sm.movement_type = 'sale' THEN -sm.quantity ELSE 0 END) AS dispensed_qty,
+            SUM(CASE WHEN sm.movement_type = 'return' THEN sm.quantity ELSE 0 END) AS returned_qty,
+            SUM(CASE WHEN sm.movement_type = 'adjustment' THEN sm.quantity ELSE 0 END) AS adjusted_qty
+     FROM stock_movements sm
+     JOIN medicines m ON m.id = sm.medicine_id
+     WHERE sm.movement_date = ?
+     GROUP BY m.id
+     ORDER BY m.name`,
+    [date]
+  );
+  return rows;
+};
+
+/* ─────────────────────────────────────────────
+   REPORTS — low stock / expiry / non-movable
+───────────────────────────────────────────── */
+
+/** Medicines at or below their minimum-stock threshold (reorder_level). */
+const lowStockReport = async () => {
+  const [rows] = await db.execute(
+    `SELECT m.id AS medicine_id, m.name, m.generic_name, m.unit, m.reorder_level,
+            COALESCE(SUM(mb.qty_in_stock), 0) AS total_stock
+     FROM medicines m
+     LEFT JOIN medicine_batches mb ON mb.medicine_id = m.id AND mb.qty_in_stock > 0
+     WHERE m.is_active = 1
+     GROUP BY m.id
+     HAVING total_stock <= m.reorder_level
+     ORDER BY total_stock ASC`
+  );
+  return rows;
+};
+
+/** Batches expiring within `days` (includes already-expired, oldest first). */
+const expiringStockReport = async ({ days = 90 }) => {
+  const [rows] = await db.execute(
+    `SELECT mb.*, m.name AS medicine_name, m.generic_name, m.unit,
+            DATEDIFF(mb.expiry_date, CURDATE()) AS days_to_expiry
+     FROM medicine_batches mb
+     JOIN medicines m ON m.id = mb.medicine_id
+     WHERE mb.qty_in_stock > 0
+       AND mb.expiry_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+     ORDER BY mb.expiry_date ASC`,
+    [days]
+  );
+  return rows;
+};
+
+/**
+ * Non-movable ("dead") stock: medicines still holding stock that received
+ * at least once more than `days` ago, with zero 'sale' movement since.
+ */
+const nonMovableStockReport = async ({ days = 90 }) => {
+  const [rows] = await db.execute(
+    `SELECT m.id AS medicine_id, m.name, m.generic_name, m.unit,
+            COALESCE(SUM(mb.qty_in_stock), 0) AS total_stock,
+            MIN(mb.received_at) AS oldest_batch_received_at,
+            (SELECT MAX(sm2.movement_date) FROM stock_movements sm2
+              WHERE sm2.medicine_id = m.id AND sm2.movement_type = 'sale') AS last_sale_date
+     FROM medicines m
+     JOIN medicine_batches mb ON mb.medicine_id = m.id AND mb.qty_in_stock > 0
+     WHERE mb.received_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
+     GROUP BY m.id
+     HAVING total_stock > 0
+        AND (last_sale_date IS NULL OR last_sale_date < DATE_SUB(CURDATE(), INTERVAL ? DAY))
+     ORDER BY total_stock DESC`,
+    [days, days]
+  );
+  return rows;
+};
+
 module.exports = {
-  listMedicines, getMedicineByBarcode, getMedicine, createMedicine, updateMedicine,
+  listMedicines, getMedicineByBarcode, getMedicine, createMedicine, updateMedicine, listCategories, createCategory,
   listBatches, listAllBatches, addBatch, fifoDeduct,
-  listBills, getBill, createBill, addBillItem,
+  listBills, getBill, createBill, addBillItem, updateBillPayment,
   suggestMedicines,
+  listSuppliers, getSupplier, createSupplier, updateSupplier,
+  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, updatePurchaseOrderStatus,
+  listGoodsReceipts, getGoodsReceipt, createGoodsReceipt, updateGoodsReceiptPayment, closeGoodsReceipt,
+  logStockMovement, listMovements, dailyMovementSummary,
+  lowStockReport, expiringStockReport, nonMovableStockReport,
 };

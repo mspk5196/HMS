@@ -12,6 +12,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
   const availableRoles = (currentDept?.roles || []).map(r => typeof r === 'string' ? r : r.roleName);
 
   const [formData, setFormData] = useState({
+    employeeCode: '',
     name: '',
     qualification: '',
     position: availableRoles.length > 0 ? availableRoles[0] : '',
@@ -42,6 +43,11 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
 
   const validate = () => {
     const newErrors = {};
+    if (!formData.employeeCode.trim()) {
+      newErrors.employeeCode = 'Employee code is required.';
+    } else if (!/^[A-Za-z0-9._-]+$/.test(formData.employeeCode.trim())) {
+      newErrors.employeeCode = 'Use only letters, numbers, dot, dash or underscore.';
+    }
     if (!formData.name.trim()) newErrors.name = 'Member name is required.';
     if (!formData.qualification.trim()) newErrors.qualification = 'Qualification is required.';
     if (!formData.position.trim()) newErrors.position = 'Please select or enter a position.';
@@ -105,6 +111,25 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Employee Code — must match the biometric device */}
+          <div className="space-y-1.5 md:col-span-2">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+              Employee Code <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.employeeCode}
+              onChange={(e) => handleChange('employeeCode', e.target.value)}
+              placeholder="e.g. 1042"
+              className={`w-full px-3.5 py-2.5 border rounded-lg text-xs font-semibold text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
+                errors.employeeCode ? 'border-red-400 bg-red-50/30' : 'border-gray-200 bg-white'
+              }`}
+            />
+            {errors.employeeCode
+              ? <p className="text-[11px] text-red-500">{errors.employeeCode}</p>
+              : <p className="text-[11px] text-gray-400">Must exactly match this staff member's Emp Code on the biometric device — attendance is matched on this, not on name.</p>}
           </div>
 
           {/* Member Name */}

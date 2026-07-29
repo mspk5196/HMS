@@ -55,13 +55,28 @@ const processDay = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/attendance/punches/import
- * Body: { punches: [{ employee_id, punch_time, device_id?, punch_type? }] }
+ * Body: { punches: [{ employee_code | employee_id, punch_time, device_id?, punch_type? }] }
+ *
+ * The device exports employee_code, so that is the primary identifier. Codes
+ * matching no employee are still stored and returned in `unmatchedCodes`.
  */
 const importPunches = asyncHandler(async (req, res) => {
   const { punches } = req.body;
   if (!Array.isArray(punches)) return res.status(400).json(fail('punches must be an array'));
   const result = await svc.importPunches(punches);
-  return res.status(201).json(created(result, `${result.imported} punches imported`));
+  const note = result.unmatchedCodes.length
+    ? ` ${result.unmatchedCodes.length} code(s) matched no employee.`
+    : '';
+  return res.status(201).json(
+    created(result, `${result.inserted} punch(es) imported, ${result.duplicatesIgnored} duplicate(s) ignored.${note}`)
+  );
+});
+
+/** GET /api/attendance/punches/unmatched?fromDate=&toDate= */
+const listUnmatchedPunches = asyncHandler(async (req, res) => {
+  const { fromDate, toDate } = req.query;
+  if (!fromDate || !toDate) return res.status(400).json(fail('fromDate and toDate are required'));
+  return res.json(success(await svc.getUnmatchedPunches(fromDate, toDate)));
 });
 
 /* ─────────────────────────────────────────────
@@ -119,7 +134,7 @@ const listCorrections = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/attendance/corrections
- * Body: { employee_id, attendance_date, requested_first_in?, requested_last_out?, reason }
+ * Body: { employee_id, attendance_date, requested_in_time?, requested_out_time?, reason }
  */
 const createCorrection = asyncHandler(async (req, res) => {
   const id = await svc.submitCorrectionRequest(req.body);
@@ -128,7 +143,7 @@ const createCorrection = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/attendance/corrections/:id/review
- * Body: { status: 'approved'|'rejected', reviewer_notes? }
+ * Body: { status: 'approved'|'rejected' }
  */
 const reviewCorrection = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -172,6 +187,7 @@ module.exports = {
   getSummary,
   processDay,
   importPunches,
+  listUnmatchedPunches,
   manualMark,
   listBiometricWindows,
   createBiometricWindow,

@@ -17,14 +17,18 @@ router.post('/holidays', requirePermissions(['manage_hr']), ctrl.createHoliday);
 router.get('/balances', ctrl.getBalances);
 router.post('/balances', requirePermissions(['manage_leaves']), ctrl.setBalance);
 
-// Leave Requests
+// Leave Requests — two-step approval: reporting person, then HR
 router.get('/requests', ctrl.listRequests);
 router.post('/requests', ctrl.createRequest); // any employee can request
 router.get('/requests/:id', ctrl.getRequest);
-router.patch('/requests/:id/review', requirePermissions(['approve_leaves']), ctrl.reviewRequest);
+router.patch('/requests/:id/review-reporting', requirePermissions(['approve_leaves']), ctrl.reviewReporting);
+router.patch('/requests/:id/review-hr', requirePermissions(['approve_leaves']), ctrl.reviewHR);
+
+// Unexplained absences — outcome 3: LOP + Fine Engine trigger
+router.post('/absences/unexplained', requirePermissions(['manage_leaves']), ctrl.recordUnexplainedAbsence);
 
 // Week Off Policies
 router.get('/week-offs', ctrl.listWeekOffs);
-router.post('/week-offs', requirePermissions(['manage_hr']), ctrl.createWeekOff);
+router.post('/week-offs', requirePermissions(['manage_hr']), ctrl.setWeekOff);
 
 module.exports = router;

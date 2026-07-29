@@ -136,18 +136,33 @@ const getEmployeesForRoster = asyncHandler(async (req, res) => {
   return res.json(success(data));
 });
 
+const getRosterWeek = asyncHandler(async (req, res) => {
+  const { weekStart, departmentId, staffRoleId } = req.query;
+  const data = await rosterSvc.getWeek({
+    weekStart,
+    departmentId: departmentId ? Number(departmentId) : null,
+    staffRoleId: staffRoleId ? Number(staffRoleId) : null,
+  });
+  return res.json(success(data));
+});
+
 const saveRosterDay = asyncHandler(async (req, res) => {
-  await rosterSvc.saveRosterDay(req.body);
+  await rosterSvc.saveRosterDay(req.body, req.user?.id ?? null);
   return res.json(success(null, 'Roster updated'));
 });
 
 const bulkSaveRoster = asyncHandler(async (req, res) => {
-  const { rows } = req.body;
+  const { rows, weekStart } = req.body;
   if (!Array.isArray(rows) || !rows.length) {
     return res.status(400).json(fail('rows array is required'));
   }
-  await rosterSvc.bulkSaveRoster(rows);
-  return res.json(success(null, `Saved ${rows.length} roster entries`));
+  const result = await rosterSvc.bulkSaveRoster(rows, req.user?.id ?? null, weekStart);
+  return res.json(success(result, `Saved ${result.saved} roster entries`));
+});
+
+const swapRosterShifts = asyncHandler(async (req, res) => {
+  const data = await rosterSvc.swapShifts(req.body, req.user?.id ?? null);
+  return res.json(success(data, 'Shifts swapped'));
 });
 
 module.exports = {
@@ -157,5 +172,5 @@ module.exports = {
   listRoles, createRole,
   listShifts, createShift, updateShift, deleteShift,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
-  getRoster, getEmployeesForRoster, saveRosterDay, bulkSaveRoster,
+  getRoster, getRosterWeek, getEmployeesForRoster, saveRosterDay, bulkSaveRoster, swapRosterShifts,
 };
