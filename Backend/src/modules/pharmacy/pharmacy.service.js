@@ -55,6 +55,20 @@ const deleteCategory = async (id) => {
   }
 };
 
+const createFormFactor = async (name) => {
+  if (!name || !name.trim()) throw new AppError('Form factor name is required', 400);
+  return q.createFormFactor(name.trim());
+};
+
+const updateFormFactor = async (id, name) => {
+  if (!name || !name.trim()) throw new AppError('Form factor name is required', 400);
+  await q.updateFormFactor(id, name.trim());
+};
+
+const deleteFormFactor = async (id) => {
+  await q.deleteFormFactor(id);
+};
+
 /* ─────────────────────────────────────────────
    STOCK (BATCH) MANAGEMENT — manual / opening stock entry
 ───────────────────────────────────────────── */
@@ -359,6 +373,9 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  createFormFactor,
+  updateFormFactor,
+  deleteFormFactor,
   addBatch,
   lookupByBarcode,
   suggestFromPrescription,
@@ -379,6 +396,7 @@ module.exports = {
   listMedicines: q.listMedicines,
   getMedicine: q.getMedicine,
   listCategories: q.listCategories,
+  listFormFactors: q.listFormFactors,
   listAllBatches: q.listAllBatches,
   listBills: q.listBills,
   getBill: q.getBill,

@@ -1,14 +1,30 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../../util/api';
 
-const FORM_OPTIONS = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Other'];
+const DEFAULT_FORM_OPTIONS = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Other'];
 
 export default function MedicineForm({ categories, initialData, onCancel, onSubmit, onCreateCategory }) {
   const [categoryOptions, setCategoryOptions] = useState(categories);
+  const [formOptions, setFormOptions] = useState(DEFAULT_FORM_OPTIONS);
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isSavingCategory, setIsSavingCategory] = useState(false);
 
   useEffect(() => { setCategoryOptions(categories); }, [categories]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const ffs = await apiFetch('/pharmacy/medicines/form-factors');
+        if (Array.isArray(ffs) && ffs.length > 0) {
+          const names = ffs.map((f) => f.name);
+          setFormOptions(Array.from(new Set([...names, ...DEFAULT_FORM_OPTIONS])).sort());
+        }
+      } catch {
+        /* fallback to defaults */
+      }
+    })();
+  }, []);
 
   const [values, setValues] = useState({
     name: initialData?.name || '',
@@ -119,7 +135,7 @@ export default function MedicineForm({ categories, initialData, onCancel, onSubm
           <Field label="Form">
             <select value={values.form} onChange={set('form')} className={inputCls}>
               <option value="">Select form…</option>
-              {FORM_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+              {formOptions.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </Field>
           <Field label="Strength">

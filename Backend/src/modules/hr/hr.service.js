@@ -113,12 +113,27 @@ const deleteStaffRole = async (id) => {
   await q.deleteStaffRole(id);
 };
 
+const remapEmployee = async (data, userId) => {
+  if (!data.employee_id || !data.to_department_id || !data.to_role_id || !data.from_date) {
+    throw new AppError('employee_id, to_department_id, to_role_id, and from_date are required', 400);
+  }
+  await q.remapEmployee(data, userId);
+};
+
+const updateEmployeeSalary = async (employeeId, data, userId) => {
+  if (!data.effective_from) {
+    throw new AppError('effective_from date is required', 400);
+  }
+  await q.updateEmployeeSalary(employeeId, data, userId);
+};
+
 module.exports = {
   createEmployee, updateEmployee,
   createShift, updateShift, deleteShift,
   createDepartment, updateDepartment, deleteDepartment,
   createDesignation, createRole,
   createStaffRole, updateStaffRole, deleteStaffRole,
+  remapEmployee, updateEmployeeSalary,
   // Pass-through
   listEmployees: q.listEmployees,
   getEmployee: q.getEmployee,
@@ -128,4 +143,6 @@ module.exports = {
   listShifts: q.listShifts,
   listStaffRoles: q.listStaffRoles,
   getStaffRole: q.getStaffRole,
+  listRemappingLogs: q.listRemappingLogs,
+  listSalaryLogs: q.listSalaryLogs,
 };

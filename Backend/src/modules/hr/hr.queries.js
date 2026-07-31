@@ -457,6 +457,165 @@ const isShiftInUse = async (shiftId) => {
   return (c1 + c2 + c3) > 0;
 };
 
+/* ─── REMAPPING & SALARY LOGGING ─── */
+
+const remapEmployee = async ({ employee_id, to_department_id, to_role_id, from_date, notes }, userId = null) => {
+  const emp = await getEmployee(employee_id);
+  if (!emp) throw new Error('Employee not found');
+
+  const [deptRows] = await db.execute(`SELECT name FROM departments WHERE id = ?`, [to_department_id]);
+  const toDeptName = deptRows[0]?.name || '';
+
+  const [roleRows] = await db.execute(`SELECT name FROM staff_roles WHERE id = ?`, [to_role_id]);
+  const toRoleName = roleRows[0]?.name || '';
+
+  await db.execute(
+    `UPDATE employee_role_remapping_logs
+     SET to_date = ?
+     WHERE employee_id = ? AND to_date IS NULL`,
+    [from_date, employee_id]
+  );
+
+  await db.execute(
+    `INSERT INTO employee_role_remapping_logs
+       (employee_id, from_department_id, from_department_name, from_role_id, from_role_name,
+        to_department_id, to_department_name, to_role_id, to_role_name, from_date, remapped_by, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employee_id,
+      emp.department_id || null,
+      emp.department_name || null,
+      emp.designation_id || null,
+      emp.designation_name || null,
+      to_department_id,
+      toDeptName,
+      to_role_id,
+      toRoleName,
+      from_date,
+      userId,
+      notes || null
+    ]
+  );
+
+  await db.execute(
+    `UPDATE employees SET department_id = ?, designation_id = ? WHERE id = ?`,
+    [to_department_id, to_role_id, employee_id]
+  );
+};
+
+const listRemappingLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+
+  if (employeeId) {
+    filters.push('l.employee_id = ?');
+    params.push(employeeId);
+  }
+  if (search) {
+    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT l.*, e.full_name AS employee_name, e.employee_code, u.username AS remapped_by_name
+     FROM employee_role_remapping_logs l
+     JOIN employees e ON e.id = l.employee_id
+     LEFT JOIN users u ON u.id = l.remapped_by
+     ${where}
+     ORDER BY l.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total
+     FROM employee_role_remapping_logs l
+     JOIN employees e ON e.id = l.employee_id
+     ${where}`,
+    params
+  );
+
+  return { rows, total };
+};
+
+const updateEmployeeSalary = async (employeeId, data, userId = null) => {
+  const { salary_type, basic_salary, per_day_salary, per_night_salary, effective_from, reason } = data;
+  const emp = await getEmployee(employeeId);
+  if (!emp) throw new Error('Employee not found');
+
+  await db.execute(
+    `INSERT INTO employee_salary_logs
+       (employee_id, previous_salary_type, new_salary_type,
+        previous_basic_salary, new_basic_salary,
+        previous_per_day_salary, new_per_day_salary,
+        previous_per_night_salary, new_per_night_salary,
+        effective_from, reason, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employeeId,
+      emp.salary_type || 'monthly',
+      salary_type || 'monthly',
+      Number(emp.basic_salary) || 0,
+      Number(basic_salary) || 0,
+      Number(emp.per_day_salary) || 0,
+      Number(per_day_salary) || 0,
+      Number(emp.per_night_salary) || 0,
+      Number(per_night_salary) || 0,
+      effective_from,
+      reason || null,
+      userId
+    ]
+  );
+
+  await db.execute(
+    `UPDATE employees
+     SET salary_type = ?, basic_salary = ?, per_day_salary = ?, per_night_salary = ?
+     WHERE id = ?`,
+    [salary_type || 'monthly', Number(basic_salary) || 0, Number(per_day_salary) || 0, Number(per_night_salary) || 0, employeeId]
+  );
+};
+
+const listSalaryLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+
+  if (employeeId) {
+    filters.push('sl.employee_id = ?');
+    params.push(employeeId);
+  }
+  if (search) {
+    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT sl.*, e.full_name AS employee_name, e.employee_code, u.username AS changed_by_name
+     FROM employee_salary_logs sl
+     JOIN employees e ON e.id = sl.employee_id
+     LEFT JOIN users u ON u.id = sl.changed_by
+     ${where}
+     ORDER BY sl.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total
+     FROM employee_salary_logs sl
+     JOIN employees e ON e.id = sl.employee_id
+     ${where}`,
+    params
+  );
+
+  return { rows, total };
+};
+
 module.exports = {
   listEmployees, getEmployee, getEmployeeByCode, createEmployee, updateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
@@ -465,4 +624,5 @@ module.exports = {
   listShifts, createShift, updateShift, deleteShift, isShiftInUse,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   countEmployeesInDepartment, countStaffRolesInDepartment, countEmployeesWithStaffRole,
+  remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
 };

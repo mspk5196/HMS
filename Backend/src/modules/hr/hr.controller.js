@@ -165,6 +165,40 @@ const swapRosterShifts = asyncHandler(async (req, res) => {
   return res.json(success(data, 'Shifts swapped'));
 });
 
+/* ─── REMAPPING & SALARY LOGGING ─── */
+
+const remapEmployee = asyncHandler(async (req, res) => {
+  await svc.remapEmployee(req.body, req.user?.id ?? null);
+  return res.json(success(null, 'Employee remapped successfully'));
+});
+
+const listRemappingLogs = asyncHandler(async (req, res) => {
+  const { search, employeeId, page = 1, limit = 50 } = req.query;
+  const result = await svc.listRemappingLogs({
+    search: search || null,
+    employeeId: employeeId ? Number(employeeId) : null,
+    page: Number(page),
+    limit: Number(limit)
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+const updateEmployeeSalary = asyncHandler(async (req, res) => {
+  await svc.updateEmployeeSalary(Number(req.params.id), req.body, req.user?.id ?? null);
+  return res.json(success(null, 'Employee salary updated successfully'));
+});
+
+const listSalaryLogs = asyncHandler(async (req, res) => {
+  const { search, employeeId, page = 1, limit = 50 } = req.query;
+  const result = await svc.listSalaryLogs({
+    search: search || null,
+    employeeId: employeeId ? Number(employeeId) : null,
+    page: Number(page),
+    limit: Number(limit)
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
 module.exports = {
   listEmployees, getEmployee, createEmployee, updateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
@@ -173,4 +207,5 @@ module.exports = {
   listShifts, createShift, updateShift, deleteShift,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   getRoster, getRosterWeek, getEmployeesForRoster, saveRosterDay, bulkSaveRoster, swapRosterShifts,
+  remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
 };

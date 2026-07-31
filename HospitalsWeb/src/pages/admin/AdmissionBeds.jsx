@@ -118,6 +118,7 @@ function Occupancy({ onError, onSuccess }) {
   const [beds, setBeds] = useState([]);
   const [admissions, setAdmissions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [prescribeTarget, setPrescribeTarget] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -187,7 +188,7 @@ function Occupancy({ onError, onSuccess }) {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-bold text-gray-900">Currently Admitted ({admissions.length})</h2>
         </div>
         {admissions.length === 0 ? (
@@ -195,16 +196,182 @@ function Occupancy({ onError, onSuccess }) {
         ) : (
           <div className="divide-y divide-gray-100">
             {admissions.map((a) => (
-              <div key={a.id} className="p-3.5 flex items-center justify-between text-xs">
+              <div key={a.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="font-bold text-gray-900">{a.patient_name}</span>{' '}
                   <span className="text-gray-500">— {a.age_years} Yrs / {a.gender} · admitted {new Date(a.admission_datetime).toLocaleDateString('en-IN')}</span>
+                  <div className="text-[11px] text-gray-400 mt-0.5">Admitting Doctor: Dr. {a.doctor_name || '—'}</div>
                 </div>
-                <span className="text-gray-500">Dr. {a.doctor_name || '—'}</span>
+                <button
+                  onClick={() => setPrescribeTarget(a)}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold px-3 py-1.5 rounded-lg cursor-pointer text-xs whitespace-nowrap self-start sm:self-auto"
+                >
+                  + Add Medicine / Rx
+                </button>
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      {prescribeTarget && (
+        <InpatientPrescribeModal
+          admission={prescribeTarget}
+          onClose={() => setPrescribeTarget(null)}
+          onSuccess={(msg) => {
+            setPrescribeTarget(null);
+            onSuccess(msg);
+          }}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+function InpatientPrescribeModal({ admission, onClose, onSuccess, onError }) {
+  const [medicines, setMedicines] = useState([]);
+  const [lines, setLines] = useState([{ medicine_id: '', quantity: '1', discount_percent: '0' }]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [modalErr, setModalErr] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await apiFetch('/pharmacy/medicines?inStockOnly=true&limit=300', { withMeta: true });
+        setMedicines(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setModalErr(err.message || 'Failed to load medicines list.');
+      }
+    })();
+  }, []);
+
+  const updateLine = (idx, key, val) =>
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [key]: val } : l)));
+  const addLine = () => setLines((prev) => [...prev, { medicine_id: '', quantity: '1', discount_percent: '0' }]);
+  const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const valid = lines.filter((l) => l.medicine_id && Number(l.quantity) > 0);
+    if (!valid.length) { setModalErr('Please add at least one medicine with quantity.'); return; }
+
+    try {
+      setIsSaving(true);
+      setModalErr('');
+      const todayISO = new Date().toISOString().slice(0, 10);
+      await apiFetch('/pharmacy/bills', {
+        method: 'POST',
+        body: JSON.stringify({
+          patient_id: admission.patient_id,
+          admission_id: admission.id,
+          bill_date: todayISO,
+          payment_mode: 'credit',
+          discount_amount: 0,
+          paid_amount: 0,
+          items: valid.map((l) => ({
+            medicine_id: Number(l.medicine_id),
+            quantity: Number(l.quantity),
+            discount_percent: Number(l.discount_percent) || 0,
+          })),
+        }),
+      });
+      onSuccess(`Medicines prescribed & charged to ${admission.patient_name}'s stay.`);
+    } catch (err) {
+      setModalErr(err.message || 'Failed to record inpatient prescription.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-xl max-w-xl w-full p-6 shadow-xl space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">
+              Prescribe / Dispense Medicines
+            </h3>
+            <p className="text-xs text-gray-500">
+              Admission for <span className="font-semibold text-blue-600">{admission.patient_name}</span> (Logged &amp; billed at discharge)
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+        </div>
+
+        {modalErr && (
+          <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-2.5 rounded-lg">
+            {modalErr}
+          </div>
+        )}
+
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-3">
+            {lines.map((line, idx) => (
+              <div key={idx} className="flex items-center gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200/80 text-xs">
+                <select
+                  value={line.medicine_id}
+                  onChange={(e) => updateLine(idx, 'medicine_id', e.target.value)}
+                  className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium bg-white"
+                  required
+                >
+                  <option value="">Select in-stock medicine…</option>
+                  {medicines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} {[m.form, m.strength].filter(Boolean).join(' · ')} ({m.total_stock} {m.unit || 'units'} in stock)
+                    </option>
+                  ))}
+                </select>
+
+                <div className="w-20">
+                  <input
+                    type="number" min="1"
+                    value={line.quantity}
+                    onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
+                    placeholder="Qty"
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-center bg-white"
+                    required
+                  />
+                </div>
+
+                {lines.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeLine(idx)}
+                    className="text-rose-500 hover:text-rose-700 font-bold px-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={addLine}
+            className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+          >
+            + Add Another Medicine
+          </button>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-4 py-2 text-xs font-semibold bg-[#1e40af] hover:bg-[#1c399b] text-white rounded-lg cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Processing…' : 'Prescribe & Charge to Admission'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

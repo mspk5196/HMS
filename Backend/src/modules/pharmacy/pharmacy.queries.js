@@ -9,7 +9,7 @@ const db = require('../../config/db');
    MEDICINES (master)
 ───────────────────────────────────────────── */
 
-const listMedicines = async ({ search, includeInactive = false, page = 1, limit = 50 }) => {
+const listMedicines = async ({ search, includeInactive = false, inStockOnly = false, page = 1, limit = 50 }) => {
   const offset = (page - 1) * limit;
   const conditions = [];
   const params = [];
@@ -19,9 +19,13 @@ const listMedicines = async ({ search, includeInactive = false, page = 1, limit 
   }
 
   if (search) {
-    conditions.push('(m.name LIKE ? OR m.generic_name LIKE ? OR m.barcode LIKE ?)');
+    conditions.push('(LOWER(m.name) LIKE LOWER(?) OR LOWER(m.generic_name) LIKE LOWER(?) OR LOWER(m.barcode) LIKE LOWER(?))');
     const s = `%${search}%`;
     params.push(s, s, s);
+  }
+
+  if (inStockOnly) {
+    conditions.push('(SELECT COALESCE(SUM(mb.qty_in_stock), 0) FROM medicine_batches mb WHERE mb.medicine_id = m.id) > 0');
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -150,6 +154,28 @@ const deleteCategory = async (id) => {
 
   await db.execute(`UPDATE medicines SET category_id = NULL WHERE category_id = ?`, [id]);
   await db.execute(`DELETE FROM medicine_categories WHERE id = ?`, [id]);
+};
+
+/* ─────────────────────────────────────────────
+   FORM FACTORS
+───────────────────────────────────────────── */
+
+const listFormFactors = async () => {
+  const [rows] = await db.execute(`SELECT * FROM medicine_form_factors ORDER BY name`);
+  return rows;
+};
+
+const createFormFactor = async (name) => {
+  const [result] = await db.execute(`INSERT INTO medicine_form_factors (name) VALUES (?)`, [name]);
+  return result.insertId;
+};
+
+const updateFormFactor = async (id, name) => {
+  await db.execute(`UPDATE medicine_form_factors SET name = ? WHERE id = ?`, [name, id]);
+};
+
+const deleteFormFactor = async (id) => {
+  await db.execute(`DELETE FROM medicine_form_factors WHERE id = ?`, [id]);
 };
 
 /* ─────────────────────────────────────────────
@@ -348,7 +374,7 @@ const updateBillPayment = async (id, { paid_amount, balance_amount, payment_stat
  */
 const suggestMedicines = async (terms) => {
   if (!terms || !terms.length) return [];
-  const likeConditions = terms.map(() => '(m.name LIKE ? OR m.generic_name LIKE ?)').join(' OR ');
+  const likeConditions = terms.map(() => '(LOWER(m.name) LIKE LOWER(?) OR LOWER(m.generic_name) LIKE LOWER(?))').join(' OR ');
   const likeParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
 
   const [rows] = await db.execute(
@@ -763,6 +789,7 @@ const nonMovableStockReport = async ({ days = 90 }) => {
 
 module.exports = {
   listMedicines, getMedicineByBarcode, getMedicine, createMedicine, updateMedicine, deleteMedicine, listCategories, createCategory, updateCategory, deleteCategory,
+  listFormFactors, createFormFactor, updateFormFactor, deleteFormFactor,
   listBatches, listAllBatches, addBatch, fifoDeduct,
   listBills, getBill, createBill, addBillItem, updateBillPayment,
   suggestMedicines,

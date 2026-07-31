@@ -151,7 +151,7 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
     setItemField(idx, 'medicine_id', '');
     if (!term.trim()) { setItemField(idx, 'candidates', []); return; }
     try {
-      const { data } = await apiFetch(`/pharmacy/medicines?search=${encodeURIComponent(term)}&limit=8`, { withMeta: true });
+      const { data } = await apiFetch(`/pharmacy/medicines?search=${encodeURIComponent(term)}&inStockOnly=true&limit=10`, { withMeta: true });
       setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, candidates: data || [] } : it)));
     } catch {
       /* ignore search errors, keep typing */
@@ -159,8 +159,9 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
   };
 
   const pickMedicine = (idx, med) => {
+    const details = [med.name, med.generic_name ? `(${med.generic_name})` : '', [med.form, med.strength].filter(Boolean).join(' '), med.unit ? `[${med.unit}]` : ''].filter(Boolean).join(' ');
     setItems((prev) => prev.map((it, i) => (i === idx
-      ? { ...it, medicine_id: med.id, medicine_name: med.name, candidates: [] }
+      ? { ...it, medicine_id: med.id, medicine_name: details, candidates: [] }
       : it)));
   };
 
@@ -229,34 +230,60 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
 
   return (
     <form onSubmit={submit} className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-6">
-      <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-        <div>
-          <h2 className="text-sm font-bold text-gray-900">Token #{String(appointment.token_number).padStart(2, '0')} — {appointment.patient_name}</h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">{appointment.age_years} Yrs / {appointment.gender} · {appointment.mobile}</p>
-        </div>
+      <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-gray-900">
+          Consultation &amp; Prescription — <span className="text-blue-600">{appointment.patient_name}</span>
+        </h2>
+        <span className="text-xs font-bold text-blue-600">Token #{String(appointment.token_number).padStart(2, '0')}</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>
-          <textarea rows="2" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
+          <input
+            type="text"
+            value={diagnosis}
+            onChange={(e) => setDiagnosis(e.target.value)}
+            placeholder="e.g. Acute Viral Fever"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
+          />
         </div>
+
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Complaints</label>
-          <textarea rows="2" value={complaints} onChange={(e) => setComplaints(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
+          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Chief Complaints</label>
+          <input
+            type="text"
+            value={complaints}
+            onChange={(e) => setComplaints(e.target.value)}
+            placeholder="e.g. Fever for 2 days, headache"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
+          />
         </div>
-        <div className="space-y-1.5">
+
+        <div className="md:col-span-2 space-y-1.5">
           <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor Notes</label>
-          <textarea rows="2" value={doctorNotes} onChange={(e) => setDoctorNotes(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
+          <textarea
+            rows="2"
+            value={doctorNotes}
+            onChange={(e) => setDoctorNotes(e.target.value)}
+            placeholder="Clinical observations, advice, lab tests ordered..."
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs"
+          />
         </div>
+
         <div className="space-y-1.5">
           <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Follow-up Date</label>
-          <input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
+          <input
+            type="date"
+            value={followUpDate}
+            onChange={(e) => setFollowUpDate(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
+          />
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-2">
           <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Structured Prescription</label>
           <button type="button" onClick={addItem} className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer">+ Add Medicine</button>
         </div>
@@ -268,20 +295,33 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
                 type="text"
                 value={it.medicine_name}
                 onChange={(e) => searchMedicine(idx, e.target.value)}
-                placeholder="Search medicine..."
+                placeholder="Search in-stock medicine by name or generic name…"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
               />
               {it.medicine_id && <span className="absolute right-2 top-2.5 text-emerald-500 text-[10px] font-bold">✓ linked</span>}
               {it.candidates?.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md max-h-40 overflow-y-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto divide-y divide-gray-100">
                   {it.candidates.map((med) => (
                     <button
                       key={med.id}
                       type="button"
                       onClick={() => pickMedicine(idx, med)}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
+                      className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-blue-50 cursor-pointer flex items-center justify-between transition-colors"
                     >
-                      {med.name} {med.strength && <span className="text-gray-400">({med.strength})</span>}
+                      <div>
+                        <div className="font-bold text-gray-900">{med.name}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">
+                          {med.generic_name && <span className="italic mr-2 text-gray-600">{med.generic_name}</span>}
+                          <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                            {[med.form, med.strength, med.unit].filter(Boolean).join(' · ')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right ml-2 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                          {med.total_stock} {med.unit || 'units'}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>

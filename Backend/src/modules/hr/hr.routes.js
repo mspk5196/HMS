@@ -4,10 +4,14 @@ const { verifyToken, requirePermissions } = require('../../middleware/auth');
 
 router.use(verifyToken);
 
-// Employees
+// Employees — NOTE: static routes MUST precede /employees/:id
+router.get('/employees/remapping-logs', ctrl.listRemappingLogs);
+router.get('/employees/salary-logs', ctrl.listSalaryLogs);
+router.post('/employees/remap', requirePermissions(['manage_hr']), ctrl.remapEmployee);
 router.get('/employees', ctrl.listEmployees);
 router.get('/employees/:id', ctrl.getEmployee);
 router.post('/employees', requirePermissions(['manage_hr']), ctrl.createEmployee);
+router.patch('/employees/:id/salary', requirePermissions(['manage_hr']), ctrl.updateEmployeeSalary);
 router.patch('/employees/:id', requirePermissions(['manage_hr']), ctrl.updateEmployee);
 
 // Departments

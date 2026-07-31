@@ -9,10 +9,15 @@ const { success, created, paginated, fail } = require('../../utils/response');
 
 /* ─── MEDICINES ─── */
 
-/** GET /api/pharmacy/medicines?search=&page=&limit= */
+/** GET /api/pharmacy/medicines?search=&inStockOnly=&page=&limit= */
 const listMedicines = asyncHandler(async (req, res) => {
-  const { search, page = 1, limit = 50 } = req.query;
-  const result = await svc.listMedicines({ search: search || null, page: Number(page), limit: Number(limit) });
+  const { search, inStockOnly, page = 1, limit = 50 } = req.query;
+  const result = await svc.listMedicines({
+    search: search || null,
+    inStockOnly: inStockOnly === 'true',
+    page: Number(page),
+    limit: Number(limit)
+  });
   return res.json(paginated(result.rows, result.total, page, limit));
 });
 
@@ -38,6 +43,30 @@ const updateCategory = asyncHandler(async (req, res) => {
 const deleteCategory = asyncHandler(async (req, res) => {
   await svc.deleteCategory(Number(req.params.id));
   return res.json(success(null, 'Category deleted successfully'));
+});
+
+/** GET /api/pharmacy/medicines/form-factors */
+const listFormFactors = asyncHandler(async (req, res) => {
+  const rows = await svc.listFormFactors();
+  return res.json(success(rows));
+});
+
+/** POST /api/pharmacy/medicines/form-factors — Body: { name } */
+const createFormFactor = asyncHandler(async (req, res) => {
+  const id = await svc.createFormFactor(req.body.name);
+  return res.status(201).json(created({ id }, 'Form factor created'));
+});
+
+/** PATCH /api/pharmacy/medicines/form-factors/:id — Body: { name } */
+const updateFormFactor = asyncHandler(async (req, res) => {
+  await svc.updateFormFactor(Number(req.params.id), req.body.name);
+  return res.json(success(null, 'Form factor updated successfully'));
+});
+
+/** DELETE /api/pharmacy/medicines/form-factors/:id */
+const deleteFormFactor = asyncHandler(async (req, res) => {
+  await svc.deleteFormFactor(Number(req.params.id));
+  return res.json(success(null, 'Form factor deleted successfully'));
 });
 
 /** GET /api/pharmacy/medicines/:id */
@@ -312,7 +341,9 @@ const dailyMovementSummary = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  listMedicines, listCategories, createCategory, updateCategory, deleteCategory, getMedicine, getByBarcode, createMedicine, updateMedicine, deleteMedicine,
+  listMedicines, listCategories, createCategory, updateCategory, deleteCategory,
+  listFormFactors, createFormFactor, updateFormFactor, deleteFormFactor,
+  getMedicine, getByBarcode, createMedicine, updateMedicine, deleteMedicine,
   listStock, addStock,
   suggestMedicines,
   listBills, getBill, generateBill, recordBillPayment, closeBill,
