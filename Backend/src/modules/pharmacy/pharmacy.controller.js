@@ -28,6 +28,18 @@ const createCategory = asyncHandler(async (req, res) => {
   return res.status(201).json(created({ id }, 'Category created'));
 });
 
+/** PATCH /api/pharmacy/medicines/categories/:id — Body: { name } */
+const updateCategory = asyncHandler(async (req, res) => {
+  await svc.updateCategory(Number(req.params.id), req.body.name);
+  return res.json(success(null, 'Category updated successfully'));
+});
+
+/** DELETE /api/pharmacy/medicines/categories/:id */
+const deleteCategory = asyncHandler(async (req, res) => {
+  await svc.deleteCategory(Number(req.params.id));
+  return res.json(success(null, 'Category deleted successfully'));
+});
+
 /** GET /api/pharmacy/medicines/:id */
 const getMedicine = asyncHandler(async (req, res) => {
   const med = await svc.getMedicine(Number(req.params.id));
@@ -54,6 +66,12 @@ const createMedicine = asyncHandler(async (req, res) => {
 const updateMedicine = asyncHandler(async (req, res) => {
   await svc.updateMedicine(Number(req.params.id), req.body);
   return res.json(success(null, 'Medicine updated'));
+});
+
+/** DELETE /api/pharmacy/medicines/:id */
+const deleteMedicine = asyncHandler(async (req, res) => {
+  await svc.deleteMedicine(Number(req.params.id));
+  return res.json(success(null, 'Medicine deleted successfully'));
 });
 
 /* ─── BATCHES / STOCK ─── */
@@ -294,7 +312,7 @@ const dailyMovementSummary = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  listMedicines, listCategories, createCategory, getMedicine, getByBarcode, createMedicine, updateMedicine,
+  listMedicines, listCategories, createCategory, updateCategory, deleteCategory, getMedicine, getByBarcode, createMedicine, updateMedicine, deleteMedicine,
   listStock, addStock,
   suggestMedicines,
   listBills, getBill, generateBill, recordBillPayment, closeBill,

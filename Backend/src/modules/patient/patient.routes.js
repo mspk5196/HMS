@@ -4,20 +4,32 @@ const { verifyToken, requirePermissions } = require('../../middleware/auth');
 
 router.use(verifyToken);
 
-// Patients
+// Patients — static segments before /:id
+router.get('/patients/by-mobile/:mobile', ctrl.findByMobile);
 router.get('/patients', ctrl.listPatients);
 router.get('/patients/:id', ctrl.getPatient);
-router.post('/patients', ctrl.createPatient);
-router.patch('/patients/:id', ctrl.updatePatient);
+router.get('/patients/:id/history', ctrl.getPatientHistory);
+router.post('/patients', requirePermissions(['patient.modify']), ctrl.createPatient);
+router.patch('/patients/:id', requirePermissions(['patient.modify']), ctrl.updatePatient);
 
 // Appointments
 router.get('/appointments', ctrl.listAppointments);
-router.post('/appointments', ctrl.createAppointment);
-router.patch('/appointments/:id/status', ctrl.updateAppointmentStatus);
+router.get('/appointments/:id', ctrl.getAppointment);
+router.post('/appointments', requirePermissions(['appointment.modify']), ctrl.createAppointment);
+router.patch('/appointments/:id/status', requirePermissions(['appointment.modify']), ctrl.updateAppointmentStatus);
+router.post('/appointments/:id/close', requirePermissions(['appointment.close_appointment']), ctrl.closeWalkInVisit);
 
-// Admissions
+// Admissions & Beds
 router.get('/admissions', ctrl.listAdmissions);
-router.post('/admissions', ctrl.createAdmission);
-router.post('/discharges', ctrl.createDischarge);
+router.get('/admissions/:id', ctrl.getAdmission);
+router.get('/admissions/:id/discharge-preview', ctrl.previewDischarge);
+router.get('/admissions/:id/discharge', ctrl.getDischarge);
+router.post('/admissions', requirePermissions(['admission.convert_to_admission']), ctrl.createAdmission);
+router.post('/admissions/:id/beds', requirePermissions(['admission.assign_bed']), ctrl.assignBed);
+router.delete('/admissions/:id/beds/:bedId', requirePermissions(['admission.assign_bed']), ctrl.releaseBed);
+
+// Discharges
+router.post('/discharges', requirePermissions(['discharge.discharge_patient']), ctrl.createDischarge);
+router.post('/discharges/:admissionId/payment', requirePermissions(['discharge.modify']), ctrl.recordDischargePayment);
 
 module.exports = router;

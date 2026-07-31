@@ -31,9 +31,28 @@ const updateMedicine = async (id, data) => {
   await q.updateMedicine(id, data);
 };
 
+const deleteMedicine = async (id) => {
+  const medicine = await q.getMedicine(id);
+  if (!medicine) throw new AppError('Medicine not found', 404);
+  await q.deleteMedicine(id);
+};
+
 const createCategory = async (name) => {
   if (!name || !name.trim()) throw new AppError('Category name is required', 400);
   return q.createCategory(name.trim());
+};
+
+const updateCategory = async (id, name) => {
+  if (!name || !name.trim()) throw new AppError('Category name is required', 400);
+  await q.updateCategory(id, name.trim());
+};
+
+const deleteCategory = async (id) => {
+  try {
+    await q.deleteCategory(id);
+  } catch (err) {
+    throw new AppError(err.message, 400);
+  }
 };
 
 /* ─────────────────────────────────────────────
@@ -336,7 +355,10 @@ const nonMovableStockReport = (days) => q.nonMovableStockReport({ days: days ?? 
 module.exports = {
   createMedicine,
   updateMedicine,
+  deleteMedicine,
   createCategory,
+  updateCategory,
+  deleteCategory,
   addBatch,
   lookupByBarcode,
   suggestFromPrescription,

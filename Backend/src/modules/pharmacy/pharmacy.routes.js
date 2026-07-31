@@ -56,15 +56,21 @@
 
 const router = require('express').Router();
 const ctrl = require('./pharmacy.controller');
+const { verifyToken } = require('../../middleware/auth');
+
+router.use(verifyToken);
 
 // Medicines — NOTE: specific routes MUST come before /:id to avoid conflict
 router.get('/medicines/categories', ctrl.listCategories);
 router.post('/medicines/categories', ctrl.createCategory);
+router.patch('/medicines/categories/:id', ctrl.updateCategory);
+router.delete('/medicines/categories/:id', ctrl.deleteCategory);
 router.get('/medicines/barcode/:barcode', ctrl.getByBarcode);
 router.get('/medicines', ctrl.listMedicines);
 router.get('/medicines/:id', ctrl.getMedicine);
 router.post('/medicines', ctrl.createMedicine);
 router.patch('/medicines/:id', ctrl.updateMedicine);
+router.delete('/medicines/:id', ctrl.deleteMedicine);
 
 // Stock
 router.get('/stock', ctrl.listStock);

@@ -11,6 +11,7 @@ import PatientRecords from './PatientRecords';
 import Appointments from './Appointments';
 import ConsultationRx from './ConsultationRx';
 import PharmacyStock from './pharmacy/StockList';
+import PharmacyCategories from './pharmacy/MedicineCategories';
 import PharmacyDispense from './pharmacy/DispenseCounter';
 import PharmacyBillHistory from './pharmacy/BillHistory';
 import PharmacyPurchaseOrders from './pharmacy/PurchaseOrders';
@@ -62,6 +63,8 @@ export default function AdminDashboard({ user, onLogout }) {
         return <ConsultationRx />;
       case 'pharmacy-stock':
         return <PharmacyStock />;
+      case 'pharmacy-categories':
+        return <PharmacyCategories />;
       case 'pharmacy-dispense':
         return <PharmacyDispense />;
       case 'pharmacy-bills':

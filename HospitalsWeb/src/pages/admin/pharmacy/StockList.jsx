@@ -19,6 +19,9 @@ export default function StockList() {
   const [expandedMedicineId, setExpandedMedicineId] = useState(null);
   const [batchesByMedicine, setBatchesByMedicine] = useState({});
 
+  const [deletingMedicine, setDeletingMedicine] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); };
 
   const loadAll = useCallback(async () => {
@@ -64,6 +67,22 @@ export default function StockList() {
     setShowMedicineForm(false);
     setEditingMedicine(null);
     await loadAll();
+  };
+
+  const handleDeleteMedicine = async () => {
+    if (!deletingMedicine) return;
+    try {
+      setIsDeleting(true);
+      setErrorMsg('');
+      await apiFetch(`/pharmacy/medicines/${deletingMedicine.id}`, { method: 'DELETE' });
+      flash(`"${deletingMedicine.name}" removed from pharmacy stock.`);
+      setDeletingMedicine(null);
+      await loadAll();
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to delete medicine.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleCreateCategory = async (name) => {
@@ -175,6 +194,9 @@ export default function StockList() {
                       <button onClick={() => { setEditingMedicine(m); setShowMedicineForm(true); }} className="text-gray-500 hover:underline cursor-pointer font-semibold">
                         Edit
                       </button>
+                      <button onClick={() => setDeletingMedicine(m)} className="text-rose-600 hover:underline cursor-pointer font-semibold">
+                        Delete
+                      </button>
                     </td>
                   </tr>
                   {isExpanded && (
@@ -226,6 +248,34 @@ export default function StockList() {
           onCancel={() => setStockTargetMedicine(null)}
           onSubmit={handleAddStock}
         />
+      )}
+
+      {deletingMedicine && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-gray-100">
+            <h3 className="text-base font-bold text-gray-900">Delete Medicine</h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-gray-900">"{deletingMedicine.name}"</span> from pharmacy stock?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingMedicine(null)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteMedicine}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting…' : 'Delete Medicine'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

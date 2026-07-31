@@ -451,14 +451,17 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
    PAYSLIP VIEW
 ═══════════════════════════════════════════════════════════════════════ */
 
-function PayslipView({ payslip, onBack }) {
-  const { run, item, day_rate } = payslip;
-  const Row = ({ label, value, strong }) => (
+function PayslipRow({ label, value, strong }) {
+  return (
     <div className={`flex items-center justify-between py-1.5 ${strong ? 'font-bold text-gray-900' : 'text-gray-600'}`}>
       <span className="text-xs">{label}</span>
       <span className="text-xs">{value}</span>
     </div>
   );
+}
+
+function PayslipView({ payslip, onBack }) {
+  const { run, item, day_rate } = payslip;
 
   return (
     <div className="space-y-4">
@@ -483,33 +486,33 @@ function PayslipView({ payslip, onBack }) {
 
         <div className="py-3 border-b border-gray-100">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Attendance</div>
-          <Row label="Days present" value={item.days_present} />
-          <Row label="Paid leave days" value={item.days_paid_leave} />
-          <Row label="LOP days" value={item.days_lop} />
-          <Row label="Shifts worked" value={item.shifts_worked} />
+          <PayslipRow label="Days present" value={item.days_present} />
+          <PayslipRow label="Paid leave days" value={item.days_paid_leave} />
+          <PayslipRow label="LOP days" value={item.days_lop} />
+          <PayslipRow label="Shifts worked" value={item.shifts_worked} />
         </div>
 
         <div className="py-3 border-b border-gray-100">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Earnings</div>
-          <Row label="Monthly salary" value={money(item.base_salary_component)} />
-          <Row label="Night shift allowance" value={money(item.night_shift_component)} />
-          <Row label="Paid extra days" value={money(item.overtime_amount)} />
-          <Row label="Gross pay" value={money(item.gross_pay)} strong />
+          <PayslipRow label="Monthly salary" value={money(item.base_salary_component)} />
+          <PayslipRow label="Night shift allowance" value={money(item.night_shift_component)} />
+          <PayslipRow label="Paid extra days" value={money(item.overtime_amount)} />
+          <PayslipRow label="Gross pay" value={money(item.gross_pay)} strong />
         </div>
 
         <div className="py-3 border-b border-gray-100">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Deductions</div>
-          <Row label="LOP" value={money(item.lop_amount)} />
-          <Row label="Late buffer excess" value={money(item.buffer_late_deduction)} />
-          <Row label="Fines" value={money(item.fines_amount)} />
-          <Row label="PF (employee)" value={money(item.pf_employee_amount)} />
-          <Row label="ESI (employee)" value={money(item.esi_employee_amount)} />
+          <PayslipRow label="LOP" value={money(item.lop_amount)} />
+          <PayslipRow label="Late buffer excess" value={money(item.buffer_late_deduction)} />
+          <PayslipRow label="Fines" value={money(item.fines_amount)} />
+          <PayslipRow label="PF (employee)" value={money(item.pf_employee_amount)} />
+          <PayslipRow label="ESI (employee)" value={money(item.esi_employee_amount)} />
         </div>
 
         <div className="py-3 border-b border-gray-100">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employer Contribution (not deducted from pay)</div>
-          <Row label="PF (employer)" value={money(item.pf_employer_amount)} />
-          <Row label="ESI (employer)" value={money(item.esi_employer_amount)} />
+          <PayslipRow label="PF (employer)" value={money(item.pf_employer_amount)} />
+          <PayslipRow label="ESI (employer)" value={money(item.esi_employer_amount)} />
         </div>
 
         <div className="pt-3 flex items-center justify-between">

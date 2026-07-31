@@ -9,16 +9,22 @@ const db = require('../../config/db');
    MEDICINES (master)
 ───────────────────────────────────────────── */
 
-const listMedicines = async ({ search, page = 1, limit = 50 }) => {
+const listMedicines = async ({ search, includeInactive = false, page = 1, limit = 50 }) => {
   const offset = (page - 1) * limit;
-  let whereClause = '';
+  const conditions = [];
   const params = [];
 
+  if (!includeInactive) {
+    conditions.push('m.is_active = 1');
+  }
+
   if (search) {
-    whereClause = `WHERE (m.name LIKE ? OR m.generic_name LIKE ? OR m.barcode LIKE ?)`;
+    conditions.push('(m.name LIKE ? OR m.generic_name LIKE ? OR m.barcode LIKE ?)');
     const s = `%${search}%`;
     params.push(s, s, s);
   }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   // Correlated subqueries (not JOIN + GROUP BY) so this stays valid under
   // strict ONLY_FULL_GROUP_BY sql_mode regardless of how MySQL is configured.
@@ -95,14 +101,55 @@ const updateMedicine = async (id, data) => {
   await db.execute(`UPDATE medicines SET ${fields.join(', ')} WHERE id = ?`, vals);
 };
 
+const deleteMedicine = async (id) => {
+  const [[{ count }]] = await db.execute(
+    `SELECT (
+       (SELECT COUNT(*) FROM medicine_batches WHERE medicine_id = ?) +
+       (SELECT COUNT(*) FROM pharmacy_bill_items WHERE medicine_id = ?) +
+       (SELECT COUNT(*) FROM stock_movements WHERE medicine_id = ?) +
+       (SELECT COUNT(*) FROM purchase_order_items WHERE medicine_id = ?)
+     ) AS count`,
+    [id, id, id, id]
+  );
+
+  if (Number(count) > 0) {
+    await db.execute(`UPDATE medicines SET is_active = 0 WHERE id = ?`, [id]);
+  } else {
+    await db.execute(`DELETE FROM medicines WHERE id = ?`, [id]);
+  }
+};
+
 const listCategories = async () => {
-  const [rows] = await db.execute(`SELECT * FROM medicine_categories ORDER BY name`);
+  const [rows] = await db.execute(
+    `SELECT mc.*, COUNT(m.id) AS medicine_count
+     FROM medicine_categories mc
+     LEFT JOIN medicines m ON m.category_id = mc.id AND m.is_active = 1
+     GROUP BY mc.id, mc.name
+     ORDER BY mc.name`
+  );
   return rows;
 };
 
 const createCategory = async (name) => {
   const [result] = await db.execute(`INSERT INTO medicine_categories (name) VALUES (?)`, [name]);
   return result.insertId;
+};
+
+const updateCategory = async (id, name) => {
+  await db.execute(`UPDATE medicine_categories SET name = ? WHERE id = ?`, [name, id]);
+};
+
+const deleteCategory = async (id) => {
+  const [[{ count }]] = await db.execute(
+    `SELECT COUNT(*) AS count FROM medicines WHERE category_id = ? AND is_active = 1`,
+    [id]
+  );
+  if (Number(count) > 0) {
+    throw new Error(`Cannot delete category because ${count} medicine(s) are assigned to it. Please reassign or remove those medicines first.`);
+  }
+
+  await db.execute(`UPDATE medicines SET category_id = NULL WHERE category_id = ?`, [id]);
+  await db.execute(`DELETE FROM medicine_categories WHERE id = ?`, [id]);
 };
 
 /* ─────────────────────────────────────────────
@@ -235,12 +282,12 @@ const getBill = async (id) => {
   if (!bill) return null;
 
   const [items] = await db.execute(
-    `SELECT pbi.*, m.name AS medicine_name, m.generic_name, m.unit,
+    `SELECT pbi.*, pbi.subtotal AS total_price, m.name AS medicine_name, m.generic_name, m.unit,
             mb.batch_number, mb.expiry_date
      FROM pharmacy_bill_items pbi
      JOIN medicines m ON m.id = pbi.medicine_id
      LEFT JOIN medicine_batches mb ON mb.id = pbi.batch_id
-     WHERE pbi.bill_id = ?`,
+     WHERE pbi.pharmacy_bill_id = ?`,
     [id]
   );
   bill.items = items;
@@ -272,12 +319,13 @@ const createBill = async (header) => {
   return id;
 };
 
-const addBillItem = async ({ bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent, total_price }) => {
+const addBillItem = async ({ bill_id, pharmacy_bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent }) => {
+  const billId = pharmacy_bill_id || bill_id;
   await db.execute(
     `INSERT INTO pharmacy_bill_items
-       (bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent, total_price)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [bill_id, medicine_id, batch_id ?? null, quantity, unit_price, discount_percent ?? 0, total_price]
+       (pharmacy_bill_id, medicine_id, batch_id, quantity, unit_price, discount_percent)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [billId, medicine_id, batch_id ?? null, quantity, unit_price, discount_percent ?? 0]
   );
 };
 
@@ -714,7 +762,7 @@ const nonMovableStockReport = async ({ days = 90 }) => {
 };
 
 module.exports = {
-  listMedicines, getMedicineByBarcode, getMedicine, createMedicine, updateMedicine, listCategories, createCategory,
+  listMedicines, getMedicineByBarcode, getMedicine, createMedicine, updateMedicine, deleteMedicine, listCategories, createCategory, updateCategory, deleteCategory,
   listBatches, listAllBatches, addBatch, fifoDeduct,
   listBills, getBill, createBill, addBillItem, updateBillPayment,
   suggestMedicines,
