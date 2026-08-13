@@ -8,6 +8,7 @@ router.use(verifyToken);
 router.get('/types', ctrl.listLeaveTypes);
 router.post('/types', requirePermissions(['manage_leaves']), ctrl.createLeaveType);
 router.patch('/types/:id', requirePermissions(['manage_leaves']), ctrl.updateLeaveType);
+router.delete('/types/:id', requirePermissions(['manage_leaves']), ctrl.deleteLeaveType);
 
 // Holidays
 router.get('/holidays', ctrl.listHolidays);

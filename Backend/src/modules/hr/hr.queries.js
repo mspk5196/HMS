@@ -152,7 +152,7 @@ const listDepartments = async () => {
 
   // Query all active staff roles
   const [roles] = await db.execute(`
-    SELECT id, department_id, name AS roleName, basic_salary AS basicSalary
+    SELECT id, department_id, name AS roleName, basic_salary AS basicSalary, weekly_off_count AS weeklyOffCount, monthly_buffer_minutes AS monthlyBufferMinutes
     FROM staff_roles
     ORDER BY name
   `);
@@ -167,7 +167,7 @@ const listDepartments = async () => {
     staffCount: dept.staffCount,
     roles: roles
       .filter(r => r.department_id === dept.id)
-      .map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary }))
+      .map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30 }))
   }));
 };
 
@@ -240,8 +240,8 @@ const createDepartment = async (data) => {
       for (const r of roles) {
         if (!r.roleName) continue;
         await conn.execute(
-          `INSERT INTO staff_roles (department_id, name, basic_salary) VALUES (?, ?, ?)`,
-          [departmentId, r.roleName, r.basicSalary ?? 0.00]
+          `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes) VALUES (?, ?, ?, ?, ?)`,
+          [departmentId, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30]
         );
       }
     }
@@ -290,17 +290,16 @@ const updateDepartment = async (id, data) => {
         if (r.id) {
           // Update existing role
           await conn.execute(
-            `UPDATE staff_roles SET name = ?, basic_salary = ? WHERE id = ? AND department_id = ?`,
-            [r.roleName, r.basicSalary ?? 0.00, r.id, id]
+            `UPDATE staff_roles SET name = ?, basic_salary = ?, weekly_off_count = ?, monthly_buffer_minutes = ? WHERE id = ? AND department_id = ?`,
+            [r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.id, id]
           );
           keepIds.push(r.id);
         } else {
           // Insert new role
           const [insResult] = await conn.execute(
-            `INSERT INTO staff_roles (department_id, name, basic_salary) VALUES (?, ?, ?)`,
-            [id, r.roleName, r.basicSalary ?? 0.00]
+            `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes) VALUES (?, ?, ?, ?, ?)`,
+            [id, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30]
           );
-          // (No need to track new ids as they are not in currentIds)
         }
       }
 

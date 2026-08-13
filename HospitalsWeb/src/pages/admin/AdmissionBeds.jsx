@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import DoctorPicker from '../../components/DoctorPicker';
+import MedicineSearchSelect from '../../components/MedicineSearchSelect';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -309,19 +310,14 @@ function InpatientPrescribeModal({ admission, onClose, onSuccess, onError }) {
           <div className="space-y-3">
             {lines.map((line, idx) => (
               <div key={idx} className="flex items-center gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200/80 text-xs">
-                <select
+                <MedicineSearchSelect
                   value={line.medicine_id}
-                  onChange={(e) => updateLine(idx, 'medicine_id', e.target.value)}
-                  className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium bg-white"
-                  required
-                >
-                  <option value="">Select in-stock medicine…</option>
-                  {medicines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} {[m.form, m.strength].filter(Boolean).join(' · ')} ({m.total_stock} {m.unit || 'units'} in stock)
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => updateLine(idx, 'medicine_id', id)}
+                  medicines={medicines}
+                  placeholder="Search in-stock medicine..."
+                  className="flex-1"
+                  compact
+                />
 
                 <div className="w-20">
                   <input

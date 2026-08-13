@@ -593,6 +593,8 @@ function LeaveTypes({ onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingType, setEditingType] = useState(null);
+  const [deletingType, setDeletingType] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', quota_days: '', quota_period: 'yearly', is_lop_applicable: true, can_carry_forward: false, max_carry_forward_days: '',
@@ -612,6 +614,25 @@ function LeaveTypes({ onError, onSuccess }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const openNewForm = () => {
+    setEditingType(null);
+    setForm({ name: '', quota_days: '', quota_period: 'yearly', is_lop_applicable: true, can_carry_forward: false, max_carry_forward_days: '' });
+    setShowForm(true);
+  };
+
+  const openEditForm = (t) => {
+    setEditingType(t);
+    setForm({
+      name: t.name || '',
+      quota_days: t.quota_days ?? '',
+      quota_period: t.quota_period || 'yearly',
+      is_lop_applicable: !!t.is_lop_applicable,
+      can_carry_forward: !!t.can_carry_forward,
+      max_carry_forward_days: t.max_carry_forward_days ?? '',
+    });
+    setShowForm(true);
+  };
+
   const toggleActive = async (type) => {
     try {
       await apiFetch(`/leave/types/${type.id}`, { method: 'PATCH', body: JSON.stringify({ is_active: !type.is_active }) });
@@ -619,6 +640,21 @@ function LeaveTypes({ onError, onSuccess }) {
       await load();
     } catch (err) {
       onError(err, 'Failed to update the leave type.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingType) return;
+    try {
+      setIsSaving(true);
+      await apiFetch(`/leave/types/${deletingType.id}`, { method: 'DELETE' });
+      onSuccess(`Leave type "${deletingType.name}" deleted (deactivated).`);
+      setDeletingType(null);
+      await load();
+    } catch (err) {
+      onError(err, 'Failed to delete leave type.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -630,23 +666,35 @@ function LeaveTypes({ onError, onSuccess }) {
     }
     try {
       setIsSaving(true);
-      await apiFetch('/leave/types', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: form.name.trim(),
-          quota_days: Number(form.quota_days),
-          quota_period: form.quota_period,
-          is_lop_applicable: form.is_lop_applicable,
-          can_carry_forward: form.can_carry_forward,
-          max_carry_forward_days: form.can_carry_forward ? Number(form.max_carry_forward_days || 0) : 0,
-        }),
-      });
-      onSuccess('Leave type created.');
+      const payload = {
+        name: form.name.trim(),
+        quota_days: Number(form.quota_days),
+        quota_period: form.quota_period,
+        is_lop_applicable: form.is_lop_applicable,
+        can_carry_forward: form.can_carry_forward,
+        max_carry_forward_days: form.can_carry_forward ? Number(form.max_carry_forward_days || 0) : 0,
+      };
+
+      if (editingType) {
+        await apiFetch(`/leave/types/${editingType.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        onSuccess(`Leave type "${form.name.trim()}" updated.`);
+      } else {
+        await apiFetch('/leave/types', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        onSuccess('Leave type created.');
+      }
+
       setForm({ name: '', quota_days: '', quota_period: 'yearly', is_lop_applicable: true, can_carry_forward: false, max_carry_forward_days: '' });
+      setEditingType(null);
       setShowForm(false);
       await load();
     } catch (err) {
-      onError(err, 'Failed to create the leave type.');
+      onError(err, `Failed to ${editingType ? 'update' : 'create'} the leave type.`);
     } finally {
       setIsSaving(false);
     }
@@ -656,7 +704,10 @@ function LeaveTypes({ onError, onSuccess }) {
     <div className="space-y-4">
       <div className="flex justify-end">
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => {
+            if (showForm) { setShowForm(false); setEditingType(null); }
+            else { openNewForm(); }
+          }}
           className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
         >
           {showForm ? 'Cancel' : '+ New Leave Type'}
@@ -665,6 +716,9 @@ function LeaveTypes({ onError, onSuccess }) {
 
       {showForm && (
         <form onSubmit={submit} className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2 text-xs font-bold text-gray-900 border-b border-gray-100 pb-2">
+            {editingType ? `Edit Leave Type — ${editingType.name}` : 'Add New Leave Type'}
+          </div>
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Name</label>
             <input
@@ -717,13 +771,20 @@ function LeaveTypes({ onError, onSuccess }) {
           <div className="md:col-span-2 text-[11px] text-gray-400 italic">
             Half-day leave is not supported by this system and cannot be enabled.
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setEditingType(null); }}
+              className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={isSaving}
               className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
             >
-              {isSaving ? 'Saving…' : 'Create Leave Type'}
+              {isSaving ? 'Saving…' : editingType ? 'Update Leave Type' : 'Create Leave Type'}
             </button>
           </div>
         </form>
@@ -743,6 +804,7 @@ function LeaveTypes({ onError, onSuccess }) {
                 <th className="text-center px-3 py-2.5">Period</th>
                 <th className="text-center px-3 py-2.5">Carry-Forward</th>
                 <th className="text-center px-3 py-2.5">Status</th>
+                <th className="text-right px-4 py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -764,12 +826,55 @@ function LeaveTypes({ onError, onSuccess }) {
                       {t.is_active ? 'Active' : 'Inactive'}
                     </button>
                   </td>
+                  <td className="px-4 py-2.5 text-right space-x-3 font-semibold whitespace-nowrap">
+                    <button
+                      onClick={() => openEditForm(t)}
+                      className="text-blue-600 hover:underline cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeletingType(t)}
+                      className="text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Soft Delete Modal */}
+      {deletingType && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-gray-100">
+            <h3 className="text-base font-bold text-gray-900">Delete Leave Type</h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-gray-900">"{deletingType.name}"</span>? This will deactivate the leave type (soft delete).
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingType(null)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isSaving}
+                className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Deleting…' : 'Delete (Deactivate)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -55,6 +55,12 @@ const updateLeaveType = async (id, data) => {
   await q.updateLeaveType(id, data);
 };
 
+const deleteLeaveType = async (id) => {
+  const type = await q.getLeaveType(id);
+  if (!type) throw new AppError('Leave type not found', 404);
+  await q.deleteLeaveType(id);
+};
+
 /* ─────────────────────────────────────────────
    LEAVE APPLICATION
 ───────────────────────────────────────────── */
@@ -243,7 +249,7 @@ const allocateLeaveBalance = async (data) => {
 };
 
 module.exports = {
-  createLeaveType, updateLeaveType,
+  createLeaveType, updateLeaveType, deleteLeaveType,
   applyForLeave, reviewByReportingPerson, reviewByHR,
   recordUnexplainedAbsence,
   allocateLeaveBalance,

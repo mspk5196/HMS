@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { todayISO } from './pharmacyUtils';
 
@@ -93,10 +94,13 @@ export default function CreatePurchaseOrderForm({ onCancel, onSubmit }) {
           <div className="space-y-2">
             {items.map((it, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <select value={it.medicine_id} onChange={(e) => updateItem(idx, 'medicine_id', e.target.value)} className={`${inputCls} flex-1`}>
-                  <option value="">Select medicine…</option>
-                  {medicines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                <MedicineSearchSelect
+                  value={it.medicine_id}
+                  onChange={(id) => updateItem(idx, 'medicine_id', id)}
+                  medicines={medicines}
+                  className="flex-1"
+                  compact
+                />
                 <input type="number" min="1" placeholder="Qty" value={it.ordered_qty} onChange={(e) => updateItem(idx, 'ordered_qty', e.target.value)} className={`${inputCls} w-24`} />
                 <input type="number" min="0" step="0.01" placeholder="Est. Price" value={it.estimated_price} onChange={(e) => updateItem(idx, 'estimated_price', e.target.value)} className={`${inputCls} w-28`} />
                 <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer p-1.5">

@@ -17,6 +17,11 @@ const updateLeaveType = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Leave type updated'));
 });
 
+const deleteLeaveType = asyncHandler(async (req, res) => {
+  await svc.deleteLeaveType(Number(req.params.id));
+  return res.json(success(null, 'Leave type deleted'));
+});
+
 /* ─── HOLIDAYS ─── */
 const listHolidays = asyncHandler(async (req, res) => {
   const { year } = req.query;
@@ -99,7 +104,7 @@ const setWeekOff = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  listLeaveTypes, createLeaveType, updateLeaveType,
+  listLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType,
   listHolidays, createHoliday,
   getBalances, setBalance,
   listRequests, getRequest, createRequest, reviewReporting, reviewHR,

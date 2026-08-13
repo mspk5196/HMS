@@ -56,7 +56,7 @@ export default function DepartmentRole() {
           method: 'PATCH',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary) }))
+            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30) }))
           })
         });
         flash(`Department "${deptName}" updated successfully.`);
@@ -65,7 +65,7 @@ export default function DepartmentRole() {
           method: 'POST',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary) }))
+            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30) }))
           })
         });
         flash(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
@@ -265,6 +265,7 @@ export default function DepartmentRole() {
                             </span>
                             <span className="font-bold text-blue-700 text-[11px] whitespace-nowrap">
                               {typeof r === 'object' && r.basicSalary !== undefined ? `₹${Number(r.basicSalary).toLocaleString('en-IN')}` : ''}
+                              {typeof r === 'object' && r.weeklyOffCount !== undefined ? ` · ${r.weeklyOffCount} W/O` : ''}
                             </span>
                           </div>
                         ))}

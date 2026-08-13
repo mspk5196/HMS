@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { todayISO } from './pharmacyUtils';
 
@@ -145,29 +146,37 @@ export default function ReceiveGoodsForm({ onCancel, onSubmit }) {
         <div className="space-y-2">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Items Received</span>
           <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              <div className="col-span-3">Medicine *</div>
+              <div className="col-span-2">Batch #</div>
+              <div className="col-span-2">Expiry Date</div>
+              <div className="col-span-1 text-center">Qty</div>
+              <div className="col-span-2 text-center">Purch (₹)</div>
+              <div className="col-span-1 text-center">Sell (₹)</div>
+              <div className="col-span-1"></div>
+            </div>
             {items.map((it, idx) => (
               <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                <select
+                <MedicineSearchSelect
                   value={it.medicine_id}
-                  onChange={(e) => updateItem(idx, 'medicine_id', e.target.value)}
+                  onChange={(id) => updateItem(idx, 'medicine_id', id)}
+                  medicines={medicines}
                   disabled={!!it.purchase_order_item_id}
-                  className={`${inputCls} col-span-3`}
-                >
-                  <option value="">Medicine…</option>
-                  {medicines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-                <input placeholder="Batch #" value={it.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className={`${inputCls} col-span-2`} />
-                <input type="date" value={it.expiry_date} onChange={(e) => updateItem(idx, 'expiry_date', e.target.value)} className={`${inputCls} col-span-2`} />
-                <input type="number" min="1" placeholder="Qty" value={it.qty_received} onChange={(e) => updateItem(idx, 'qty_received', e.target.value)} className={`${inputCls} col-span-1`} />
-                <input type="number" min="0" step="0.01" placeholder="Purch. ₹" value={it.purchase_price} onChange={(e) => updateItem(idx, 'purchase_price', e.target.value)} className={`${inputCls} col-span-2`} />
-                <input type="number" min="0" step="0.01" placeholder="Sell ₹" value={it.selling_price} onChange={(e) => updateItem(idx, 'selling_price', e.target.value)} className={`${inputCls} col-span-1`} />
-                <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1">
+                  className="col-span-3"
+                  compact
+                />
+                <input placeholder="Batch #" value={it.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
+                <input type="date" value={it.expiry_date} onChange={(e) => updateItem(idx, 'expiry_date', e.target.value)} className={`${inputCls} col-span-2 px-1.5 text-xs`} />
+                <input type="number" min="1" placeholder="Qty" value={it.qty_received} onChange={(e) => updateItem(idx, 'qty_received', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
+                <input type="number" min="0" step="0.01" placeholder="Purch ₹" value={it.purchase_price} onChange={(e) => updateItem(idx, 'purchase_price', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
+                <input type="number" min="0" step="0.01" placeholder="Sell ₹" value={it.selling_price} onChange={(e) => updateItem(idx, 'selling_price', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
+                <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1 flex justify-center">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             ))}
           </div>
-          <button type="button" onClick={addItemRow} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">+ Add another item</button>
+          <button type="button" onClick={addItemRow} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer pt-1">+ Add another item</button>
         </div>
 
         <Field label="Notes">

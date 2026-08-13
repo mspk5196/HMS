@@ -4,8 +4,8 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   const [deptName, setDeptName] = useState(initialData ? initialData.name : '');
   const [roles, setRoles] = useState(
     initialData && initialData.roles && initialData.roles.length > 0
-      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary }))
-      : [{ roleName: '', basicSalary: '' }]
+      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30 }))
+      : [{ roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30 }]
   );
   const [errors, setErrors] = useState({});
 
@@ -23,7 +23,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   };
 
   const addRole = () => {
-    setRoles(prev => [...prev, { roleName: '', basicSalary: '' }]);
+    setRoles(prev => [...prev, { roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30 }]);
   };
 
   const removeRole = (idx) => {
@@ -136,33 +136,39 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
             </button>
           </div>
 
-          <div className="grid grid-cols-12 gap-3 px-1">
-            <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">#</div>
-            <div className="col-span-6 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+          <div className="grid grid-cols-12 gap-2 px-1">
+            <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">#</div>
+            <div className="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Role Name <span className="text-red-400">*</span>
             </div>
-            <div className="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Basic Salary (₹) <span className="text-red-400">*</span>
+            </div>
+            <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Weekly Offs per month">
+              W-Off
+            </div>
+            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Monthly Buffer Minutes">
+              Buffer (min)
             </div>
             <div className="col-span-1"></div>
           </div>
 
           <div className="space-y-3">
             {roles.map((role, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-3 items-start">
+              <div key={idx} className="grid grid-cols-12 gap-2 items-start">
                 <div className="col-span-1 flex items-center justify-center h-10">
                   <span className="text-xs font-bold text-gray-400 bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center">
                     {idx + 1}
                   </span>
                 </div>
 
-                <div className="col-span-6 space-y-1">
+                <div className="col-span-4 space-y-1">
                   <input
                     type="text"
                     value={role.roleName}
                     onChange={(e) => handleRoleChange(idx, 'roleName', e.target.value)}
                     placeholder="e.g. Head Nurse"
-                    className={`w-full px-3.5 py-2.5 border rounded-lg text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
+                    className={`w-full px-3 py-2.5 border rounded-lg text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
                       errors[`role_${idx}_roleName`] ? 'border-red-400 bg-red-50/30' : 'border-gray-200 bg-white'
                     }`}
                   />
@@ -176,9 +182,9 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   )}
                 </div>
 
-                <div className="col-span-4 space-y-1">
+                <div className="col-span-3 space-y-1">
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-semibold pointer-events-none">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-semibold pointer-events-none">
                       ₹
                     </span>
                     <input
@@ -187,7 +193,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                       onChange={(e) => handleRoleChange(idx, 'basicSalary', e.target.value)}
                       placeholder="e.g. 25000"
                       min="0"
-                      className={`w-full pl-7 pr-3 py-2.5 border rounded-lg text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
+                      className={`w-full pl-6 pr-2 py-2.5 border rounded-lg text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
                         errors[`role_${idx}_basicSalary`] ? 'border-red-400 bg-red-50/30' : 'border-gray-200 bg-white'
                       }`}
                     />
@@ -200,6 +206,30 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                       {errors[`role_${idx}_basicSalary`]}
                     </p>
                   )}
+                </div>
+
+                <div className="col-span-1 space-y-1">
+                  <input
+                    type="number"
+                    value={role.weeklyOffCount ?? 4}
+                    onChange={(e) => handleRoleChange(idx, 'weeklyOffCount', e.target.value)}
+                    placeholder="4"
+                    min="0" max="15"
+                    title="Weekly Offs per month"
+                    className="w-full px-1 py-2.5 border border-gray-200 bg-white rounded-lg text-xs font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="col-span-2 space-y-1">
+                  <input
+                    type="number"
+                    value={role.monthlyBufferMinutes ?? 30}
+                    onChange={(e) => handleRoleChange(idx, 'monthlyBufferMinutes', e.target.value)}
+                    placeholder="30"
+                    min="0" max="600"
+                    title="Monthly Buffer Minutes"
+                    className="w-full px-2 py-2.5 border border-gray-200 bg-white rounded-lg text-xs font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  />
                 </div>
 
                 <div className="col-span-1 flex items-center justify-center h-10">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { formatDate, todayISO } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
@@ -142,10 +143,13 @@ function DrugWiseMovements({ onError }) {
   return (
     <div className="space-y-4">
       <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
-        <select value={medicineId} onChange={(e) => setMedicineId(e.target.value)} className="w-full sm:w-80 px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-900">
-          <option value="">Select a medicine…</option>
-          {medicines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        <MedicineSearchSelect
+          value={medicineId}
+          onChange={(id) => setMedicineId(id)}
+          medicines={medicines}
+          placeholder="Search & pick a medicine to view movements..."
+          className="w-full sm:w-96"
+        />
       </div>
       <MovementsTable rows={rows} isLoading={isLoading} showPatient placeholder="Pick a medicine to see its full movement history." />
     </div>

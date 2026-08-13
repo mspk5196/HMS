@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, todayISO } from './pharmacyUtils';
 
@@ -191,14 +192,13 @@ export default function DispenseCounter() {
               const med = medicineById[l.medicine_id];
               return (
                 <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <select value={l.medicine_id} onChange={(e) => updateLine(idx, 'medicine_id', e.target.value)} className={`${inputCls} col-span-6`}>
-                    <option value="">Select medicine…</option>
-                    {medicines.map((m) => (
-                      <option key={m.id} value={m.id} disabled={m.total_stock <= 0}>
-                        {m.name} {m.total_stock <= 0 ? '(out of stock)' : `— ${m.total_stock} in stock`}
-                      </option>
-                    ))}
-                  </select>
+                  <MedicineSearchSelect
+                    value={l.medicine_id}
+                    onChange={(id) => updateLine(idx, 'medicine_id', id)}
+                    medicines={medicines}
+                    className="col-span-6"
+                    compact
+                  />
                   <input type="number" min="1" placeholder="Qty" value={l.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} className={`${inputCls} col-span-2`} />
                   <input type="number" min="0" max="100" placeholder="Disc %" value={l.discount_percent} onChange={(e) => updateLine(idx, 'discount_percent', e.target.value)} className={`${inputCls} col-span-2`} />
                   <div className="col-span-1 text-[11px] text-gray-500 text-right">{med ? formatCurrency(med.selling_price) : ''}</div>

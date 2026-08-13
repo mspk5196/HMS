@@ -15,8 +15,9 @@ const db = require('../../config/db');
 
 /* ─── LEAVE TYPES ─── */
 
-const listLeaveTypes = async () => {
-  const [rows] = await db.execute(`SELECT * FROM leave_types ORDER BY name`);
+const listLeaveTypes = async (includeInactive = true) => {
+  const where = includeInactive ? '' : 'WHERE is_active = 1';
+  const [rows] = await db.execute(`SELECT * FROM leave_types ${where} ORDER BY name`);
   return rows;
 };
 
@@ -51,6 +52,10 @@ const updateLeaveType = async (id, data) => {
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE leave_types SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+const deleteLeaveType = async (id) => {
+  await db.execute(`UPDATE leave_types SET is_active = 0 WHERE id = ?`, [id]);
 };
 
 /* ─── HOLIDAYS ─── */
@@ -252,7 +257,7 @@ const upsertWeekOffPolicy = async ({ designation_id, week_offs_per_month, prefer
 };
 
 module.exports = {
-  listLeaveTypes, getLeaveType, createLeaveType, updateLeaveType,
+  listLeaveTypes, getLeaveType, createLeaveType, updateLeaveType, deleteLeaveType,
   listHolidays, createHoliday,
   getLeaveBalances, getLeaveBalance, getTotalRemainingBalance, upsertLeaveBalance, allocateLeaveBalance,
   listLeaveRequests, getLeaveRequest, findRequestCoveringDate,
