@@ -143,38 +143,65 @@ export default function ReceiveGoodsForm({ onCancel, onSubmit }) {
           </Field>
         </div>
 
+        <div className="bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
+          <span className="text-emerald-600 font-bold">ℹ️ Note:</span>
+          <span className="text-[11px] leading-relaxed">
+            Enter <strong>Received Qty</strong> in <strong>Strips / Packs</strong> and enter <strong>Purchase &amp; Selling Prices</strong> per <strong>1 Strip / Pack</strong>.
+            The system automatically converts stock into individual tablets for patient dispensing.
+          </span>
+        </div>
+
         <div className="space-y-2">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Items Received</span>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
               <div className="col-span-3">Medicine *</div>
-              <div className="col-span-2">Batch #</div>
-              <div className="col-span-2">Expiry Date</div>
-              <div className="col-span-1 text-center">Qty</div>
-              <div className="col-span-2 text-center">Purch (₹)</div>
-              <div className="col-span-1 text-center">Sell (₹)</div>
+              <div className="col-span-2">Batch # *</div>
+              <div className="col-span-2">Expiry Date *</div>
+              <div className="col-span-1 text-center">Qty (Packs)</div>
+              <div className="col-span-2 text-center">Purch. / Pack (₹)</div>
+              <div className="col-span-1 text-center">Sell / Pack (₹)</div>
               <div className="col-span-1"></div>
             </div>
-            {items.map((it, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                <MedicineSearchSelect
-                  value={it.medicine_id}
-                  onChange={(id) => updateItem(idx, 'medicine_id', id)}
-                  medicines={medicines}
-                  disabled={!!it.purchase_order_item_id}
-                  className="col-span-3"
-                  compact
-                />
-                <input placeholder="Batch #" value={it.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
-                <input type="date" value={it.expiry_date} onChange={(e) => updateItem(idx, 'expiry_date', e.target.value)} className={`${inputCls} col-span-2 px-1.5 text-xs`} />
-                <input type="number" min="1" placeholder="Qty" value={it.qty_received} onChange={(e) => updateItem(idx, 'qty_received', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
-                <input type="number" min="0" step="0.01" placeholder="Purch ₹" value={it.purchase_price} onChange={(e) => updateItem(idx, 'purchase_price', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
-                <input type="number" min="0" step="0.01" placeholder="Sell ₹" value={it.selling_price} onChange={(e) => updateItem(idx, 'selling_price', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
-                <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1 flex justify-center">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            ))}
+            {items.map((it, idx) => {
+              const med = medicines.find((m) => String(m.id) === String(it.medicine_id));
+              const ratio = med?.tablets_per_strip && Number(med.tablets_per_strip) > 0 ? Number(med.tablets_per_strip) : 1;
+              const qtyReceived = Number(it.qty_received) || 0;
+              const totalTablets = qtyReceived * ratio;
+              const unitPurch = ratio > 1 && it.purchase_price ? (Number(it.purchase_price) / ratio).toFixed(2) : null;
+              const unitSell = ratio > 1 && it.selling_price ? (Number(it.selling_price) / ratio).toFixed(2) : null;
+
+              return (
+                <div key={idx} className="space-y-1 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <MedicineSearchSelect
+                      value={it.medicine_id}
+                      onChange={(id) => updateItem(idx, 'medicine_id', id)}
+                      medicines={medicines}
+                      disabled={!!it.purchase_order_item_id}
+                      className="col-span-3"
+                      compact
+                    />
+                    <input placeholder="Batch #" value={it.batch_number} onChange={(e) => updateItem(idx, 'batch_number', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
+                    <input type="date" value={it.expiry_date} onChange={(e) => updateItem(idx, 'expiry_date', e.target.value)} className={`${inputCls} col-span-2 px-1.5 text-xs`} />
+                    <input type="number" min="1" placeholder="Qty" value={it.qty_received} onChange={(e) => updateItem(idx, 'qty_received', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
+                    <input type="number" min="0" step="0.01" placeholder="Purch ₹" value={it.purchase_price} onChange={(e) => updateItem(idx, 'purchase_price', e.target.value)} className={`${inputCls} col-span-2 px-2 text-xs`} />
+                    <input type="number" min="0" step="0.01" placeholder="Sell ₹" value={it.selling_price} onChange={(e) => updateItem(idx, 'selling_price', e.target.value)} className={`${inputCls} col-span-1 px-1 text-center text-xs`} />
+                    <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1 flex justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+
+                  {med && ratio > 1 && qtyReceived > 0 && (
+                    <div className="text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md flex items-center gap-1.5">
+                      <span>💡 1 Strip = {ratio} Tablets</span>
+                      <span>→ Adds <strong>{totalTablets} Tablets</strong> to inventory</span>
+                      {unitSell && <span>(Patient rate: <strong>₹{unitSell} / tablet</strong>)</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <button type="button" onClick={addItemRow} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer pt-1">+ Add another item</button>
         </div>

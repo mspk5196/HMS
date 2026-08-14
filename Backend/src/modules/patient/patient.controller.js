@@ -68,10 +68,10 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Appointment status updated'));
 });
 
-/** POST /appointments/:id/close  Body: { amount_paid } — walk-in close, no admission. */
+/** POST /appointments/:id/close  Body: { doctor_fee } — marks visit as payment_pending. */
 const closeWalkInVisit = asyncHandler(async (req, res) => {
-  await svc.closeWalkInVisit(Number(req.params.id), req.body.amount_paid ?? 0, req.user?.id ?? null);
-  return res.json(success(null, 'Visit closed'));
+  await svc.closeWalkInVisit(Number(req.params.id), req.body.doctor_fee ?? 0, req.user?.id ?? null);
+  return res.json(success(null, 'Visit marked as payment pending'));
 });
 
 /* ─── ADMISSIONS ─── */
@@ -110,6 +110,24 @@ const releaseBed = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Bed released'));
 });
 
+/** GET /admissions/:id/timeline — full stay: beds, day-wise notes, medicines, charges, discharge. */
+const getAdmissionTimeline = asyncHandler(async (req, res) => {
+  const data = await svc.getAdmissionTimeline(Number(req.params.id));
+  return res.json(success(data));
+});
+
+/** GET /admissions/:id/notes */
+const listAdmissionNotes = asyncHandler(async (req, res) => {
+  const notes = await svc.listAdmissionDailyNotes(Number(req.params.id));
+  return res.json(success(notes));
+});
+
+/** POST /admissions/:id/notes  Body: { note_date, doctor_id, bp, pulse, temperature, spo2, advice } */
+const createAdmissionNote = asyncHandler(async (req, res) => {
+  const id = await svc.addAdmissionDailyNote(Number(req.params.id), req.body, req.user?.id ?? null);
+  return res.status(201).json(created({ id }, 'Daily note added'));
+});
+
 /* ─── DISCHARGES ─── */
 
 /** GET /admissions/:id/discharge-preview */
@@ -119,8 +137,8 @@ const previewDischarge = asyncHandler(async (req, res) => {
 });
 
 const createDischarge = asyncHandler(async (req, res) => {
-  const id = await svc.createDischarge({ ...req.body, discharged_by: req.user?.id ?? null });
-  return res.status(201).json(created({ id }, 'Patient discharged'));
+  const result = await svc.createDischarge({ ...req.body, discharged_by: req.user?.id ?? null });
+  return res.status(201).json(created({ id: result.dischargeId, final_bill_amount: result.final_bill_amount }, 'Discharge saved — awaiting payment'));
 });
 
 /** GET /admissions/:id/discharge — the discharge record for an admission, if any. */
@@ -142,5 +160,6 @@ module.exports = {
   listPatients, findByMobile, getPatient, createPatient, updatePatient, getPatientHistory,
   listAppointments, getAppointment, createAppointment, updateAppointmentStatus, closeWalkInVisit,
   listAdmissions, getAdmission, createAdmission, assignBed, releaseBed,
+  getAdmissionTimeline, listAdmissionNotes, createAdmissionNote,
   previewDischarge, createDischarge, getDischarge, recordDischargePayment,
 };

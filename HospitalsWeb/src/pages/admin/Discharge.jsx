@@ -108,7 +108,15 @@ function AdmittedList({ onProcess, onError }) {
           {rows.map((a) => (
             <div key={a.id} className="p-4 flex items-center justify-between gap-3">
               <div>
-                <div className="font-bold text-gray-900 text-xs">{a.patient_name} <span className="text-gray-400 font-medium">({a.age_years} Yrs / {a.gender})</span></div>
+                <div className="font-bold text-gray-900 text-xs flex items-center gap-2">
+                  <span>{a.patient_name}</span>
+                  <span className="text-gray-400 font-medium">({a.age_years} Yrs / {a.gender})</span>
+                  {a.status === 'payment_pending' && (
+                    <span className="text-[10px] bg-orange-50 text-orange-700 font-semibold px-2 py-0.5 rounded-full border border-orange-200">
+                      ⏳ Awaiting Payment
+                    </span>
+                  )}
+                </div>
                 <div className="text-[11px] text-gray-500 mt-0.5">
                   Admitted {displayDate(a.admission_datetime)} · Dr. {a.doctor_name || '—'}
                 </div>
@@ -117,7 +125,7 @@ function AdmittedList({ onProcess, onError }) {
                 onClick={() => onProcess(a)}
                 className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
               >
-                Process Discharge
+                {a.status === 'payment_pending' ? 'Edit Discharge' : 'Process Discharge'}
               </button>
             </div>
           ))}
@@ -138,7 +146,7 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
 
   const [form, setForm] = useState({
     diagnosis_summary: '', treatment_summary: '', doctor_advice: '', discharge_condition: 'recovered',
-    follow_up_date: '', other_charges: '', amount_paid: '', payment_mode: 'cash', discharge_notes: '',
+    follow_up_date: '', doctor_fee: '', other_charges: '', discharge_notes: '',
   });
 
   useEffect(() => {
@@ -155,8 +163,22 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
     })();
   }, [admission.id]);
 
+  // Pre-fill doctor fee from rate configuration
+  useEffect(() => {
+    if (!admission.admitting_doctor_id) return;
+    (async () => {
+      try {
+        const rate = await apiFetch(`/payment/fee-rates/${admission.admitting_doctor_id}`);
+        if (rate && rate.ipd_daily_fee) {
+          setForm((f) => ({ ...f, doctor_fee: String(rate.ipd_daily_fee) }));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [admission.admitting_doctor_id]);
+
+  const doctorFee = Number(form.doctor_fee) || 0;
   const otherCharges = Number(form.other_charges) || 0;
-  const estimatedTotal = preview ? preview.room_charges + preview.pharmacy_charges + otherCharges : 0;
+  const estimatedTotal = preview ? preview.room_charges + preview.pharmacy_charges + doctorFee + otherCharges : 0;
 
   const setField = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -173,15 +195,14 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
           doctor_advice: form.doctor_advice.trim() || null,
           discharge_condition: form.discharge_condition,
           follow_up_date: form.follow_up_date || null,
+          doctor_fee: doctorFee,
           other_charges: otherCharges,
-          amount_paid: Number(form.amount_paid) || 0,
-          payment_mode: form.payment_mode,
           discharge_notes: form.discharge_notes.trim() || null,
         }),
       });
-      onDone(`${admission.patient_name} discharged.`);
+      onDone(`${admission.patient_name} discharge saved — moved to payment queue.`);
     } catch (err) {
-      onError(err, 'Failed to process the discharge.');
+      onError(err, 'Failed to save the discharge.');
     } finally {
       setIsSubmitting(false);
     }
@@ -216,6 +237,10 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
               <div className="flex justify-between text-blue-900">
                 <span>Pharmacy bills for this admission</span>
                 <span className="font-semibold">{money(preview.pharmacy_charges)}</span>
+              </div>
+              <div className="flex justify-between text-blue-900">
+                <span>Doctor Fee</span>
+                <span className="font-semibold">{money(doctorFee)}</span>
               </div>
               <div className="flex justify-between text-blue-900">
                 <span>Other charges</span>
@@ -257,22 +282,12 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
             <input type="date" value={form.follow_up_date} onChange={(e) => setField('follow_up_date')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
           </div>
           <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor Fee (₹) <span className="text-blue-500 font-normal normal-case">(pre-filled from rate settings)</span></label>
+            <input type="number" value={form.doctor_fee} onChange={(e) => setField('doctor_fee')(e.target.value)} placeholder="e.g. 500" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
+          </div>
+          <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Other Charges (₹)</label>
             <input type="number" value={form.other_charges} onChange={(e) => setField('other_charges')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Amount Paid Now (₹)</label>
-            <input type="number" value={form.amount_paid} onChange={(e) => setField('amount_paid')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Payment Mode</label>
-            <select value={form.payment_mode} onChange={(e) => setField('payment_mode')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white">
-              <option value="cash">Cash</option>
-              <option value="upi">UPI</option>
-              <option value="card">Card</option>
-              <option value="insurance">Insurance</option>
-              <option value="credit">Credit</option>
-            </select>
           </div>
           <div className="md:col-span-2 space-y-1.5">
             <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Discharge Notes</label>
@@ -280,14 +295,12 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
           </div>
         </div>
 
-        {Number(form.amount_paid) < estimatedTotal && (
-          <div className="bg-amber-50/70 border border-amber-200 rounded-lg px-3.5 py-2.5 text-[11px] text-amber-800">
-            A balance of {money(estimatedTotal - (Number(form.amount_paid) || 0))} will remain — the bed(s) will show <strong>pending clearance</strong> until it's paid in full.
-          </div>
-        )}
+        <div className="bg-blue-50/60 border border-blue-200 rounded-lg px-3.5 py-2.5 text-[11px] text-blue-800">
+          After saving, this discharge will appear in <strong>Collect Payment</strong> page. Payment can be collected from there.
+        </div>
 
         <button type="submit" disabled={isSubmitting || isLoadingPreview} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50">
-          {isSubmitting ? 'Processing…' : 'Confirm Discharge'}
+          {isSubmitting ? 'Saving…' : 'Save & Move to Payment'}
         </button>
       </form>
     </div>
@@ -301,9 +314,6 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
 function DischargedList({ onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [payingId, setPayingId] = useState(null);
-  const [payAmount, setPayAmount] = useState('');
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -319,26 +329,11 @@ function DischargedList({ onError, onSuccess }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const submitPayment = async (admissionId) => {
-    try {
-      setBusy(true);
-      const res = await apiFetch(`/patient/discharges/${admissionId}/payment`, {
-        method: 'POST', body: JSON.stringify({ amount: Number(payAmount) }),
-      });
-      onSuccess(res.released > 0 ? 'Payment recorded — bed(s) released.' : 'Payment recorded.');
-      setPayingId(null); setPayAmount('');
-      await load();
-    } catch (err) {
-      onError(err, 'Failed to record the payment.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100">
         <h2 className="text-sm font-bold text-gray-900">Discharged Patients ({rows.length})</h2>
+        <p className="text-[11px] text-gray-400 mt-0.5">Payments are collected via the Collect Payment page.</p>
       </div>
       {isLoading ? (
         <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
@@ -347,68 +342,18 @@ function DischargedList({ onError, onSuccess }) {
       ) : (
         <div className="divide-y divide-gray-100">
           {rows.map((a) => (
-            <DischargeRow key={a.id} admission={a} onError={onError}
-              payingId={payingId} setPayingId={setPayingId}
-              payAmount={payAmount} setPayAmount={setPayAmount}
-              busy={busy} onPay={submitPayment} />
+            <div key={a.id} className="p-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-gray-900 text-xs">{a.patient_name}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  Dr. {a.doctor_name || '—'} · Admitted {displayDate(a.admission_datetime)}
+                </div>
+              </div>
+              <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-semibold">Discharged</span>
+            </div>
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function DischargeRow({ admission, onError, payingId, setPayingId, payAmount, setPayAmount, busy, onPay }) {
-  const [discharge, setDischarge] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        const data = await apiFetch(`/patient/admissions/${admission.id}/discharge`);
-        setDischarge(data);
-      } catch (err) {
-        onError(err, 'Failed to load the discharge record.');
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [admission.id]);
-
-  const balance = discharge ? Number(discharge.balance_due) : 0;
-
-  return (
-    <div className="p-4 flex items-center justify-between gap-3">
-      <div>
-        <div className="font-bold text-gray-900 text-xs">{admission.patient_name}</div>
-        <div className="text-[11px] text-gray-500 mt-0.5">
-          {isLoading ? 'Loading…' : discharge ? (
-            <>
-              Discharged {displayDate(discharge.discharge_datetime)} · Bill {money(discharge.final_bill_amount)}
-              {' · '}
-              <span className={balance > 0 ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold'}>
-                {balance > 0 ? `Balance ${money(balance)}` : 'Fully paid'}
-              </span>
-            </>
-          ) : 'No discharge record'}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {balance > 0 && (
-          payingId === admission.id ? (
-            <>
-              <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="₹ amount" className="w-24 px-2 py-1 border border-gray-200 rounded text-[11px]" />
-              <button onClick={() => onPay(admission.id)} disabled={busy} className="text-emerald-600 font-bold text-[11px] hover:underline cursor-pointer disabled:opacity-50">Save</button>
-              <button onClick={() => setPayingId(null)} className="text-gray-400 font-bold text-[11px] hover:underline cursor-pointer">Cancel</button>
-            </>
-          ) : (
-            <button onClick={() => { setPayingId(admission.id); setPayAmount(''); }} className="text-blue-600 font-bold text-[11px] hover:underline cursor-pointer">
-              Record Payment
-            </button>
-          )
-        )}
-      </div>
     </div>
   );
 }

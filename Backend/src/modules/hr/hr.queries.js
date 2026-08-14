@@ -152,7 +152,7 @@ const listDepartments = async () => {
 
   // Query all active staff roles
   const [roles] = await db.execute(`
-    SELECT id, department_id, name AS roleName, basic_salary AS basicSalary, weekly_off_count AS weeklyOffCount, monthly_buffer_minutes AS monthlyBufferMinutes
+    SELECT id, department_id, name AS roleName, basic_salary AS basicSalary, weekly_off_count AS weeklyOffCount, monthly_buffer_minutes AS monthlyBufferMinutes, is_doctor AS isDoctor
     FROM staff_roles
     ORDER BY name
   `);
@@ -167,7 +167,7 @@ const listDepartments = async () => {
     staffCount: dept.staffCount,
     roles: roles
       .filter(r => r.department_id === dept.id)
-      .map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30 }))
+      .map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30, isDoctor: !!r.isDoctor }))
   }));
 };
 
@@ -240,8 +240,8 @@ const createDepartment = async (data) => {
       for (const r of roles) {
         if (!r.roleName) continue;
         await conn.execute(
-          `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes) VALUES (?, ?, ?, ?, ?)`,
-          [departmentId, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30]
+          `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes, is_doctor) VALUES (?, ?, ?, ?, ?, ?)`,
+          [departmentId, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0]
         );
       }
     }
@@ -290,15 +290,15 @@ const updateDepartment = async (id, data) => {
         if (r.id) {
           // Update existing role
           await conn.execute(
-            `UPDATE staff_roles SET name = ?, basic_salary = ?, weekly_off_count = ?, monthly_buffer_minutes = ? WHERE id = ? AND department_id = ?`,
-            [r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.id, id]
+            `UPDATE staff_roles SET name = ?, basic_salary = ?, weekly_off_count = ?, monthly_buffer_minutes = ?, is_doctor = ? WHERE id = ? AND department_id = ?`,
+            [r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0, r.id, id]
           );
           keepIds.push(r.id);
         } else {
           // Insert new role
           const [insResult] = await conn.execute(
-            `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes) VALUES (?, ?, ?, ?, ?)`,
-            [id, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30]
+            `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes, is_doctor) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0]
           );
         }
       }
@@ -389,21 +389,21 @@ const createStaffRole = async (data) => {
     basic_salary, hra, da, lop_deduction, casual_leave_count, privilege_leave_count, weekly_off_count,
     shift_name, shift_start_time, shift_end_time,
     biometric_in_start, biometric_in_end, biometric_out_start, biometric_out_end,
-    is_night_shift, grace_period_minutes
+    is_night_shift, grace_period_minutes, is_doctor
   } = data;
   const [result] = await db.execute(
-    `INSERT INTO staff_roles 
+    `INSERT INTO staff_roles
        (department_id, name, description, is_active, basic_salary, hra, da, lop_deduction, casual_leave_count, privilege_leave_count, weekly_off_count,
         shift_name, shift_start_time, shift_end_time, biometric_in_start, biometric_in_end, biometric_out_start, biometric_out_end,
-        is_night_shift, grace_period_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_night_shift, grace_period_minutes, is_doctor)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       department_id, name, description ?? null, is_active ?? 1,
       basic_salary ?? 0.00, hra ?? 0.00, da ?? 0.00, lop_deduction ?? 0.00,
       casual_leave_count ?? 0, privilege_leave_count ?? 0, weekly_off_count ?? 0,
       shift_name ?? null, shift_start_time ?? null, shift_end_time ?? null,
       biometric_in_start ?? null, biometric_in_end ?? null, biometric_out_start ?? null, biometric_out_end ?? null,
-      is_night_shift ? 1 : 0, grace_period_minutes ?? 0
+      is_night_shift ? 1 : 0, grace_period_minutes ?? 0, is_doctor ? 1 : 0
     ]
   );
   return result.insertId;
@@ -417,14 +417,14 @@ const updateStaffRole = async (id, data) => {
     'biometric_in_start', 'biometric_in_end', 'biometric_out_start', 'biometric_out_end',
     'is_night_shift', 'grace_period_minutes',
     // Shift-definition link + the capacity/break/notes the assign-shift form collects
-    'default_shift_id', 'capacity', 'break_minutes', 'notes', 'monthly_buffer_minutes'
+    'default_shift_id', 'capacity', 'break_minutes', 'notes', 'monthly_buffer_minutes', 'is_doctor'
   ];
   const fields = [];
   const vals = [];
   for (const key of allowed) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      vals.push(key === 'is_active' || key === 'is_night_shift' ? (data[key] ? 1 : 0) : data[key]);
+      vals.push(key === 'is_active' || key === 'is_night_shift' || key === 'is_doctor' ? (data[key] ? 1 : 0) : data[key]);
     }
   }
   if (!fields.length) return;

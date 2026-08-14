@@ -78,22 +78,22 @@ const getMedicine = async (id) => {
 };
 
 const createMedicine = async (data) => {
-  const { name, generic_name, category_id, form, strength, unit,
+  const { name, generic_name, category_id, form, strength, unit, tablets_per_strip,
     manufacturer, hsn_code, gst_percent, reorder_level, barcode, description } = data;
   const [result] = await db.execute(
     `INSERT INTO medicines
-       (name, generic_name, category_id, form, strength, unit,
+       (name, generic_name, category_id, form, strength, unit, tablets_per_strip,
         manufacturer, hsn_code, gst_percent, reorder_level, barcode, description)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [name, generic_name ?? null, category_id ?? null, form ?? null,
-     strength ?? null, unit ?? null, manufacturer ?? null, hsn_code ?? null,
+     strength ?? null, unit ?? null, tablets_per_strip ?? 1, manufacturer ?? null, hsn_code ?? null,
      gst_percent ?? 0, reorder_level ?? 0, barcode ?? null, description ?? null]
   );
   return result.insertId;
 };
 
 const updateMedicine = async (id, data) => {
-  const allowed = ['name', 'generic_name', 'category_id', 'form', 'strength', 'unit',
+  const allowed = ['name', 'generic_name', 'category_id', 'form', 'strength', 'unit', 'tablets_per_strip',
     'manufacturer', 'hsn_code', 'gst_percent', 'reorder_level', 'barcode', 'description', 'is_active'];
   const fields = [];
   const vals = [];
@@ -614,12 +614,26 @@ const createGoodsReceipt = async ({
     await connection.execute(`UPDATE goods_receipts SET grn_number = ? WHERE id = ?`, [grnNumber, grnId]);
 
     for (const item of items) {
+      // Get medicine's tablets_per_strip ratio to convert packs/strips to base unit tablets
+      const [[med]] = await connection.execute(
+        `SELECT tablets_per_strip FROM medicines WHERE id = ?`,
+        [item.medicine_id]
+      );
+      const ratio = med?.tablets_per_strip && Number(med.tablets_per_strip) > 0 ? Number(med.tablets_per_strip) : 1;
+
+      // Base stock units added = qty_received (strips/packs) * ratio (tablets per strip)
+      const baseQtyAdded = Number(item.qty_received) * ratio;
+
+      // Per-tablet prices for dispensing to patient
+      const unitPurchasePrice = ratio > 1 ? Number(item.purchase_price ?? 0) / ratio : Number(item.purchase_price ?? 0);
+      const unitSellingPrice = ratio > 1 ? Number(item.selling_price ?? 0) / ratio : Number(item.selling_price ?? 0);
+
       const [batchResult] = await connection.execute(
         `INSERT INTO medicine_batches
            (medicine_id, batch_number, expiry_date, qty_in_stock, purchase_price, selling_price)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [item.medicine_id, item.batch_number, item.expiry_date, item.qty_received,
-         item.purchase_price ?? 0, item.selling_price ?? 0]
+        [item.medicine_id, item.batch_number, item.expiry_date, baseQtyAdded,
+         unitPurchasePrice, unitSellingPrice]
       );
       const batchId = batchResult.insertId;
 
@@ -635,7 +649,7 @@ const createGoodsReceipt = async ({
       await connection.execute(
         `INSERT INTO stock_movements (medicine_id, batch_id, movement_type, quantity, reference_type, reference_id, movement_date)
          VALUES (?, ?, 'receipt', ?, 'goods_receipt', ?, ?)`,
-        [item.medicine_id, batchId, item.qty_received, grnId, received_date]
+        [item.medicine_id, batchId, baseQtyAdded, grnId, received_date]
       );
 
       if (item.purchase_order_item_id) {

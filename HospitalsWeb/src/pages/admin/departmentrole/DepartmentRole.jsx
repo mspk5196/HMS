@@ -56,7 +56,7 @@ export default function DepartmentRole() {
           method: 'PATCH',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30) }))
+            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30), isDoctor: !!r.isDoctor }))
           })
         });
         flash(`Department "${deptName}" updated successfully.`);
@@ -65,7 +65,7 @@ export default function DepartmentRole() {
           method: 'POST',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30) }))
+            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30), isDoctor: !!r.isDoctor }))
           })
         });
         flash(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
@@ -260,8 +260,11 @@ export default function DepartmentRole() {
                       <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
                         {dept.roles.map((r, i) => (
                           <div key={r.id || i} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-gray-50 text-gray-700">
-                            <span className="font-semibold text-gray-900 truncate max-w-[170px]">
+                            <span className="font-semibold text-gray-900 truncate max-w-[170px] flex items-center gap-1">
                               {typeof r === 'object' ? r.roleName : r}
+                              {typeof r === 'object' && r.isDoctor && (
+                                <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">Doctor</span>
+                              )}
                             </span>
                             <span className="font-bold text-blue-700 text-[11px] whitespace-nowrap">
                               {typeof r === 'object' && r.basicSalary !== undefined ? `₹${Number(r.basicSalary).toLocaleString('en-IN')}` : ''}

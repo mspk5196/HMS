@@ -22,6 +22,8 @@ import PharmacyNonMovableStock from './pharmacy/NonMovableStock';
 import PharmacyMovements from './pharmacy/StockMovements';
 import AdmissionBeds from './AdmissionBeds';
 import Discharge from './Discharge';
+import CollectPayment from './CollectPayment';
+import DoctorFeeSettings from './DoctorFeeSettings';
 import RolesPermissions from './RolesPermissions';
 import Settings from './Settings';
 
@@ -85,6 +87,10 @@ export default function AdminDashboard({ user, onLogout }) {
         return <AdmissionBeds />;
       case 'discharge':
         return <Discharge />;
+      case 'collect-payment':
+        return <CollectPayment />;
+      case 'doctor-fee-settings':
+        return <DoctorFeeSettings />;
       case 'roles-permissions':
         return <RolesPermissions />;
       case 'settings':

@@ -12,6 +12,18 @@ const getConsultation = async (req, res, next) => {
   }
 };
 
+const getConsultationById = async (req, res, next) => {
+  try {
+    const data = await service.getConsultationById(req.params.id);
+    if (!data) {
+      return res.status(404).json({ success: false, message: 'Consultation not found' });
+    }
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const saveConsultation = async (req, res, next) => {
   try {
     // req.user comes from verifyToken middleware
@@ -35,5 +47,6 @@ const saveConsultation = async (req, res, next) => {
 
 module.exports = {
   getConsultation,
+  getConsultationById,
   saveConsultation
 };

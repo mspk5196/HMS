@@ -36,6 +36,49 @@ const getConsultationByAppointment = async (appointmentId) => {
   return consultation;
 };
 
+/** Full detail for one consultation by its own id — used by the patient history detail view. */
+const getConsultationById = async (id) => {
+  const [rows] = await db.execute(
+    `SELECT c.*, a.appointment_date, a.doctor_fee, a.patient_id, p.full_name AS patient_name,
+            e.full_name AS doctor_name
+     FROM consultations c
+     JOIN appointments a ON a.id = c.appointment_id
+     JOIN patients p ON p.id = a.patient_id
+     LEFT JOIN employees e ON e.id = c.doctor_id
+     WHERE c.id = ?`,
+    [id]
+  );
+  const consultation = rows[0] || null;
+  if (!consultation) return null;
+
+  const [[paid]] = await db.execute(
+    `SELECT COALESCE(SUM(amount_paid), 0) AS amount_paid FROM appointment_payments WHERE appointment_id = ?`,
+    [consultation.appointment_id]
+  );
+  consultation.amount_paid = Number(paid.amount_paid);
+
+  const [prescriptions] = await db.execute(
+    `SELECT p.id AS prescription_id FROM prescriptions p WHERE p.consultation_id = ?`,
+    [consultation.id]
+  );
+
+  if (prescriptions.length > 0) {
+    const prescriptionId = prescriptions[0].prescription_id;
+    const [items] = await db.execute(
+      `SELECT pi.*, m.name AS medicine_name, m.generic_name
+       FROM prescription_items pi
+       JOIN medicines m ON m.id = pi.medicine_id
+       WHERE pi.prescription_id = ?`,
+      [prescriptionId]
+    );
+    consultation.prescription_items = items;
+  } else {
+    consultation.prescription_items = [];
+  }
+
+  return consultation;
+};
+
 const createConsultation = async (data, connection = db) => {
   const { appointment_id, doctor_id, diagnosis, complaints, doctor_notes, follow_up_date } = data;
   const [result] = await connection.execute(
@@ -91,6 +134,7 @@ const updateAppointmentStatus = async (appointmentId, status, connection = db) =
 
 module.exports = {
   getConsultationByAppointment,
+  getConsultationById,
   createConsultation,
   createPrescription,
   createPrescriptionItems,

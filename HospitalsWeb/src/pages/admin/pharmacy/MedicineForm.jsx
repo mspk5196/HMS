@@ -38,6 +38,7 @@ export default function MedicineForm({ categories, initialData, onCancel, onSubm
     gst_percent: initialData?.gst_percent ?? 0,
     reorder_level: initialData?.reorder_level ?? 10,
     barcode: initialData?.barcode || '',
+    tablets_per_strip: initialData?.tablets_per_strip ?? 1,
     description: initialData?.description || '',
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -73,6 +74,7 @@ export default function MedicineForm({ categories, initialData, onCancel, onSubm
         category_id: values.category_id || null,
         gst_percent: Number(values.gst_percent) || 0,
         reorder_level: Number(values.reorder_level) || 0,
+        tablets_per_strip: Math.max(1, Number(values.tablets_per_strip) || 1),
       });
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save medicine.');
@@ -141,8 +143,11 @@ export default function MedicineForm({ categories, initialData, onCancel, onSubm
           <Field label="Strength">
             <input value={values.strength} onChange={set('strength')} className={inputCls} placeholder="650mg" />
           </Field>
-          <Field label="Unit">
+          <Field label="Unit / Pack">
             <input value={values.unit} onChange={set('unit')} className={inputCls} placeholder="Strip / Bottle / Box" />
+          </Field>
+          <Field label="Tablets / Units per Strip (Pack Ratio) *" hint="e.g. 10 tablets in 1 strip. Converts strip purchases to tablet stock for dispensing.">
+            <input type="number" min="1" value={values.tablets_per_strip} onChange={set('tablets_per_strip')} className={inputCls} placeholder="10" />
           </Field>
           <Field label="Manufacturer">
             <input value={values.manufacturer} onChange={set('manufacturer')} className={inputCls} />

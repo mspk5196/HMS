@@ -84,6 +84,13 @@ const addBatch = async (data) => {
   const medicine = await q.getMedicine(data.medicine_id);
   if (!medicine) throw new AppError('Medicine not found', 404);
 
+  // Check if batch number already exists for this medicine
+  const existingBatches = await q.listBatches(data.medicine_id);
+  const dup = existingBatches.find(b => b.batch_number.trim().toLowerCase() === data.batch_number.trim().toLowerCase());
+  if (dup) {
+    throw new AppError(`Batch "${data.batch_number}" already exists for "${medicine.name}". Batch numbers must be unique per medicine.`, 400);
+  }
+
   const batchId = await q.addBatch(data);
   await q.logStockMovement({
     medicine_id: data.medicine_id,
@@ -323,6 +330,13 @@ const receiveGoodsReceipt = async (data) => {
     }
     if (new Date(item.expiry_date) <= new Date()) {
       throw new AppError(`Batch "${item.batch_number}" has an expiry date that is not in the future`, 400);
+    }
+    // Check if batch number already exists for this medicine
+    const existingBatches = await q.listBatches(item.medicine_id);
+    const dup = existingBatches.find(b => b.batch_number.trim().toLowerCase() === item.batch_number.trim().toLowerCase());
+    if (dup) {
+      const med = await q.getMedicine(item.medicine_id);
+      throw new AppError(`Batch "${item.batch_number}" already exists for "${med?.name || 'this medicine'}". Batch numbers must be unique per medicine.`, 400);
     }
   }
 

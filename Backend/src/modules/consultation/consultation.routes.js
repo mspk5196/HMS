@@ -7,5 +7,6 @@ router.use(verifyToken);
 // Doctor Consultation endpoints
 router.get('/appointments/:appointmentId/consultation', requirePermissions(['consultation.view']), ctrl.getConsultation);
 router.post('/appointments/:appointmentId/consultation', requirePermissions(['consultation.modify']), ctrl.saveConsultation);
+router.get('/consultations/:id', requirePermissions(['consultation.view']), ctrl.getConsultationById);
 
 module.exports = router;

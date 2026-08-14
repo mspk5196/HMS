@@ -78,7 +78,7 @@ const bookAppointment = async (data, createdBy) => {
 };
 
 const updateAppointmentStatus = async (id, status, actingUserId) => {
-  const allowed = ['waiting', 'in_consultation', 'completed', 'converted_to_admission', 'closed', 'cancelled'];
+  const allowed = ['waiting', 'in_consultation', 'completed', 'payment_pending', 'converted_to_admission', 'closed', 'cancelled'];
   if (!allowed.includes(status)) {
     throw new AppError(`status must be one of: ${allowed.join(', ')}`, 400);
   }
@@ -87,14 +87,22 @@ const updateAppointmentStatus = async (id, status, actingUserId) => {
   await q.updateAppointmentStatus(id, status, actingUserId);
 };
 
-/** Walk-in visit, no admission: simple payment + close. */
-const closeWalkInVisit = async (appointmentId, amountPaid, closedBy) => {
+/** Save & Move to Payment: marks OPD visit as payment_pending with doctor_fee. */
+const closeWalkInVisit = async (appointmentId, doctorFee, closedBy) => {
   const appt = await q.getAppointment(appointmentId);
   if (!appt) throw new AppError('Appointment not found', 404);
   if (['closed', 'cancelled'].includes(appt.status)) {
     throw new AppError(`This visit is already ${appt.status}`, 400);
   }
-  await q.closeWalkInVisit(appointmentId, Number(amountPaid) || 0, closedBy);
+  if (appt.status === 'payment_pending') {
+    throw new AppError('This visit is already pending payment', 400);
+  }
+  await q.markAppointmentPaymentPending(appointmentId, Number(doctorFee) || 0);
+};
+
+/** Actually finalize (close) an appointment after payment. Used by payment module. */
+const finalizeAppointmentClose = async (appointmentId, closedBy) => {
+  await q.closeAppointment(appointmentId, closedBy);
 };
 
 /* ─────────────────────────────────────────────
@@ -111,7 +119,7 @@ const createAdmission = async (data) => {
 const assignBed = async (admissionId, bedId) => {
   const admission = await q.getAdmission(admissionId);
   if (!admission) throw new AppError('Admission not found', 404);
-  if (admission.status !== 'admitted') throw new AppError('This admission is already discharged', 400);
+  if (!['admitted', 'payment_pending'].includes(admission.status)) throw new AppError('This admission is already discharged', 400);
   await q.assignBed(admissionId, bedId);
 };
 
@@ -144,35 +152,24 @@ const createDischarge = async (data) => {
   if (!admission) throw new AppError('Admission not found', 404);
   if (admission.status === 'discharged') throw new AppError('This patient is already discharged', 400);
 
-  const existing = await q.getDischargeByAdmission(data.admission_id);
-  if (existing) throw new AppError('A discharge record already exists for this admission', 409);
-
   // Charges are computed server-side from the real stay and real pharmacy
-  // bills — the client may only add "other_charges" on top.
+  // bills — the client may only add "other_charges" and "doctor_fee" on top.
   const room = await q.computeRoomCharges(data.admission_id);
   const pharmacy = await q.computePharmacyCharges(data.admission_id);
   const otherCharges = Number(data.other_charges) || 0;
-  const finalBillAmount = room.total + pharmacy + otherCharges;
-  const amountPaid = Number(data.amount_paid) || 0;
-
-  if (amountPaid > finalBillAmount) {
-    throw new AppError('Amount paid cannot exceed the final bill amount', 400);
-  }
+  const doctorFee = Number(data.doctor_fee) || 0;
+  const finalBillAmount = room.total + pharmacy + otherCharges + doctorFee;
 
   const dischargeId = await q.createDischarge({
     ...data,
     room_charges: room.total,
     pharmacy_charges: pharmacy,
+    doctor_fee: doctorFee,
     other_charges: otherCharges,
     final_bill_amount: finalBillAmount,
-    amount_paid: amountPaid,
   });
 
-  // A fully-paid discharge releases its beds immediately rather than sitting
-  // in pending_clearance needlessly.
-  await q.releaseBedsIfPaid(data.admission_id);
-
-  return dischargeId;
+  return { dischargeId, final_bill_amount: finalBillAmount };
 };
 
 /** Record a further payment against an existing discharge, releasing beds once settled. */
@@ -188,6 +185,34 @@ const recordDischargePayment = async (admissionId, amount) => {
   await q.recordDischargePayment(discharge.id, amt);
   const result = await q.releaseBedsIfPaid(admissionId);
   return { ...result };
+};
+
+/* ─────────────────────────────────────────────
+   ADMISSION DAILY NOTES & TIMELINE
+───────────────────────────────────────────── */
+
+const addAdmissionDailyNote = async (admissionId, data, createdBy) => {
+  const admission = await q.getAdmission(admissionId);
+  if (!admission) throw new AppError('Admission not found', 404);
+  if (!data.note_date) throw new AppError('note_date is required', 400);
+
+  return q.createAdmissionDailyNote({
+    admission_id: admissionId,
+    note_date: data.note_date,
+    doctor_id: data.doctor_id || null,
+    bp: data.bp || null,
+    pulse: data.pulse ?? null,
+    temperature: data.temperature ?? null,
+    spo2: data.spo2 ?? null,
+    advice: data.advice || null,
+    created_by: createdBy,
+  });
+};
+
+const getAdmissionTimeline = async (admissionId) => {
+  const timeline = await q.getAdmissionTimeline(admissionId);
+  if (!timeline) throw new AppError('Admission not found', 404);
+  return timeline;
 };
 
 /* ─────────────────────────────────────────────
@@ -207,12 +232,15 @@ module.exports = {
   bookAppointment,
   updateAppointmentStatus,
   closeWalkInVisit,
+  finalizeAppointmentClose,
   createAdmission,
   assignBed,
   releaseBedFromAdmission,
   previewDischargeCharges,
   createDischarge,
   recordDischargePayment,
+  addAdmissionDailyNote,
+  getAdmissionTimeline,
   getPatientHistory,
   // Pass-through
   listPatients: q.listPatients,
@@ -224,4 +252,5 @@ module.exports = {
   listAdmissions: q.listAdmissions,
   getAdmission: q.getAdmission,
   getDischargeByAdmission: q.getDischargeByAdmission,
+  listAdmissionDailyNotes: q.listAdmissionDailyNotes,
 };

@@ -89,27 +89,41 @@ export default function CreatePurchaseOrderForm({ onCancel, onSubmit }) {
           </Field>
         </div>
 
+        <div className="bg-blue-50/80 border border-blue-200 text-blue-900 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
+          <span className="text-blue-600 font-bold">ℹ️ Note:</span>
+          <span className="text-[11px] leading-relaxed">
+            Enter <strong>Ordered Qty</strong> in <strong>Strips / Packs</strong> and <strong>Est. Price</strong> per <strong>1 Strip / Pack</strong>.
+            Total line cost = Ordered Qty × Est. Pack Price.
+          </span>
+        </div>
+
         <div className="space-y-2">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Items to Order</span>
           <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              <div className="col-span-6">Medicine *</div>
+              <div className="col-span-3 text-center">Qty (Strips/Packs) *</div>
+              <div className="col-span-2 text-center">Est. Pack Price (₹)</div>
+              <div className="col-span-1"></div>
+            </div>
             {items.map((it, idx) => (
-              <div key={idx} className="flex items-center gap-2">
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                 <MedicineSearchSelect
                   value={it.medicine_id}
                   onChange={(id) => updateItem(idx, 'medicine_id', id)}
                   medicines={medicines}
-                  className="flex-1"
+                  className="col-span-6"
                   compact
                 />
-                <input type="number" min="1" placeholder="Qty" value={it.ordered_qty} onChange={(e) => updateItem(idx, 'ordered_qty', e.target.value)} className={`${inputCls} w-24`} />
-                <input type="number" min="0" step="0.01" placeholder="Est. Price" value={it.estimated_price} onChange={(e) => updateItem(idx, 'estimated_price', e.target.value)} className={`${inputCls} w-28`} />
-                <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer p-1.5">
+                <input type="number" min="1" placeholder="Qty (Packs)" value={it.ordered_qty} onChange={(e) => updateItem(idx, 'ordered_qty', e.target.value)} className={`${inputCls} col-span-3 text-center text-xs`} />
+                <input type="number" min="0" step="0.01" placeholder="Price/Pack ₹" value={it.estimated_price} onChange={(e) => updateItem(idx, 'estimated_price', e.target.value)} className={`${inputCls} col-span-2 text-center text-xs`} />
+                <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1 flex justify-center">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             ))}
           </div>
-          <button type="button" onClick={addItemRow} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">+ Add another item</button>
+          <button type="button" onClick={addItemRow} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer pt-1">+ Add another item</button>
         </div>
 
         <Field label="Notes">

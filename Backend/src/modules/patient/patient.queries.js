@@ -159,29 +159,28 @@ const updateAppointmentStatus = async (id, status, closedBy = null) => {
   }
 };
 
-/** Walk-in (non-admitted) visit close: simple payment + close, no discharge summary. */
-const closeWalkInVisit = async (appointmentId, amountPaid, receivedBy) => {
-  const conn = await db.getConnection();
-  try {
-    await conn.beginTransaction();
-    if (amountPaid > 0) {
-      await conn.execute(
-        `INSERT INTO appointment_payments (appointment_id, amount_paid, received_by) VALUES (?, ?, ?)`,
-        [appointmentId, amountPaid, receivedBy ?? null]
-      );
-    }
-    await conn.execute(
-      `UPDATE appointments SET status = 'closed', closed_at = NOW(), closed_by = ? WHERE id = ?`,
-      [receivedBy ?? null, appointmentId]
-    );
-    await conn.commit();
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+/**
+ * Mark a walk-in visit as payment_pending (Save & Move to Payment).
+ * The appointment stays open (not 'closed') until full payment is collected.
+ * doctor_fee is stored on the appointment row for the payment page to read.
+ */
+const markAppointmentPaymentPending = async (appointmentId, doctorFee) => {
+  await db.execute(
+    `UPDATE appointments SET status = 'payment_pending', doctor_fee = ? WHERE id = ?`,
+    [doctorFee ?? 0, appointmentId]
+  );
 };
+
+/** Actually close an appointment after payment is collected. */
+const closeAppointment = async (appointmentId, closedBy) => {
+  await db.execute(
+    `UPDATE appointments SET status = 'closed', closed_at = NOW(), closed_by = ? WHERE id = ?`,
+    [closedBy ?? null, appointmentId]
+  );
+};
+
+// Keep legacy name for backward compat if referenced elsewhere
+const closeWalkInVisit = markAppointmentPaymentPending;
 
 const getAppointmentPayments = async (appointmentId) => {
   const [rows] = await db.execute(
@@ -204,7 +203,14 @@ const listAdmissions = async ({ patientId, status, page = 1, limit = 50 }) => {
   const params = [];
 
   if (patientId) { filters.push('ad.patient_id = ?'); params.push(patientId); }
-  if (status) { filters.push('ad.status = ?'); params.push(status); }
+  if (status) {
+    if (status === 'admitted') {
+      filters.push("ad.status IN ('admitted', 'payment_pending')");
+    } else {
+      filters.push('ad.status = ?');
+      params.push(status);
+    }
+  }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await db.query(
@@ -385,46 +391,100 @@ const getDischargeByAdmission = async (admissionId) => {
  * they only become available once the bill is fully paid (see
  * releaseBedsIfPaid). This is a confirmed, deliberate rule.
  */
+/**
+ * Save discharge clinical data + fee breakdown (Save & Move to Payment).
+ * Does NOT record payment — payment_status = 'pending'.
+ * Admission stays as 'admitted'; beds remain occupied until payment is complete.
+ */
 const createDischarge = async (data) => {
   const {
     admission_id, discharge_datetime, diagnosis_summary, treatment_summary, doctor_advice,
-    discharge_condition, room_charges, pharmacy_charges, other_charges, follow_up_date,
-    final_bill_amount, amount_paid, payment_mode, discharge_notes, discharged_by,
+    discharge_condition, room_charges, pharmacy_charges, doctor_fee, other_charges,
+    follow_up_date, final_bill_amount, discharge_notes, discharged_by,
   } = data;
 
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
 
-    const [result] = await conn.execute(
-      `INSERT INTO discharges
-         (admission_id, discharge_datetime, diagnosis_summary, treatment_summary, doctor_advice,
-          discharge_condition, room_charges, pharmacy_charges, other_charges, follow_up_date,
-          final_bill_amount, amount_paid, balance_due, payment_mode, discharge_notes, discharged_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [admission_id, discharge_datetime ?? new Date(), diagnosis_summary ?? null, treatment_summary ?? null,
-       doctor_advice ?? null, discharge_condition ?? 'recovered', room_charges ?? 0, pharmacy_charges ?? 0,
-       other_charges ?? 0, follow_up_date ?? null, final_bill_amount ?? 0, amount_paid ?? 0,
-       (final_bill_amount ?? 0) - (amount_paid ?? 0), payment_mode ?? 'cash', discharge_notes ?? null,
-       discharged_by ?? null]
+    // Check if discharge record already exists (upsert pattern)
+    const [[existing]] = await conn.execute(
+      `SELECT id FROM discharges WHERE admission_id = ?`, [admission_id]
     );
 
-    await conn.execute(`UPDATE admissions SET status = 'discharged' WHERE id = ?`, [admission_id]);
+    let dischargeId;
+    if (existing) {
+      // Update existing record (re-saving discharge details)
+      await conn.execute(
+        `UPDATE discharges SET
+           discharge_datetime = ?, diagnosis_summary = ?, treatment_summary = ?,
+           doctor_advice = ?, discharge_condition = ?, room_charges = ?,
+           pharmacy_charges = ?, doctor_fee = ?, other_charges = ?,
+           follow_up_date = ?, final_bill_amount = ?,
+           balance_due = ?, discharge_notes = ?, discharged_by = ?,
+           payment_status = 'pending'
+         WHERE admission_id = ?`,
+        [discharge_datetime ?? new Date(), diagnosis_summary ?? null, treatment_summary ?? null,
+         doctor_advice ?? null, discharge_condition ?? 'recovered', room_charges ?? 0,
+         pharmacy_charges ?? 0, doctor_fee ?? 0, other_charges ?? 0, follow_up_date ?? null,
+         final_bill_amount ?? 0, final_bill_amount ?? 0,
+         discharge_notes ?? null, discharged_by ?? null, admission_id]
+      );
+      dischargeId = existing.id;
+    } else {
+      const [result] = await conn.execute(
+        `INSERT INTO discharges
+           (admission_id, discharge_datetime, diagnosis_summary, treatment_summary, doctor_advice,
+            discharge_condition, room_charges, pharmacy_charges, doctor_fee, other_charges,
+            follow_up_date, final_bill_amount, amount_paid, balance_due, payment_mode,
+            discharge_notes, discharged_by, payment_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'cash', ?, ?, 'pending')`,
+        [admission_id, discharge_datetime ?? new Date(), diagnosis_summary ?? null, treatment_summary ?? null,
+         doctor_advice ?? null, discharge_condition ?? 'recovered', room_charges ?? 0,
+         pharmacy_charges ?? 0, doctor_fee ?? 0, other_charges ?? 0, follow_up_date ?? null,
+         final_bill_amount ?? 0, final_bill_amount ?? 0,
+         discharge_notes ?? null, discharged_by ?? null]
+      );
+      dischargeId = result.insertId;
+    }
 
+    // Mark admission as payment_pending (not discharged yet)
+    await conn.execute(`UPDATE admissions SET status = 'payment_pending' WHERE id = ?`, [admission_id]);
+
+    // Beds remain occupied — no status change until payment is collected
+
+    await conn.commit();
+    return dischargeId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
+/**
+ * Finalize discharge after full payment: mark admission 'discharged',
+ * set beds to pending_clearance (released to 'available' once fully paid).
+ */
+const finalizeDischarge = async (admissionId) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`UPDATE admissions SET status = 'discharged' WHERE id = ?`, [admissionId]);
     const [beds] = await conn.execute(
       `SELECT bed_id FROM admission_beds WHERE admission_id = ? AND occupied_to IS NULL`,
-      [admission_id]
+      [admissionId]
     );
     for (const { bed_id } of beds) {
       await conn.execute(`UPDATE beds SET status = 'pending_clearance' WHERE id = ?`, [bed_id]);
       await conn.execute(
         `UPDATE admission_beds SET occupied_to = NOW() WHERE admission_id = ? AND bed_id = ? AND occupied_to IS NULL`,
-        [admission_id, bed_id]
+        [admissionId, bed_id]
       );
     }
-
     await conn.commit();
-    return result.insertId;
+    return beds.length;
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -460,6 +520,79 @@ const releaseBedsIfPaid = async (admissionId) => {
     );
   }
   return { released: beds.length };
+};
+
+/* ─────────────────────────────────────────────
+   ADMISSION DAILY NOTES (day-wise vitals/advice)
+───────────────────────────────────────────── */
+
+const createAdmissionDailyNote = async (data) => {
+  const { admission_id, note_date, doctor_id, bp, pulse, temperature, spo2, advice, created_by } = data;
+  const [result] = await db.execute(
+    `INSERT INTO admission_daily_notes (admission_id, note_date, doctor_id, bp, pulse, temperature, spo2, advice, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [admission_id, note_date, doctor_id ?? null, bp ?? null, pulse ?? null, temperature ?? null, spo2 ?? null, advice ?? null, created_by ?? null]
+  );
+  return result.insertId;
+};
+
+const listAdmissionDailyNotes = async (admissionId) => {
+  const [rows] = await db.execute(
+    `SELECT n.*, e.full_name AS doctor_name
+     FROM admission_daily_notes n
+     LEFT JOIN employees e ON e.id = n.doctor_id
+     WHERE n.admission_id = ?
+     ORDER BY n.note_date DESC, n.created_at DESC`,
+    [admissionId]
+  );
+  return rows;
+};
+
+/* ─────────────────────────────────────────────
+   ADMISSION FULL TIMELINE
+───────────────────────────────────────────── */
+
+/**
+ * Everything about one admission in one place: bed/room stay history,
+ * day-wise vitals/advice notes, medicines given (grouped by bill date),
+ * computed charges, and the discharge record folded in (not a separate view).
+ */
+const getAdmissionTimeline = async (admissionId) => {
+  const admission = await getAdmission(admissionId);
+  if (!admission) return null;
+
+  const notes = await listAdmissionDailyNotes(admissionId);
+
+  const [medicineBills] = await db.execute(
+    `SELECT pb.id AS bill_id, pb.bill_number, pb.bill_date, pb.net_amount,
+            pbi.quantity, pbi.unit_price, pbi.subtotal, m.name AS medicine_name
+     FROM pharmacy_bills pb
+     JOIN pharmacy_bill_items pbi ON pbi.pharmacy_bill_id = pb.id
+     JOIN medicines m ON m.id = pbi.medicine_id
+     WHERE pb.admission_id = ?
+     ORDER BY pb.bill_date ASC`,
+    [admissionId]
+  );
+
+  const room = await computeRoomCharges(admissionId);
+  const pharmacyTotal = await computePharmacyCharges(admissionId);
+  const discharge = await getDischargeByAdmission(admissionId);
+
+  return {
+    admission,
+    beds: admission.beds,
+    dailyNotes: notes,
+    medicineBills,
+    charges: {
+      room_charges: room.total,
+      room_charge_breakdown: room.breakdown,
+      pharmacy_charges: pharmacyTotal,
+      doctor_fee: discharge?.doctor_fee ?? null,
+      other_charges: discharge?.other_charges ?? null,
+      final_bill_amount: discharge?.final_bill_amount ?? null,
+    },
+    discharge,
+  };
 };
 
 /* ─────────────────────────────────────────────
@@ -538,9 +671,12 @@ const getPatientHistory = async (patientId) => {
 module.exports = {
   listPatients, findPatientsByMobile, getPatient, createPatient, updatePatient,
   listAppointments, getAppointment, getNextTokenNumber, createAppointment,
-  updateAppointmentStatus, closeWalkInVisit, getAppointmentPayments,
+  updateAppointmentStatus, closeWalkInVisit,
+  markAppointmentPaymentPending, closeAppointment, getAppointmentPayments,
   listAdmissions, getAdmission, createAdmission, assignBed, releaseBedFromAdmission,
   computeRoomCharges, computePharmacyCharges,
-  getDischargeByAdmission, createDischarge, recordDischargePayment, releaseBedsIfPaid,
+  getDischargeByAdmission, createDischarge, finalizeDischarge,
+  recordDischargePayment, releaseBedsIfPaid,
+  createAdmissionDailyNote, listAdmissionDailyNotes, getAdmissionTimeline,
   getPatientHistory,
 };

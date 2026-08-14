@@ -5,6 +5,10 @@ const getConsultation = async (appointmentId) => {
   return await queries.getConsultationByAppointment(appointmentId);
 };
 
+const getConsultationById = async (id) => {
+  return await queries.getConsultationById(id);
+};
+
 const saveConsultation = async (data, doctorId) => {
   const { appointment_id, diagnosis, complaints, doctor_notes, follow_up_date, prescription_items } = data;
   
@@ -51,5 +55,6 @@ const saveConsultation = async (data, doctorId) => {
 
 module.exports = {
   getConsultation,
+  getConsultationById,
   saveConsultation
 };

@@ -4,8 +4,8 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   const [deptName, setDeptName] = useState(initialData ? initialData.name : '');
   const [roles, setRoles] = useState(
     initialData && initialData.roles && initialData.roles.length > 0
-      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30 }))
-      : [{ roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30 }]
+      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30, isDoctor: !!r.isDoctor }))
+      : [{ roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30, isDoctor: false }]
   );
   const [errors, setErrors] = useState({});
 
@@ -23,7 +23,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   };
 
   const addRole = () => {
-    setRoles(prev => [...prev, { roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30 }]);
+    setRoles(prev => [...prev, { roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30, isDoctor: false }]);
   };
 
   const removeRole = (idx) => {
@@ -138,10 +138,10 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
 
           <div className="grid grid-cols-12 gap-2 px-1">
             <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">#</div>
-            <div className="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Role Name <span className="text-red-400">*</span>
             </div>
-            <div className="col-span-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Basic Salary (₹) <span className="text-red-400">*</span>
             </div>
             <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Weekly Offs per month">
@@ -149,6 +149,9 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
             </div>
             <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Monthly Buffer Minutes">
               Buffer (min)
+            </div>
+            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Employees under this role are treated as doctors">
+              Doctor
             </div>
             <div className="col-span-1"></div>
           </div>
@@ -162,7 +165,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   </span>
                 </div>
 
-                <div className="col-span-4 space-y-1">
+                <div className="col-span-3 space-y-1">
                   <input
                     type="text"
                     value={role.roleName}
@@ -182,7 +185,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   )}
                 </div>
 
-                <div className="col-span-3 space-y-1">
+                <div className="col-span-2 space-y-1">
                   <div className="relative">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-semibold pointer-events-none">
                       ₹
@@ -229,6 +232,16 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                     min="0" max="600"
                     title="Monthly Buffer Minutes"
                     className="w-full px-2 py-2.5 border border-gray-200 bg-white rounded-lg text-xs font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="col-span-2 flex items-center justify-center h-10">
+                  <input
+                    type="checkbox"
+                    checked={!!role.isDoctor}
+                    onChange={(e) => handleRoleChange(idx, 'isDoctor', e.target.checked)}
+                    title="Employees under this role are treated as doctors"
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/30 cursor-pointer"
                   />
                 </div>
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import AdmissionDetailView from './AdmissionDetailView';
+import ConsultationDetailView from './ConsultationDetailView';
 
 const genderLabel = { male: 'Male', female: 'Female', other: 'Other' };
 
@@ -396,6 +398,7 @@ function Section({ title, children }) {
 function PatientHistory({ patient, onBack, onError }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [detailView, setDetailView] = useState(null); // null | { type: 'admission'|'consultation', id }
 
   useEffect(() => {
     (async () => {
@@ -410,6 +413,26 @@ function PatientHistory({ patient, onBack, onError }) {
       }
     })();
   }, [patient.id]);
+
+  if (detailView?.type === 'admission') {
+    return (
+      <AdmissionDetailView
+        admissionId={detailView.id}
+        onBack={() => setDetailView(null)}
+        onError={onError}
+      />
+    );
+  }
+
+  if (detailView?.type === 'consultation') {
+    return (
+      <ConsultationDetailView
+        consultationId={detailView.id}
+        onBack={() => setDetailView(null)}
+        onError={onError}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -452,7 +475,11 @@ function PatientHistory({ patient, onBack, onError }) {
             ) : (
               <div className="divide-y divide-gray-100">
                 {data.admissions.map((a) => (
-                  <div key={a.id} className="p-3.5 flex items-center justify-between text-xs">
+                  <div
+                    key={a.id}
+                    onClick={() => setDetailView({ type: 'admission', id: a.id })}
+                    className="p-3.5 flex items-center justify-between text-xs cursor-pointer hover:bg-gray-50/80 transition-colors"
+                  >
                     <div>
                       <span className="font-bold text-gray-900">Admission #{a.id}</span>{' '}
                       <span className="text-gray-500">— {displayDate(a.admission_datetime)} · Dr. {a.doctor_name || '—'}</span>
@@ -474,7 +501,11 @@ function PatientHistory({ patient, onBack, onError }) {
                 {data.consultations.map((c) => {
                   const items = data.prescriptions.filter((p) => p.consultation_id === c.id);
                   return (
-                    <div key={c.id} className="p-3.5 text-xs space-y-1.5">
+                    <div
+                      key={c.id}
+                      onClick={() => setDetailView({ type: 'consultation', id: c.id })}
+                      className="p-3.5 text-xs space-y-1.5 cursor-pointer hover:bg-gray-50/80 transition-colors"
+                    >
                       <div className="font-bold text-gray-900">{displayDate(c.appointment_date)} · Dr. {c.doctor_name || '—'}</div>
                       <div className="text-gray-600">Diagnosis: {c.diagnosis || '—'}</div>
                       {items.length > 0 && (
@@ -510,27 +541,6 @@ function PatientHistory({ patient, onBack, onError }) {
                         b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>{b.payment_status}</span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-
-          <Section title={`Discharge Summaries (${data.discharges.length})`}>
-            {data.discharges.length === 0 ? (
-              <div className="p-6 text-center text-xs text-gray-500">No discharge records.</div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {data.discharges.map((d) => (
-                  <div key={d.id} className="p-3.5 text-xs space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-900">{displayDate(d.discharge_datetime)}</span>
-                      <span className="font-semibold text-gray-700">
-                        ₹{Number(d.final_bill_amount).toLocaleString('en-IN')} · balance ₹{Number(d.balance_due).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                    <div className="text-gray-600">{d.diagnosis_summary || '—'}</div>
-                    {d.follow_up_date && <div className="text-[11px] text-blue-600">Follow-up: {displayDate(d.follow_up_date)}</div>}
                   </div>
                 ))}
               </div>
