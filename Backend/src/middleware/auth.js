@@ -28,6 +28,7 @@ const verifyToken = (req, res, next) => {
       username: 'admin',
       role_id: 1,
       role_name: 'Administrator',
+      can_access_settings: true,
       permissions: ['manage_all']
     };
     return next();
@@ -67,4 +68,13 @@ const requirePermissions = (requiredPermissions) => {
   };
 };
 
-module.exports = { verifyToken, requirePermissions };
+/** Gate the Settings page: Administrators always pass; other roles need can_access_settings. */
+const requireSettingsAccess = (req, res, next) => {
+  if (!req.user) return res.status(401).json(fail('Access denied. No user data.'));
+  if (req.user.permissions?.includes('manage_all') || req.user.can_access_settings) {
+    return next();
+  }
+  return res.status(403).json(fail('Forbidden. This role cannot access Settings.'));
+};
+
+module.exports = { verifyToken, requirePermissions, requireSettingsAccess };

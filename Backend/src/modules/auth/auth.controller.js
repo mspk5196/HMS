@@ -17,6 +17,19 @@ const login = asyncHandler(async (req, res) => {
   return res.json(success(result, 'Login successful'));
 });
 
+const refresh = asyncHandler(async (req, res) => {
+  const result = await svc.refreshToken(req.user.id);
+
+  res.cookie('token', result.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000
+  });
+
+  return res.json(success(result, 'Token refreshed'));
+});
+
 const logout = asyncHandler(async (req, res) => {
   res.clearCookie('token');
   return res.json(success(null, 'Logged out successfully'));
@@ -29,6 +42,7 @@ const getMe = asyncHandler(async (req, res) => {
 
 module.exports = {
   login,
+  refresh,
   logout,
   getMe,
 };

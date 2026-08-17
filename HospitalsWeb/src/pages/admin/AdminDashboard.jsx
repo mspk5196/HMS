@@ -24,8 +24,9 @@ import AdmissionBeds from './AdmissionBeds';
 import Discharge from './Discharge';
 import CollectPayment from './CollectPayment';
 import DoctorFeeSettings from './DoctorFeeSettings';
-import RolesPermissions from './RolesPermissions';
 import Settings from './Settings';
+import UsersAuthentication from './UsersAuthentication';
+import Approvals from './Approvals';
 
 export default function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('hr-employees');
@@ -91,8 +92,10 @@ export default function AdminDashboard({ user, onLogout }) {
         return <CollectPayment />;
       case 'doctor-fee-settings':
         return <DoctorFeeSettings />;
-      case 'roles-permissions':
-        return <RolesPermissions />;
+      case 'users-auth':
+        return <UsersAuthentication />;
+      case 'approvals':
+        return <Approvals />;
       case 'settings':
         return <Settings />;
       default:

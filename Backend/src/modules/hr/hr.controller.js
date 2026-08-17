@@ -2,6 +2,10 @@ const svc = require('./hr.service');
 const asyncHandler = require('../../middleware/asyncHandler');
 const { success, created, paginated, fail } = require('../../utils/response');
 
+const listDoctors = asyncHandler(async (req, res) => {
+  return res.json(success(await svc.listDoctors()));
+});
+
 const listEmployees = asyncHandler(async (req, res) => {
   const { search, departmentId, status, page = 1, limit = 50 } = req.query;
   const result = await svc.listEmployees({
@@ -200,7 +204,7 @@ const listSalaryLogs = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  listEmployees, getEmployee, createEmployee, updateEmployee,
+  listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

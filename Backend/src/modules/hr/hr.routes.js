@@ -1,52 +1,60 @@
 const router = require('express').Router();
 const ctrl = require('./hr.controller');
 const { verifyToken, requirePermissions } = require('../../middleware/auth');
+const { gate } = require('../../middleware/approvalGate');
 
 router.use(verifyToken);
+const canViewEmployees = requirePermissions(['hr_employee.view']);
+const canViewDepartments = requirePermissions(['hr_department.view']);
+const canViewShifts = requirePermissions(['hr_shift.view']);
+const canViewRoster = requirePermissions(['hr_roster.view']);
 
 // Employees — NOTE: static routes MUST precede /employees/:id
-router.get('/employees/remapping-logs', ctrl.listRemappingLogs);
-router.get('/employees/salary-logs', ctrl.listSalaryLogs);
-router.post('/employees/remap', requirePermissions(['manage_hr']), ctrl.remapEmployee);
-router.get('/employees', ctrl.listEmployees);
-router.get('/employees/:id', ctrl.getEmployee);
-router.post('/employees', requirePermissions(['manage_hr']), ctrl.createEmployee);
-router.patch('/employees/:id/salary', requirePermissions(['manage_hr']), ctrl.updateEmployeeSalary);
-router.patch('/employees/:id', requirePermissions(['manage_hr']), ctrl.updateEmployee);
+router.get('/employees/remapping-logs', canViewEmployees, ctrl.listRemappingLogs);
+router.get('/employees/salary-logs', canViewEmployees, ctrl.listSalaryLogs);
+// Doctor lookup — used by doctor pickers across appointment/admission booking;
+// deliberately ungated beyond login, same as the old open /employees list was.
+router.get('/employees/doctors', ctrl.listDoctors);
+router.post('/employees/remap', gate('hr_employee.remap', ctrl.remapEmployee));
+router.get('/employees', canViewEmployees, ctrl.listEmployees);
+router.get('/employees/:id', canViewEmployees, ctrl.getEmployee);
+router.post('/employees', gate('hr_employee.create', ctrl.createEmployee));
+router.patch('/employees/:id/salary', gate('hr_employee.set_salary', ctrl.updateEmployeeSalary));
+router.patch('/employees/:id', gate('hr_employee.edit', ctrl.updateEmployee));
 
 // Departments
-router.get('/departments', ctrl.listDepartments);
-router.post('/departments', requirePermissions(['manage_hr']), ctrl.createDepartment);
-router.patch('/departments/:id', requirePermissions(['manage_hr']), ctrl.updateDepartment);
-router.delete('/departments/:id', requirePermissions(['manage_hr']), ctrl.deleteDepartment);
+router.get('/departments', canViewDepartments, ctrl.listDepartments);
+router.post('/departments', gate('hr_department.create', ctrl.createDepartment));
+router.patch('/departments/:id', gate('hr_department.edit', ctrl.updateDepartment));
+router.delete('/departments/:id', gate('hr_department.delete', ctrl.deleteDepartment));
 
 // Designations (Master)
-router.get('/designations', ctrl.listDesignations);
-router.post('/designations', requirePermissions(['manage_hr']), ctrl.createDesignation);
+router.get('/designations', canViewDepartments, ctrl.listDesignations);
+router.post('/designations', gate('hr_department.create', ctrl.createDesignation));
 
 // Roles (Authorization Roles)
-router.get('/roles', ctrl.listRoles);
-router.post('/roles', requirePermissions(['manage_hr']), ctrl.createRole);
+router.get('/roles', canViewDepartments, ctrl.listRoles);
+router.post('/roles', gate('hr_department.create', ctrl.createRole));
 
 // Staff Roles (Department-Specific with Salary)
-router.get('/staff-roles', ctrl.listStaffRoles);
-router.get('/staff-roles/:id', ctrl.getStaffRole);
-router.post('/staff-roles', requirePermissions(['manage_hr']), ctrl.createStaffRole);
-router.patch('/staff-roles/:id', requirePermissions(['manage_hr']), ctrl.updateStaffRole);
-router.delete('/staff-roles/:id', requirePermissions(['manage_hr']), ctrl.deleteStaffRole);
+router.get('/staff-roles', canViewDepartments, ctrl.listStaffRoles);
+router.get('/staff-roles/:id', canViewDepartments, ctrl.getStaffRole);
+router.post('/staff-roles', gate('hr_department.create', ctrl.createStaffRole));
+router.patch('/staff-roles/:id', gate('hr_department.edit', ctrl.updateStaffRole));
+router.delete('/staff-roles/:id', gate('hr_department.delete', ctrl.deleteStaffRole));
 
 // Shifts
-router.get('/shifts', ctrl.listShifts);
-router.post('/shifts', requirePermissions(['manage_hr']), ctrl.createShift);
-router.patch('/shifts/:id', requirePermissions(['manage_hr']), ctrl.updateShift);
-router.delete('/shifts/:id', requirePermissions(['manage_hr']), ctrl.deleteShift);
+router.get('/shifts', canViewShifts, ctrl.listShifts);
+router.post('/shifts', gate('hr_shift.create', ctrl.createShift));
+router.patch('/shifts/:id', gate('hr_shift.edit', ctrl.updateShift));
+router.delete('/shifts/:id', gate('hr_shift.delete', ctrl.deleteShift));
 
 // Roster — static segments must precede any parameterised ones
-router.get('/roster/week', ctrl.getRosterWeek);
-router.get('/roster/employees', ctrl.getEmployeesForRoster);
-router.get('/roster', ctrl.getRoster);
-router.post('/roster/day', requirePermissions(['manage_hr']), ctrl.saveRosterDay);
-router.post('/roster/bulk', requirePermissions(['manage_hr']), ctrl.bulkSaveRoster);
-router.post('/roster/swap', requirePermissions(['manage_hr']), ctrl.swapRosterShifts);
+router.get('/roster/week', canViewRoster, ctrl.getRosterWeek);
+router.get('/roster/employees', canViewRoster, ctrl.getEmployeesForRoster);
+router.get('/roster', canViewRoster, ctrl.getRoster);
+router.post('/roster/day', requirePermissions(['hr_roster.save_day']), ctrl.saveRosterDay);
+router.post('/roster/bulk', gate('hr_roster.bulk_save', ctrl.bulkSaveRoster));
+router.post('/roster/swap', requirePermissions(['hr_roster.swap_shift']), ctrl.swapRosterShifts);
 
 module.exports = router;

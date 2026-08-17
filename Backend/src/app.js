@@ -61,6 +61,8 @@ app.use('/api/pharmacy',   require('./modules/pharmacy/pharmacy.routes'));
 app.use('/api/consultation', require('./modules/consultation/consultation.routes'));
 app.use('/api/bed', require('./modules/bed/bed.routes'));
 app.use('/api/payment', require('./modules/payment/payment.routes'));
+app.use('/api/rbac', require('./modules/rbac/rbac.routes'));
+app.use('/api/users', require('./modules/users/users.routes'));
 
 // ─── Global error handler (must be last) ────────────────────────────────────
 app.use(require('./middleware/errorHandler'));

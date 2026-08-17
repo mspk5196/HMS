@@ -136,6 +136,7 @@ module.exports = {
   remapEmployee, updateEmployeeSalary,
   // Pass-through
   listEmployees: q.listEmployees,
+  listDoctors: q.listDoctors,
   getEmployee: q.getEmployee,
   listDepartments: q.listDepartments,
   listDesignations: q.listDesignations,

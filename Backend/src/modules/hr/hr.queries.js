@@ -1,5 +1,57 @@
 const db = require('../../config/db');
 
+/**
+ * Settings > Role Permissions lists roles straight from Department & Role's
+ * staff_roles (roles.staff_role_id). Every staff_role create/rename must be
+ * mirrored into `roles` so it shows up there — this is the single place that
+ * does it. Uses `conn` so it can run inside the same transaction as the
+ * staff_role write it's mirroring.
+ */
+const syncRoleFromStaffRole = async (conn, staffRoleId, name, departmentName) => {
+  const trimmed = name.trim();
+  const [[linked]] = await conn.execute(`SELECT id FROM roles WHERE staff_role_id = ?`, [staffRoleId]);
+  if (linked) {
+    await conn.execute(`UPDATE roles SET name = ? WHERE id = ?`, [trimmed, linked.id]);
+    return;
+  }
+  const [[nameClash]] = await conn.execute(`SELECT id FROM roles WHERE name = ?`, [trimmed]);
+  const finalName = nameClash ? `${trimmed} (${departmentName})` : trimmed;
+  const [[{ maxPriority }]] = await conn.execute(`SELECT COALESCE(MAX(priority), 0) AS maxPriority FROM roles`);
+  await conn.execute(
+    `INSERT INTO roles (name, description, priority, can_access_settings, staff_role_id) VALUES (?, ?, ?, 0, ?)`,
+    [finalName, 'Auto-linked from Department & Role', maxPriority + 1, staffRoleId]
+  );
+};
+
+/** Active employees whose staff_role is flagged is_doctor — used by doctor pickers across the app. */
+const listDoctors = async () => {
+  const [rows] = await db.execute(
+    `SELECT e.id, e.full_name, sr.name AS designation, d.name AS department_name
+     FROM employees e
+     JOIN staff_roles sr ON sr.id = e.designation_id
+     LEFT JOIN departments d ON d.id = e.department_id
+     WHERE sr.is_doctor = 1 AND e.status = 'active'
+     ORDER BY e.full_name`
+  );
+  return rows;
+};
+
+/**
+ * An employee's login role is derived from their designation (staff_role),
+ * not chosen separately — Users & Authentication has no role picker. Whenever
+ * an employee's designation changes and they already have a login, move
+ * their login to the role mirrored from the new designation. No-op if they
+ * have no login yet, or the new designation has no mirrored role.
+ */
+const syncUserRoleFromDesignation = async (employeeId, designationId) => {
+  if (!designationId) return;
+  const [[user]] = await db.execute(`SELECT id FROM users WHERE employee_id = ?`, [employeeId]);
+  if (!user) return;
+  const [[role]] = await db.execute(`SELECT id FROM roles WHERE staff_role_id = ?`, [designationId]);
+  if (!role) return;
+  await db.execute(`UPDATE users SET role_id = ? WHERE id = ?`, [role.id, user.id]);
+};
+
 /* ─── EMPLOYEES ─── */
 const listEmployees = async ({ search, departmentId, status, page = 1, limit = 50 }) => {
   const offset = (page - 1) * limit;
@@ -136,6 +188,10 @@ const updateEmployee = async (id, data) => {
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE employees SET ${fields.join(', ')} WHERE id = ?`, vals);
+
+  if (data.designation_id !== undefined) {
+    await syncUserRoleFromDesignation(id, data.designation_id);
+  }
 };
 
 /* ─── DEPARTMENTS ─── */
@@ -239,10 +295,11 @@ const createDepartment = async (data) => {
     if (Array.isArray(roles) && roles.length > 0) {
       for (const r of roles) {
         if (!r.roleName) continue;
-        await conn.execute(
+        const [ins] = await conn.execute(
           `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes, is_doctor) VALUES (?, ?, ?, ?, ?, ?)`,
           [departmentId, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0]
         );
+        await syncRoleFromStaffRole(conn, ins.insertId, r.roleName, name);
       }
     }
 
@@ -283,6 +340,9 @@ const updateDepartment = async (id, data) => {
       );
       const currentIds = currentRoles.map(r => r.id);
 
+      const [[dept]] = await conn.execute(`SELECT name FROM departments WHERE id = ?`, [id]);
+      const departmentName = dept?.name ?? '';
+
       const keepIds = [];
 
       for (const r of roles) {
@@ -293,6 +353,7 @@ const updateDepartment = async (id, data) => {
             `UPDATE staff_roles SET name = ?, basic_salary = ?, weekly_off_count = ?, monthly_buffer_minutes = ?, is_doctor = ? WHERE id = ? AND department_id = ?`,
             [r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0, r.id, id]
           );
+          await syncRoleFromStaffRole(conn, r.id, r.roleName, departmentName);
           keepIds.push(r.id);
         } else {
           // Insert new role
@@ -300,6 +361,7 @@ const updateDepartment = async (id, data) => {
             `INSERT INTO staff_roles (department_id, name, basic_salary, weekly_off_count, monthly_buffer_minutes, is_doctor) VALUES (?, ?, ?, ?, ?, ?)`,
             [id, r.roleName, r.basicSalary ?? 0.00, r.weeklyOffCount ?? 4, r.monthlyBufferMinutes ?? 30, r.isDoctor ? 1 : 0]
           );
+          await syncRoleFromStaffRole(conn, insResult.insertId, r.roleName, departmentName);
         }
       }
 
@@ -406,6 +468,8 @@ const createStaffRole = async (data) => {
       is_night_shift ? 1 : 0, grace_period_minutes ?? 0, is_doctor ? 1 : 0
     ]
   );
+  const [[dept]] = await db.execute(`SELECT name FROM departments WHERE id = ?`, [department_id]);
+  await syncRoleFromStaffRole(db, result.insertId, name, dept?.name ?? '');
   return result.insertId;
 };
 
@@ -430,6 +494,14 @@ const updateStaffRole = async (id, data) => {
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE staff_roles SET ${fields.join(', ')} WHERE id = ?`, vals);
+
+  if (data.name !== undefined) {
+    const [[sr]] = await db.execute(
+      `SELECT sr.name, d.name AS department_name FROM staff_roles sr JOIN departments d ON d.id = sr.department_id WHERE sr.id = ?`,
+      [id]
+    );
+    if (sr) await syncRoleFromStaffRole(db, id, sr.name, sr.department_name);
+  }
 };
 
 const deleteStaffRole = async (id) => {
@@ -500,6 +572,8 @@ const remapEmployee = async ({ employee_id, to_department_id, to_role_id, from_d
     `UPDATE employees SET department_id = ?, designation_id = ? WHERE id = ?`,
     [to_department_id, to_role_id, employee_id]
   );
+
+  await syncUserRoleFromDesignation(employee_id, to_role_id);
 };
 
 const listRemappingLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
@@ -616,7 +690,7 @@ const listSalaryLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
 };
 
 module.exports = {
-  listEmployees, getEmployee, getEmployeeByCode, createEmployee, updateEmployee,
+  listEmployees, listDoctors, getEmployee, getEmployeeByCode, createEmployee, updateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

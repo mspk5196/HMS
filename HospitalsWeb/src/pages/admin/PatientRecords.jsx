@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import AdmissionDetailView from './AdmissionDetailView';
 import ConsultationDetailView from './ConsultationDetailView';
+import PharmacyBillDetailView from './PharmacyBillDetailView';
 
 const genderLabel = { male: 'Male', female: 'Female', other: 'Other' };
 
@@ -434,6 +435,16 @@ function PatientHistory({ patient, onBack, onError }) {
     );
   }
 
+  if (detailView?.type === 'pharmacyBill') {
+    return (
+      <PharmacyBillDetailView
+        billId={detailView.id}
+        onBack={() => setDetailView(null)}
+        onError={onError}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -530,7 +541,11 @@ function PatientHistory({ patient, onBack, onError }) {
             ) : (
               <div className="divide-y divide-gray-100">
                 {data.pharmacyBills.map((b) => (
-                  <div key={b.id} className="p-3.5 flex items-center justify-between text-xs">
+                  <div
+                    key={b.id}
+                    onClick={() => setDetailView({ type: 'pharmacyBill', id: b.id })}
+                    className="p-3.5 flex items-center justify-between text-xs cursor-pointer hover:bg-gray-50/80 transition-colors"
+                  >
                     <div>
                       <span className="font-bold text-gray-900">{b.bill_number}</span>{' '}
                       <span className="text-gray-500">— {displayDate(b.bill_date)}</span>

@@ -1,32 +1,47 @@
-import React from 'react';
+import React, { useState } from 'react';
+import RolePermissions from './settings/RolePermissions';
+import ApprovalWorkflows from './settings/ApprovalWorkflows';
+import SettingsAccess from './settings/SettingsAccess';
+import HospitalProfile from './settings/HospitalProfile';
+
+const TABS = [
+  { id: 'role-permissions', label: 'Role Permissions' },
+  { id: 'approval-workflows', label: 'Approval Workflows' },
+  { id: 'settings-access', label: 'Settings Access' },
+  { id: 'hospital-profile', label: 'Hospital Profile' },
+];
 
 export default function Settings() {
+  const [tab, setTab] = useState('role-permissions');
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Admin &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Settings</span>
-        </h1>
+        <h1 className="text-xl font-bold text-gray-800 tracking-tight">Settings</h1>
+        <p className="text-xs text-gray-500 mt-0.5">School configuration and administration</p>
       </div>
 
-      <div className="bg-white p-6 rounded-xl border border-gray-200/80 shadow-sm space-y-6">
-        <h2 className="text-sm font-bold text-gray-900">Hospital Profile</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div>
-            <label className="block font-bold text-gray-700 mb-1">Hospital Name</label>
-            <input type="text" defaultValue="Neha Hospital" className="w-full p-2.5 border border-gray-200 rounded-lg" />
-          </div>
-          <div>
-            <label className="block font-bold text-gray-700 mb-1">Tagline</label>
-            <input type="text" defaultValue="Hospital Management System v2.0" className="w-full p-2.5 border border-gray-200 rounded-lg" />
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-gray-100 flex justify-end">
-          <button className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm cursor-pointer transition-colors">
-            Save System Settings
+      <div className="border-b border-gray-200 flex gap-6">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`pb-3 text-sm font-semibold cursor-pointer transition-colors border-b-2 -mb-px ${
+              tab === t.id
+                ? 'text-blue-600 border-blue-600'
+                : 'text-gray-500 border-transparent hover:text-gray-700'
+            }`}
+          >
+            {t.label}
           </button>
-        </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6">
+        {tab === 'role-permissions' && <RolePermissions />}
+        {tab === 'approval-workflows' && <ApprovalWorkflows />}
+        {tab === 'settings-access' && <SettingsAccess />}
+        {tab === 'hospital-profile' && <HospitalProfile />}
       </div>
     </div>
   );

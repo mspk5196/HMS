@@ -2,61 +2,37 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../util/api';
 
 /**
- * Search-as-you-type doctor/employee picker.
+ * Search-as-you-type doctor picker.
  *
- * Backed by GET /hr/employees?search=..., which matches on name or employee
- * code. There's no "is_doctor" flag in the schema — doctor_id on appointments
- * and admitting_doctor_id on admissions are both plain employees FKs — so this
- * searches all active employees rather than guessing which designations count
- * as doctors.
+ * Backed by GET /hr/employees/doctors, which is filtered server-side to
+ * employees whose staff_role has is_doctor = 1 — so this only ever lists
+ * real doctors, not every employee.
  *
  * value/onChange carry the employee id (string, to match the numeric-input
  * pickers this replaces). label is shown once selected.
  */
 export default function DoctorPicker({ value, onChange, label = 'Doctor' }) {
   const [query, setQuery] = useState('');
-  const [selectedLabel, setSelectedLabel] = useState('');
-  const [results, setResults] = useState([]);
+  const [doctors, setDoctors] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const boxRef = useRef(null);
 
-  // If a value arrives from outside (e.g. editing) with no cached label yet,
-  // resolve it once so the field doesn't show a bare id.
   useEffect(() => {
-    if (!value || selectedLabel) return;
     let cancelled = false;
     (async () => {
       try {
-        const emp = await apiFetch(`/hr/employees/${value}`);
-        if (!cancelled) setSelectedLabel(`${emp.full_name} · ${emp.department_name || '—'}`);
+        setIsLoading(true);
+        const data = await apiFetch('/hr/employees/doctors');
+        if (!cancelled) setDoctors(Array.isArray(data) ? data : []);
       } catch {
-        if (!cancelled) setSelectedLabel(`Employee #${value}`);
+        if (!cancelled) setDoctors([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  useEffect(() => {
-    if (!isOpen || !query.trim()) { setResults([]); return; }
-    let cancelled = false;
-    setIsSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await apiFetch(
-          `/hr/employees?search=${encodeURIComponent(query.trim())}&status=active&limit=8`,
-          { withMeta: true }
-        );
-        if (!cancelled) setResults(Array.isArray(data) ? data : []);
-      } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setIsSearching(false);
-      }
-    }, 300);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [query, isOpen]);
+  }, []);
 
   useEffect(() => {
     const onClickOutside = (e) => {
@@ -66,17 +42,20 @@ export default function DoctorPicker({ value, onChange, label = 'Doctor' }) {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  const pick = (emp) => {
-    onChange(String(emp.id));
-    setSelectedLabel(`${emp.full_name} · ${emp.department_name || '—'}`);
+  const selected = doctors.find((d) => String(d.id) === String(value));
+  const q = query.trim().toLowerCase();
+  const results = q
+    ? doctors.filter((d) => d.full_name.toLowerCase().includes(q))
+    : doctors;
+
+  const pick = (doc) => {
+    onChange(String(doc.id));
     setQuery('');
-    setResults([]);
     setIsOpen(false);
   };
 
   const clear = () => {
     onChange('');
-    setSelectedLabel('');
     setQuery('');
   };
 
@@ -84,9 +63,16 @@ export default function DoctorPicker({ value, onChange, label = 'Doctor' }) {
     <div className="space-y-1" ref={boxRef}>
       <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</label>
 
-      {value && selectedLabel ? (
+      {value && selected ? (
         <div className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-xs">
-          <span className="font-semibold text-gray-800">{selectedLabel}</span>
+          <span className="font-semibold text-gray-800">{selected.full_name} · {selected.designation || '—'}</span>
+          <button type="button" onClick={clear} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
+            Change
+          </button>
+        </div>
+      ) : value && !selected && !isLoading ? (
+        <div className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-xs">
+          <span className="font-semibold text-gray-800">Doctor #{value}</span>
           <button type="button" onClick={clear} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
             Change
           </button>
@@ -98,25 +84,25 @@ export default function DoctorPicker({ value, onChange, label = 'Doctor' }) {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
             onFocus={() => setIsOpen(true)}
-            placeholder="Search doctor by name..."
+            placeholder={isLoading ? 'Loading doctors…' : 'Search doctor by name...'}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
-          {isOpen && query.trim() && (
+          {isOpen && (
             <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md max-h-52 overflow-y-auto">
-              {isSearching ? (
-                <div className="px-3 py-2 text-[11px] text-gray-400">Searching…</div>
+              {isLoading ? (
+                <div className="px-3 py-2 text-[11px] text-gray-400">Loading…</div>
               ) : results.length === 0 ? (
-                <div className="px-3 py-2 text-[11px] text-gray-400">No matches.</div>
+                <div className="px-3 py-2 text-[11px] text-gray-400">No doctors found.</div>
               ) : (
-                results.map((emp) => (
+                results.map((doc) => (
                   <button
-                    key={emp.id}
+                    key={doc.id}
                     type="button"
-                    onClick={() => pick(emp)}
+                    onClick={() => pick(doc)}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
                   >
-                    <div className="font-semibold text-gray-900">{emp.full_name}</div>
-                    <div className="text-[10px] text-gray-400">{emp.department_name || '—'} · {emp.designation_name || '—'}</div>
+                    <div className="font-semibold text-gray-900">{doc.full_name}</div>
+                    <div className="text-[10px] text-gray-400">{doc.department_name || '—'} · {doc.designation || '—'}</div>
                   </button>
                 ))
               )}

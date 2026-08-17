@@ -2,11 +2,22 @@ const db = require('../../config/db');
 
 const getUserByUsername = async (username) => {
   const [rows] = await db.execute(
-    `SELECT u.*, r.name AS role_name
+    `SELECT u.*, r.name AS role_name, r.can_access_settings
      FROM users u
      JOIN roles r ON r.id = u.role_id
      WHERE u.username = ? AND u.is_active = 1`,
     [username]
+  );
+  return rows[0] ?? null;
+};
+
+const getUserById = async (id) => {
+  const [rows] = await db.execute(
+    `SELECT u.*, r.name AS role_name, r.can_access_settings
+     FROM users u
+     JOIN roles r ON r.id = u.role_id
+     WHERE u.id = ?`,
+    [id]
   );
   return rows[0] ?? null;
 };
@@ -37,6 +48,7 @@ const updateUserLastLogin = async (userId) => {
 
 module.exports = {
   getUserByUsername,
+  getUserById,
   getPermissionsForRole,
   updateUserLastLogin,
 };
