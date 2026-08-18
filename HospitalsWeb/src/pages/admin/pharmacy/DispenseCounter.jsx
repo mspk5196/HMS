@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
+import HospitalReceipt from '../../../components/HospitalReceipt';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, todayISO } from './pharmacyUtils';
 
@@ -7,6 +8,8 @@ const emptyLine = { medicine_id: '', unit_type: 'tablet', quantity: '', discount
 
 export default function DispenseCounter() {
   const [medicines, setMedicines] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [doctorId, setDoctorId] = useState('');
   const [patientQuery, setPatientQuery] = useState('');
   const [patientResults, setPatientResults] = useState([]);
   const [patient, setPatient] = useState(null);
@@ -20,10 +23,14 @@ export default function DispenseCounter() {
   useEffect(() => {
     (async () => {
       try {
-        const result = await apiFetch('/pharmacy/medicines?limit=500', { withMeta: true });
-        setMedicines(Array.isArray(result.data) ? result.data : []);
+        const [medRes, docRes] = await Promise.all([
+          apiFetch('/pharmacy/medicines?limit=500', { withMeta: true }),
+          apiFetch('/payment/doctors'),
+        ]);
+        setMedicines(Array.isArray(medRes.data) ? medRes.data : []);
+        setDoctors(Array.isArray(docRes) ? docRes : []);
       } catch (err) {
-        setErrorMsg(err.message || 'Failed to load medicines.');
+        setErrorMsg(err.message || 'Failed to load pharmacy metadata.');
       }
     })();
   }, []);
@@ -89,6 +96,7 @@ export default function DispenseCounter() {
         method: 'POST',
         body: JSON.stringify({
           patient_id: patient.id,
+          doctor_id: doctorId ? Number(doctorId) : undefined,
           bill_date: todayISO(),
           payment_mode: 'cash',
           discount_amount: Number(discountAmount) || 0,
@@ -112,6 +120,7 @@ export default function DispenseCounter() {
   const startNewSale = () => {
     setGeneratedBill(null);
     setPatient(null);
+    setDoctorId('');
     setPatientQuery('');
     setPrescriptionTerms('');
     setLines([{ ...emptyLine }]);
@@ -119,7 +128,32 @@ export default function DispenseCounter() {
   };
 
   if (generatedBill) {
-    return <Receipt bill={generatedBill} onNewSale={startNewSale} />;
+    return (
+      <div className="space-y-4">
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-4 py-3 rounded-xl max-w-3xl mx-auto flex items-center justify-between">
+          <span>Bill <strong>{generatedBill.bill_number}</strong> generated. Added to <strong>Collect Payment</strong> page for payment collection.</span>
+          <button onClick={startNewSale} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg cursor-pointer">
+            + Dispense Next Sale
+          </button>
+        </div>
+        <HospitalReceipt
+          type="pharmacy"
+          data={{
+            pharmacy_bill_id: generatedBill.id,
+            bill_number: generatedBill.bill_number,
+            bill_date: generatedBill.bill_date,
+            patient_name: generatedBill.patient_name || patient?.full_name,
+            mobile_number: generatedBill.patient_mobile || patient?.mobile_number,
+            net_amount: generatedBill.net_amount,
+            amount_paid_now: generatedBill.paid_amount || 0,
+            balance_due: generatedBill.balance_amount || generatedBill.net_amount,
+            payment_mode: generatedBill.payment_mode || 'cash',
+            items: generatedBill.items || [],
+          }}
+          onClose={startNewSale}
+        />
+      </div>
+    );
   }
 
   return (
@@ -133,41 +167,59 @@ export default function DispenseCounter() {
       {errorMsg && <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl">{errorMsg}</div>}
 
       <form onSubmit={handleGenerate} className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-5">
-        <div>
-          <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Patient (Party) *</span>
-          {patient ? (
-            <div className="mt-1 flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3.5 py-2.5">
-              <div>
-                <div className="text-xs font-bold text-gray-900">{patient.full_name}</div>
-                <div className="text-[11px] text-gray-500">{patient.mobile_number}</div>
-              </div>
-              <button type="button" onClick={() => setPatient(null)} className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer">Change</button>
-            </div>
-          ) : (
-            <div className="relative mt-1">
-              <input
-                value={patientQuery}
-                onChange={(e) => setPatientQuery(e.target.value)}
-                placeholder="Search patient by name or mobile number..."
-                className={inputCls}
-              />
-              {patientResults.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {patientResults.map((p) => (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onClick={() => { setPatient(p); setPatientResults([]); }}
-                      className="w-full text-left px-3.5 py-2 text-xs hover:bg-blue-50 cursor-pointer"
-                    >
-                      <span className="font-semibold text-gray-900">{p.full_name}</span>{' '}
-                      <span className="text-gray-400">{p.mobile_number}</span>
-                    </button>
-                  ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Patient (Party) *</span>
+            {patient ? (
+              <div className="mt-1 flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3.5 py-2.5">
+                <div>
+                  <div className="text-xs font-bold text-gray-900">{patient.full_name}</div>
+                  <div className="text-[11px] text-gray-500">{patient.mobile_number}</div>
                 </div>
-              )}
-            </div>
-          )}
+                <button type="button" onClick={() => setPatient(null)} className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer">Change</button>
+              </div>
+            ) : (
+              <div className="relative mt-1">
+                <input
+                  value={patientQuery}
+                  onChange={(e) => setPatientQuery(e.target.value)}
+                  placeholder="Search patient by name or mobile number..."
+                  className={inputCls}
+                />
+                {patientResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {patientResults.map((p) => (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => { setPatient(p); setPatientResults([]); }}
+                        className="w-full text-left px-3.5 py-2 text-xs hover:bg-blue-50 cursor-pointer"
+                      >
+                        <span className="font-semibold text-gray-900">{p.full_name}</span>{' '}
+                        <span className="text-gray-400">{p.mobile_number}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Prescribing Doctor (optional)</span>
+            <select
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              className={`${inputCls} mt-1 font-semibold`}
+            >
+              <option value="">-- Select Prescribing Doctor --</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  Dr. {d.full_name} {d.qualification || d.designation ? `(${d.qualification || d.designation})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="space-y-1.5">

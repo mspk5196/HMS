@@ -3,6 +3,7 @@ import { apiFetch } from '../../util/api';
 import AdmissionDetailView from './AdmissionDetailView';
 import ConsultationDetailView from './ConsultationDetailView';
 import PharmacyBillDetailView from './PharmacyBillDetailView';
+import HospitalReceipt from '../../components/HospitalReceipt';
 
 const genderLabel = { male: 'Male', female: 'Female', other: 'Other' };
 
@@ -400,6 +401,7 @@ function PatientHistory({ patient, onBack, onError }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [detailView, setDetailView] = useState(null); // null | { type: 'admission'|'consultation', id }
+  const [selectedReceipt, setSelectedReceipt] = useState(null); // null | { type: 'opd'|'ipd'|'pharmacy', data }
 
   useEffect(() => {
     (async () => {
@@ -473,7 +475,27 @@ function PatientHistory({ patient, onBack, onError }) {
                       <span className="font-bold text-gray-900">Token #{a.token_number}</span>{' '}
                       <span className="text-gray-500">— {displayDate(a.appointment_date)} · Dr. {a.doctor_name || '—'}</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">{a.status.replace(/_/g, ' ')}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">{a.status.replace(/_/g, ' ')}</span>
+                      <button
+                        onClick={() => setSelectedReceipt({
+                          type: 'opd',
+                          data: {
+                            appointment_id: a.id,
+                            patient_name: patient.full_name,
+                            mobile_number: patient.mobile_number,
+                            age_years: patient.age_years,
+                            gender: patient.gender,
+                            doctor_name: a.doctor_name,
+                            doctor_fee: a.doctor_fee,
+                            bill_date: a.appointment_date,
+                          }
+                        })}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      >
+                        🧾 View Receipt
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -514,20 +536,44 @@ function PatientHistory({ patient, onBack, onError }) {
                   return (
                     <div
                       key={c.id}
-                      onClick={() => setDetailView({ type: 'consultation', id: c.id })}
-                      className="p-3.5 text-xs space-y-1.5 cursor-pointer hover:bg-gray-50/80 transition-colors"
+                      className="p-3.5 text-xs space-y-1.5 hover:bg-gray-50/80 transition-colors flex items-center justify-between"
                     >
-                      <div className="font-bold text-gray-900">{displayDate(c.appointment_date)} · Dr. {c.doctor_name || '—'}</div>
-                      <div className="text-gray-600">Diagnosis: {c.diagnosis || '—'}</div>
-                      {items.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {items.map((it, i) => (
-                            <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-medium">
-                              {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div
+                        onClick={() => setDetailView({ type: 'consultation', id: c.id })}
+                        className="cursor-pointer space-y-1 flex-1 min-w-0 pr-4"
+                      >
+                        <div className="font-bold text-gray-900">{displayDate(c.appointment_date)} · Dr. {c.doctor_name || '—'}</div>
+                        <div className="text-gray-600">Diagnosis: {c.diagnosis || '—'}</div>
+                        {items.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {items.map((it, i) => (
+                              <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-medium">
+                                {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedReceipt({
+                            type: 'opd',
+                            data: {
+                              appointment_id: c.appointment_id,
+                              patient_name: patient.full_name,
+                              mobile_number: patient.mobile_number,
+                              age_years: patient.age_years,
+                              gender: patient.gender,
+                              doctor_name: c.doctor_name,
+                              bill_date: c.appointment_date,
+                            }
+                          });
+                        }}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        🧾 View Receipt
+                      </button>
                     </div>
                   );
                 })}
@@ -543,10 +589,12 @@ function PatientHistory({ patient, onBack, onError }) {
                 {data.pharmacyBills.map((b) => (
                   <div
                     key={b.id}
-                    onClick={() => setDetailView({ type: 'pharmacyBill', id: b.id })}
-                    className="p-3.5 flex items-center justify-between text-xs cursor-pointer hover:bg-gray-50/80 transition-colors"
+                    className="p-3.5 flex items-center justify-between text-xs hover:bg-gray-50/80 transition-colors"
                   >
-                    <div>
+                    <div
+                      onClick={() => setDetailView({ type: 'pharmacyBill', id: b.id })}
+                      className="cursor-pointer flex-1 min-w-0 pr-4"
+                    >
                       <span className="font-bold text-gray-900">{b.bill_number}</span>{' '}
                       <span className="text-gray-500">— {displayDate(b.bill_date)}</span>
                     </div>
@@ -555,13 +603,79 @@ function PatientHistory({ patient, onBack, onError }) {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
                         b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>{b.payment_status}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedReceipt({
+                            type: 'pharmacy',
+                            data: {
+                              pharmacy_bill_id: b.id,
+                              bill_number: b.bill_number,
+                              patient_name: patient.full_name,
+                              mobile_number: patient.mobile_number,
+                              age_years: patient.age_years,
+                              gender: patient.gender,
+                              net_amount: b.net_amount,
+                              bill_date: b.bill_date,
+                            }
+                          });
+                        }}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      >
+                        🧾 View Receipt
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </Section>
+
+          {data.paymentReceipts && data.paymentReceipts.length > 0 && (
+            <Section title={`Payment Receipts (${data.paymentReceipts.length})`}>
+              <div className="divide-y divide-gray-100">
+                {data.paymentReceipts.map((r) => (
+                  <div key={r.id} className="p-3.5 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-blue-700">{r.receipt_number}</span>{' '}
+                      <span className="text-gray-500">— {displayDate(r.payment_date || r.created_at)} · Mode: <strong className="uppercase text-gray-700">{r.payment_mode}</strong></span>
+                      {r.fee_types && <div className="text-[10px] text-gray-400 capitalize">Types: {r.fee_types}</div>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-extrabold text-emerald-700 text-sm">₹{Number(r.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      <button
+                        onClick={() => setSelectedReceipt({
+                          type: (r.fee_types || '').includes('pharmacy') ? 'pharmacy' : (r.fee_types || '').includes('ipd') ? 'ipd' : 'opd',
+                          data: {
+                            receipt_number: r.receipt_number,
+                            patient_name: patient.full_name,
+                            mobile_number: patient.mobile_number,
+                            age_years: patient.age_years,
+                            gender: patient.gender,
+                            amount_paid_now: r.total_amount,
+                            payment_mode: r.payment_mode,
+                            payment_date: r.payment_date || r.created_at,
+                          }
+                        })}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        🖨️ Print Receipt
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
         </div>
+      )}
+
+      {selectedReceipt && (
+        <HospitalReceipt
+          type={selectedReceipt.type}
+          data={selectedReceipt.data}
+          onClose={() => setSelectedReceipt(null)}
+        />
       )}
     </div>
   );

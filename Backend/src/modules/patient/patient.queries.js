@@ -665,7 +665,17 @@ const getPatientHistory = async (patientId) => {
     discharges = d;
   }
 
-  return { appointments, admissions, consultations, prescriptions, pharmacyBills, discharges };
+  const [paymentReceipts] = await db.execute(
+    `SELECT r.*, GROUP_CONCAT(ri.fee_type ORDER BY ri.id SEPARATOR ', ') AS fee_types
+     FROM payment_receipts r
+     LEFT JOIN payment_receipt_items ri ON ri.receipt_id = r.id
+     WHERE r.patient_id = ?
+     GROUP BY r.id
+     ORDER BY r.created_at DESC`,
+    [patientId]
+  );
+
+  return { appointments, admissions, consultations, prescriptions, pharmacyBills, discharges, paymentReceipts };
 };
 
 module.exports = {

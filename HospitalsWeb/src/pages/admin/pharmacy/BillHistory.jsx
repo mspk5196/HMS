@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
+import HospitalReceipt from '../../../components/HospitalReceipt';
 
 export default function BillHistory() {
   const [bills, setBills] = useState([]);
@@ -139,37 +140,22 @@ export default function BillHistory() {
       </div>
 
       {viewingBill && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-800">{viewingBill.bill_number}</h3>
-              <StatusBadge status={viewingBill.payment_status} />
-            </div>
-            <div className="text-[11px] text-gray-500">{viewingBill.patient_name} · {formatDate(viewingBill.bill_date)}</div>
-            <table className="w-full text-xs">
-              <thead className="text-[10px] text-gray-400 uppercase border-b border-gray-100">
-                <tr><th className="text-left py-2">Medicine</th><th className="text-right py-2">Qty</th><th className="text-right py-2">Total ₹</th></tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {viewingBill.items.map((it) => (
-                  <tr key={it.id}>
-                    <td className="py-2 font-semibold">{it.medicine_name}</td>
-                    <td className="py-2 text-right">{it.quantity}</td>
-                    <td className="py-2 text-right">{formatCurrency(it.total_price)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="border-t border-dashed border-gray-200 pt-3 space-y-1 text-xs">
-              <div className="flex justify-between font-bold text-gray-900"><span>Net Amount</span><span>{formatCurrency(viewingBill.net_amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Paid</span><span>{formatCurrency(viewingBill.paid_amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Balance</span><span>{formatCurrency(viewingBill.balance_amount)}</span></div>
-            </div>
-            <div className="flex justify-end pt-2">
-              <button onClick={() => setViewingBill(null)} className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer">Close</button>
-            </div>
-          </div>
-        </div>
+        <HospitalReceipt
+          type="pharmacy"
+          data={{
+            pharmacy_bill_id: viewingBill.id,
+            bill_number: viewingBill.bill_number,
+            bill_date: viewingBill.bill_date,
+            patient_name: viewingBill.patient_name,
+            mobile_number: viewingBill.patient_mobile,
+            net_amount: viewingBill.net_amount,
+            amount_paid_now: viewingBill.paid_amount,
+            balance_due: viewingBill.balance_amount,
+            payment_mode: viewingBill.payment_mode || 'cash',
+            items: viewingBill.items || [],
+          }}
+          onClose={() => setViewingBill(null)}
+        />
       )}
 
       {payingBill && (

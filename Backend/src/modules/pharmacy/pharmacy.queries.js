@@ -279,10 +279,17 @@ const listBills = async ({ patientId, appointmentId, admissionId, paymentStatus,
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const [rows] = await db.query(
     `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
-            u.username AS generated_by_name
+            u.username AS generated_by_name,
+            e.full_name AS doctor_name,
+            COALESCE(e.qualification, sr.name) AS doctor_qualification,
+            sr.name AS doctor_designation
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id
      LEFT JOIN users u ON u.id = pb.generated_by
+     LEFT JOIN appointments appt ON appt.id = pb.appointment_id
+     LEFT JOIN admissions adm ON adm.id = pb.admission_id
+     LEFT JOIN employees e ON e.id = COALESCE(pb.doctor_id, appt.doctor_id, adm.admitting_doctor_id)
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      ${where}
      ORDER BY pb.bill_date DESC
      LIMIT ? OFFSET ?`,
@@ -297,10 +304,17 @@ const listBills = async ({ patientId, appointmentId, admissionId, paymentStatus,
 const getBill = async (id) => {
   const [rows] = await db.execute(
     `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
-            u.username AS generated_by_name
+            u.username AS generated_by_name,
+            e.full_name AS doctor_name,
+            COALESCE(e.qualification, sr.name) AS doctor_qualification,
+            sr.name AS doctor_designation
      FROM pharmacy_bills pb
      JOIN patients p ON p.id = pb.patient_id
      LEFT JOIN users u ON u.id = pb.generated_by
+     LEFT JOIN appointments appt ON appt.id = pb.appointment_id
+     LEFT JOIN admissions adm ON adm.id = pb.admission_id
+     LEFT JOIN employees e ON e.id = COALESCE(pb.doctor_id, appt.doctor_id, adm.admitting_doctor_id)
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      WHERE pb.id = ?`,
     [id]
   );
@@ -326,16 +340,16 @@ const getBill = async (id) => {
  * number can never collide.
  */
 const createBill = async (header) => {
-  const { patient_id, appointment_id, admission_id, bill_date, generated_by,
+  const { patient_id, appointment_id, admission_id, doctor_id, bill_date, generated_by,
     total_amount, discount_amount, tax_amount, net_amount, paid_amount, balance_amount,
     payment_mode, payment_status, closed_at } = header;
   const [result] = await db.execute(
     `INSERT INTO pharmacy_bills
-       (patient_id, appointment_id, admission_id, bill_number, bill_date, generated_by,
+       (patient_id, appointment_id, admission_id, doctor_id, bill_number, bill_date, generated_by,
         total_amount, discount_amount, tax_amount, net_amount, paid_amount, balance_amount,
         payment_mode, payment_status, closed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [patient_id, appointment_id ?? null, admission_id ?? null, `TMP-${Date.now()}`, bill_date, generated_by ?? null,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [patient_id, appointment_id ?? null, admission_id ?? null, doctor_id ?? null, `TMP-${Date.now()}`, bill_date, generated_by ?? null,
      total_amount ?? 0, discount_amount ?? 0, tax_amount ?? 0, net_amount ?? 0, paid_amount ?? 0, balance_amount ?? 0,
      payment_mode ?? 'cash', payment_status ?? 'pending', closed_at ?? null]
   );

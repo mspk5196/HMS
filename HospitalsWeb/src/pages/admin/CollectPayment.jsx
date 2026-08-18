@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import HospitalReceipt from '../../components/HospitalReceipt';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -46,6 +47,7 @@ export default function CollectPayment() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [payingItem, setPayingItem] = useState(null); // { type: 'opd'|'ipd'|'pharmacy', item }
+  const [showReceipt, setShowReceipt] = useState(null); // { type, data }
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 5000); };
   const fail = (err, fallback) => setErrorMsg(err?.message || fallback);
@@ -71,9 +73,12 @@ export default function CollectPayment() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handlePayDone = (msg) => {
+  const handlePayDone = (msg, receiptInfo) => {
     flash(msg);
     setPayingItem(null);
+    if (receiptInfo) {
+      setShowReceipt(receiptInfo);
+    }
     load();
   };
 
@@ -146,6 +151,14 @@ export default function CollectPayment() {
           rows={pending.pharmacy}
           isLoading={isLoading}
           onPay={(item) => setPayingItem({ type: 'pharmacy', item })}
+        />
+      )}
+
+      {showReceipt && (
+        <HospitalReceipt
+          type={showReceipt.type}
+          data={showReceipt.data}
+          onClose={() => setShowReceipt(null)}
         />
       )}
     </div>
@@ -361,7 +374,19 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
       const msg = result.closed
         ? `Payment recorded — Receipt ${result.receiptNumber} · ${type === 'ipd' ? 'Patient fully discharged!' : type === 'pharmacy' ? 'Pharmacy bill settled!' : 'Visit closed!'}`
         : `Partial payment recorded — Receipt ${result.receiptNumber} · Balance ${money(result.balance)}`;
-      onDone(msg);
+      
+      const receiptInfo = {
+        type,
+        data: {
+          ...item,
+          receipt_number: result.receiptNumber,
+          amount_paid_now: amt,
+          balance_due: result.balance || 0,
+          payment_mode: mode,
+        }
+      };
+
+      onDone(msg, receiptInfo);
     } catch (e) {
       setErr(e?.message || 'Failed to record payment.');
     } finally {

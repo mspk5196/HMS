@@ -150,10 +150,16 @@ const listPendingPharmacy = async ({ search } = {}) => {
       p.mobile_number,
       p.age_years,
       p.gender,
-      u.username AS generated_by_name
+      u.username AS generated_by_name,
+      e.full_name AS doctor_name,
+      COALESCE(e.qualification, sr.name) AS doctor_qualification
     FROM pharmacy_bills pb
     JOIN patients p ON p.id = pb.patient_id
     LEFT JOIN users u ON u.id = pb.generated_by
+    LEFT JOIN appointments appt ON appt.id = pb.appointment_id
+    LEFT JOIN admissions adm ON adm.id = pb.admission_id
+    LEFT JOIN employees e ON e.id = COALESCE(pb.doctor_id, appt.doctor_id, adm.admitting_doctor_id)
+    LEFT JOIN staff_roles sr ON sr.id = e.designation_id
     ${where}
     ORDER BY pb.bill_date DESC
   `, params);
