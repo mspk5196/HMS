@@ -16,6 +16,7 @@ router.post('/fee-rates', gate('payment.set_fee_rate', ctrl.upsertFeeRate));
 router.get('/pending', canView, ctrl.listPending);
 router.post('/collect/opd', gate('payment.collect_opd', ctrl.collectOPD));
 router.post('/collect/ipd', gate('payment.collect_ipd', ctrl.collectIPD));
+router.post('/collect/pharmacy', gate('payment.collect_pharmacy', ctrl.collectPharmacy));
 
 // Receipts
 router.get('/receipts/patient/:patientId', canView, ctrl.listReceiptsByPatient);

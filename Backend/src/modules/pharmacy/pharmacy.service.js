@@ -126,6 +126,121 @@ const suggestFromPrescription = async (terms) => {
   return q.suggestMedicines(terms);
 };
 
+const dispenseMedicines = async (header, items) => {
+  const { patient_id, appointment_id, admission_id, bill_date, generated_by, payment_mode, items: rawItems } = header;
+  const billItems = Array.isArray(rawItems) ? rawItems : items;
+
+  if (!patient_id || !bill_date || !Array.isArray(billItems) || !billItems.length) {
+    throw new AppError('patient_id, bill_date and at least one item are required', 400);
+  }
+
+  // 1. Process unit_type ('strip' vs 'tablet') to get base quantity (tablets)
+  const processedItems = [];
+  for (const item of billItems) {
+    if (!item.medicine_id || !item.quantity || item.quantity <= 0) {
+      throw new AppError('Each item must have medicine_id and quantity > 0', 400);
+    }
+    const med = await q.getMedicine(item.medicine_id);
+    if (!med) throw new AppError(`Medicine #${item.medicine_id} not found`, 404);
+
+    const ratio = med.tablets_per_strip && Number(med.tablets_per_strip) > 0 ? Number(med.tablets_per_strip) : 1;
+    const isStrip = item.unit_type === 'strip' && ratio > 1;
+    const baseQuantity = isStrip ? Math.round(Number(item.quantity) * ratio) : Number(item.quantity);
+
+    processedItems.push({
+      medicine_id: item.medicine_id,
+      unit_type: isStrip ? 'strip' : 'tablet',
+      input_quantity: Number(item.quantity),
+      quantity: baseQuantity,
+      discount_percent: item.discount_percent ?? 0,
+      ratio,
+    });
+  }
+
+  // 2. Validate stock for all items upfront in base units
+  for (const item of processedItems) {
+    const batches = await q.listBatches(item.medicine_id);
+    const availableQty = batches.reduce((s, b) => s + b.qty_in_stock, 0);
+    if (availableQty < item.quantity) {
+      const med = await q.getMedicine(item.medicine_id);
+      const reqStr = item.unit_type === 'strip'
+        ? `${item.input_quantity} strip(s) (${item.quantity} tablets)`
+        : `${item.quantity} tablet(s)`;
+      const availStr = item.ratio > 1
+        ? `${availableQty} tablets (${(availableQty / item.ratio).toFixed(1)} strips)`
+        : `${availableQty} units`;
+      throw new AppError(
+        `Insufficient stock for "${med?.name ?? item.medicine_id}". Available: ${availStr}, Requested: ${reqStr}`,
+        400
+      );
+    }
+  }
+
+  // 3. FIFO deduct base quantity and build line items
+  let subtotal = 0;
+  let totalTax = 0;
+  const lineItems = [];
+
+  for (const item of processedItems) {
+    const deductions = await q.fifoDeduct(item.medicine_id, item.quantity);
+    const med = await q.getMedicine(item.medicine_id);
+    const discountPct = item.discount_percent ?? 0;
+
+    for (const ded of deductions) {
+      const lineTotal = ded.selling_price * ded.deducted_qty * (1 - discountPct / 100);
+      const tax = lineTotal * ((med.gst_percent ?? 0) / 100);
+      subtotal += lineTotal;
+      totalTax += tax;
+
+      lineItems.push({
+        medicine_id: item.medicine_id,
+        batch_id: ded.batch_id,
+        quantity: ded.deducted_qty,
+        unit_price: ded.selling_price,
+        discount_percent: discountPct,
+        total_price: round2(lineTotal),
+      });
+    }
+  }
+
+  const netAmount = round2(subtotal + totalTax - (header.discount_amount ?? 0));
+  const paidAmount = round2(header.paid_amount ?? netAmount);
+  const balanceAmount = round2(Math.max(netAmount - paidAmount, 0));
+
+  const billId = await q.createBill({
+    patient_id,
+    appointment_id: appointment_id ?? null,
+    admission_id: admission_id ?? null,
+    bill_date,
+    generated_by: generated_by ?? null,
+    total_amount: round2(subtotal),
+    discount_amount: header.discount_amount ?? 0,
+    tax_amount: round2(totalTax),
+    net_amount: netAmount,
+    paid_amount: paidAmount,
+    balance_amount: balanceAmount,
+    payment_mode: payment_mode ?? 'cash',
+    payment_status: balanceAmount <= 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'pending',
+    closed_at: balanceAmount <= 0 ? new Date() : null,
+  });
+
+  for (const li of lineItems) {
+    await q.addBillItem({ bill_id: billId, ...li });
+    await q.logStockMovement({
+      medicine_id: li.medicine_id,
+      batch_id: li.batch_id,
+      movement_type: 'sale',
+      quantity: -li.quantity,
+      reference_type: 'pharmacy_bill',
+      reference_id: billId,
+      patient_id,
+      movement_date: bill_date,
+    });
+  }
+
+  return q.getBill(billId);
+};
+
 /* ─────────────────────────────────────────────
    BILL GENERATION  (dispense / sale counter)
 ───────────────────────────────────────────── */

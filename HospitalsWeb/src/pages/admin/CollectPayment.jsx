@@ -41,11 +41,11 @@ export default function CollectPayment() {
   const [tab, setTab] = useState('opd');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [pending, setPending] = useState({ opd: [], ipd: [] });
+  const [pending, setPending] = useState({ opd: [], ipd: [], pharmacy: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [payingItem, setPayingItem] = useState(null); // { type: 'opd'|'ipd', item }
+  const [payingItem, setPayingItem] = useState(null); // { type: 'opd'|'ipd'|'pharmacy', item }
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 5000); };
   const fail = (err, fallback) => setErrorMsg(err?.message || fallback);
@@ -61,7 +61,7 @@ export default function CollectPayment() {
       setErrorMsg('');
       const params = debouncedSearch ? `?search=${encodeURIComponent(debouncedSearch)}` : '';
       const data = await apiFetch(`/payment/pending${params}`);
-      setPending({ opd: data.opd || [], ipd: data.ipd || [] });
+      setPending({ opd: data.opd || [], ipd: data.ipd || [], pharmacy: data.pharmacy || [] });
     } catch (err) {
       fail(err, 'Failed to load pending payments.');
     } finally {
@@ -96,7 +96,7 @@ export default function CollectPayment() {
           Patient & Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Collect Payment</span>
         </h1>
         <p className="text-xs text-gray-500 mt-0.5">
-          All OPD visits and IPD discharges pending payment are listed here. Pharmacy payments are handled separately.
+          All OPD visits, IPD discharges, and Pharmacy bills pending payment are listed here.
         </p>
       </div>
 
@@ -110,6 +110,7 @@ export default function CollectPayment() {
           tabs={[
             { value: 'opd', label: 'OPD (Consultation)', count: pending.opd.length },
             { value: 'ipd', label: 'IPD (Discharge)', count: pending.ipd.length },
+            { value: 'pharmacy', label: 'Pharmacy Bills', count: pending.pharmacy.length },
           ]}
         />
         <div className="relative ml-auto">
@@ -120,7 +121,7 @@ export default function CollectPayment() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or mobile…"
+            placeholder="Search by name, mobile, or bill #…"
             className="pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-xs w-64 focus:outline-none focus:ring-2 focus:ring-blue-200"
           />
         </div>
@@ -138,6 +139,13 @@ export default function CollectPayment() {
           rows={pending.ipd}
           isLoading={isLoading}
           onPay={(item) => setPayingItem({ type: 'ipd', item })}
+        />
+      )}
+      {tab === 'pharmacy' && (
+        <PharmacyList
+          rows={pending.pharmacy}
+          isLoading={isLoading}
+          onPay={(item) => setPayingItem({ type: 'pharmacy', item })}
         />
       )}
     </div>
@@ -259,6 +267,61 @@ function IPDList({ rows, isLoading, onPay }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   PHARMACY PENDING LIST
+═══════════════════════════════════════════════════════════ */
+function PharmacyList({ rows, isLoading, onPay }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <h2 className="text-sm font-bold text-gray-900">Pharmacy Bills — Awaiting Payment ({rows.length})</h2>
+      </div>
+      {isLoading ? (
+        <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="p-10 text-center text-xs text-gray-500">
+          <div className="text-2xl mb-2">✅</div>
+          No pharmacy payments pending.
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {rows.map((row) => (
+            <div key={row.pharmacy_bill_id} className="p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-blue-600 text-xs">{row.bill_number}</span>
+                  <span className="font-bold text-gray-900 text-xs">{row.patient_name}</span>
+                  <span className="text-[10px] text-gray-400">{row.age_years} Yrs / {row.gender} · {row.mobile_number}</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize ${
+                    row.payment_status === 'partial' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {row.payment_status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  Bill Date: {new Date(row.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {row.generated_by_name && ` · By: ${row.generated_by_name}`}
+                </div>
+                <div className="flex items-center gap-4 mt-1.5 text-xs">
+                  <span className="text-gray-500">Net Bill: <span className="font-bold text-gray-800">{money(row.net_amount)}</span></span>
+                  <span className="text-gray-500">Paid: <span className="font-semibold text-emerald-600">{money(row.paid_amount)}</span></span>
+                  <span className="text-gray-500">Balance: <span className="font-bold text-rose-600">{money(row.balance_due)}</span></span>
+                </div>
+              </div>
+              <button
+                onClick={() => onPay(row)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors whitespace-nowrap"
+              >
+                Collect ₹{Number(row.balance_due).toFixed(0)}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    PAYMENT MODAL (inline panel)
 ═══════════════════════════════════════════════════════════ */
 function PaymentModal({ type, item, onDone, onCancel, onError }) {
@@ -284,14 +347,19 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
           method: 'POST',
           body: JSON.stringify({ appointment_id: item.appointment_id, amount: amt, payment_mode: mode, notes: notes || null }),
         });
-      } else {
+      } else if (type === 'ipd') {
         result = await apiFetch('/payment/collect/ipd', {
           method: 'POST',
           body: JSON.stringify({ admission_id: item.admission_id, amount: amt, payment_mode: mode, notes: notes || null }),
         });
+      } else {
+        result = await apiFetch('/payment/collect/pharmacy', {
+          method: 'POST',
+          body: JSON.stringify({ pharmacy_bill_id: item.pharmacy_bill_id, amount: amt, payment_mode: mode, notes: notes || null }),
+        });
       }
       const msg = result.closed
-        ? `Payment recorded — Receipt ${result.receiptNumber} · ${type === 'ipd' ? 'Patient fully discharged!' : 'Visit closed!'}`
+        ? `Payment recorded — Receipt ${result.receiptNumber} · ${type === 'ipd' ? 'Patient fully discharged!' : type === 'pharmacy' ? 'Pharmacy bill settled!' : 'Visit closed!'}`
         : `Partial payment recorded — Receipt ${result.receiptNumber} · Balance ${money(result.balance)}`;
       onDone(msg);
     } catch (e) {
@@ -302,7 +370,6 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
   };
 
   const patientName = item.patient_name;
-  const totalDue = type === 'opd' ? money(item.doctor_fee) : money(item.final_bill_amount);
 
   return (
     <div className="space-y-6 max-w-xl">
@@ -318,19 +385,26 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
       </div>
 
       <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 space-y-1.5 text-xs">
-        <div className="font-bold text-blue-900 text-sm mb-2">{type === 'opd' ? 'OPD Consultation' : 'IPD Discharge'} Bill</div>
+        <div className="font-bold text-blue-900 text-sm mb-2">
+          {type === 'opd' ? 'OPD Consultation' : type === 'ipd' ? 'IPD Discharge' : `Pharmacy Bill #${item.bill_number}`}
+        </div>
         {type === 'opd' ? (
           <>
             <div className="flex justify-between text-blue-900"><span>Doctor Fee</span><span className="font-semibold">{money(item.doctor_fee)}</span></div>
             <div className="flex justify-between text-blue-900"><span>Already Paid</span><span className="font-semibold text-emerald-600">−{money(item.amount_paid)}</span></div>
           </>
-        ) : (
+        ) : type === 'ipd' ? (
           <>
             <div className="flex justify-between text-blue-900"><span>Room Charges</span><span className="font-semibold">{money(item.room_charges)}</span></div>
             <div className="flex justify-between text-blue-900"><span>Pharmacy</span><span className="font-semibold">{money(item.pharmacy_charges)}</span></div>
             <div className="flex justify-between text-blue-900"><span>Doctor Fee</span><span className="font-semibold">{money(item.doctor_fee)}</span></div>
             <div className="flex justify-between text-blue-900"><span>Other Charges</span><span className="font-semibold">{money(item.other_charges)}</span></div>
             <div className="flex justify-between text-blue-900"><span>Already Paid</span><span className="font-semibold text-emerald-600">−{money(item.amount_paid)}</span></div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between text-blue-900"><span>Net Amount</span><span className="font-semibold">{money(item.net_amount)}</span></div>
+            <div className="flex justify-between text-blue-900"><span>Already Paid</span><span className="font-semibold text-emerald-600">−{money(item.paid_amount)}</span></div>
           </>
         )}
         <div className="flex justify-between pt-2 border-t border-blue-200 font-extrabold text-blue-900 text-sm">

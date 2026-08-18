@@ -60,6 +60,19 @@ const collectIPD = asyncHandler(async (req, res) => {
   return res.json(success(result, `Payment recorded — Receipt ${result.receiptNumber}`));
 });
 
+/** POST /payment/collect/pharmacy  Body: { pharmacy_bill_id, amount, payment_mode, notes } */
+const collectPharmacy = asyncHandler(async (req, res) => {
+  const { pharmacy_bill_id, amount, payment_mode, notes } = req.body;
+  const result = await svc.collectPharmacyPayment({
+    pharmacyBillId: pharmacy_bill_id,
+    amount,
+    paymentMode: payment_mode,
+    notes,
+    receivedBy: req.user?.id ?? null,
+  });
+  return res.json(success(result, `Payment recorded — Receipt ${result.receiptNumber}`));
+});
+
 /** GET /payment/receipts/patient/:patientId */
 const listReceiptsByPatient = asyncHandler(async (req, res) => {
   const rows = await svc.listReceiptsByPatient(Number(req.params.patientId));
@@ -68,5 +81,5 @@ const listReceiptsByPatient = asyncHandler(async (req, res) => {
 
 module.exports = {
   listDoctors, listFeeRates, getFeeRate, upsertFeeRate,
-  listPending, collectOPD, collectIPD, listReceiptsByPatient,
+  listPending, collectOPD, collectIPD, collectPharmacy, listReceiptsByPatient,
 };

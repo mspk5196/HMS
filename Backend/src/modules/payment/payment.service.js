@@ -21,11 +21,12 @@ const getDoctorFeeRate = async (doctorId) => {
 };
 
 const listPendingPayments = async ({ search } = {}) => {
-  const [opd, ipd] = await Promise.all([
+  const [opd, ipd, pharmacy] = await Promise.all([
     q.listPendingOPD({ search }),
     q.listPendingIPD({ search }),
+    q.listPendingPharmacy({ search }),
   ]);
-  return { opd, ipd };
+  return { opd, ipd, pharmacy };
 };
 
 const collectOPDPayment = async ({ appointmentId, amount, paymentMode, notes, receivedBy }) => {
@@ -38,6 +39,12 @@ const collectIPDPayment = async ({ admissionId, amount, paymentMode, notes, rece
   if (!admissionId) throw new AppError('admissionId is required', 400);
   if (!amount || Number(amount) <= 0) throw new AppError('amount must be a positive number', 400);
   return q.recordIPDPayment({ admissionId: Number(admissionId), amount: Number(amount), paymentMode, notes, receivedBy });
+};
+
+const collectPharmacyPayment = async ({ pharmacyBillId, amount, paymentMode, notes, receivedBy }) => {
+  if (!pharmacyBillId) throw new AppError('pharmacyBillId is required', 400);
+  if (!amount || Number(amount) <= 0) throw new AppError('amount must be a positive number', 400);
+  return q.recordPharmacyPayment({ pharmacyBillId: Number(pharmacyBillId), amount: Number(amount), paymentMode, notes, receivedBy });
 };
 
 const listReceiptsByPatient = async (patientId) => {
@@ -53,5 +60,6 @@ module.exports = {
   listPendingPayments,
   collectOPDPayment,
   collectIPDPayment,
+  collectPharmacyPayment,
   listReceiptsByPatient,
 };

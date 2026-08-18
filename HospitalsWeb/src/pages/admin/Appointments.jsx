@@ -31,10 +31,6 @@ export default function Appointments() {
   const [successMsg, setSuccessMsg] = useState('');
 
   const [showBook, setShowBook] = useState(false);
-  const [closingId, setClosingId] = useState(null);
-  const [closingAppt, setClosingAppt] = useState(null); // full appt row for doctor fee lookup
-  const [doctorFeeAmount, setDoctorFeeAmount] = useState('');
-  const [loadingFee, setLoadingFee] = useState(false);
   const [busyId, setBusyId] = useState(null);
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); };
@@ -74,32 +70,14 @@ export default function Appointments() {
       setBusyId(id);
       await apiFetch(`/patient/appointments/${id}/close`, {
         method: 'POST',
-        body: JSON.stringify({ doctor_fee: Number(doctorFeeAmount) || 0 }),
+        body: JSON.stringify({}),
       });
       flash('Visit saved — moved to payment queue.');
-      setClosingId(null);
-      setClosingAppt(null);
-      setDoctorFeeAmount('');
       await load();
     } catch (err) {
       fail(err, 'Failed to save the visit.');
     } finally {
       setBusyId(null);
-    }
-  };
-
-  const openClose = async (appt) => {
-    setClosingId(appt.id);
-    setClosingAppt(appt);
-    setDoctorFeeAmount('');
-    // Pre-fetch doctor's fee rate
-    if (appt.doctor_id) {
-      try {
-        setLoadingFee(true);
-        const rate = await apiFetch(`/payment/fee-rates/${appt.doctor_id}`);
-        if (rate && rate.opd_fee) setDoctorFeeAmount(String(rate.opd_fee));
-      } catch { /* ignore, user can enter manually */ }
-      finally { setLoadingFee(false); }
     }
   };
 
@@ -181,47 +159,26 @@ export default function Appointments() {
                     </span>
                   </td>
                   <td className="p-3.5">
-                    {closingId === a.id ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400">
-                            {loadingFee ? 'Fetching fee…' : 'Doctor Fee (₹)'}
-                          </span>
-                          <input
-                            type="number"
-                            value={doctorFeeAmount}
-                            onChange={(e) => setDoctorFeeAmount(e.target.value)}
-                            placeholder="Doctor fee"
-                            className="w-28 px-2 py-1 border border-gray-200 rounded text-[11px]"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1 mt-4">
-                          <button onClick={() => submitClose(a.id)} disabled={busyId === a.id} className="text-emerald-600 font-bold text-[11px] hover:underline cursor-pointer disabled:opacity-50">Save & Move to Payment</button>
-                          <button onClick={() => { setClosingId(null); setClosingAppt(null); setDoctorFeeAmount(''); }} className="text-gray-400 font-bold text-[11px] hover:underline cursor-pointer">Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2.5">
-                        {a.status === 'waiting' && (
-                          <button onClick={() => advanceStatus(a.id, 'in_consultation')} disabled={busyId === a.id} className="text-blue-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
-                            Start Consultation
-                          </button>
-                        )}
-                        {['waiting', 'in_consultation', 'completed'].includes(a.status) && (
-                          <button onClick={() => openClose(a)} className="text-gray-700 font-bold hover:underline cursor-pointer">
-                            Save & Move to Payment
-                          </button>
-                        )}
-                        {a.status === 'payment_pending' && (
-                          <span className="text-orange-600 font-bold text-[11px]">⏳ Awaiting Payment</span>
-                        )}
-                        {['waiting', 'in_consultation'].includes(a.status) && (
-                          <button onClick={() => advanceStatus(a.id, 'cancelled')} disabled={busyId === a.id} className="text-rose-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2.5">
+                      {a.status === 'waiting' && (
+                        <button onClick={() => advanceStatus(a.id, 'in_consultation')} disabled={busyId === a.id} className="text-blue-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
+                          Start Consultation
+                        </button>
+                      )}
+                      {['waiting', 'in_consultation', 'completed'].includes(a.status) && (
+                        <button onClick={() => submitClose(a.id)} disabled={busyId === a.id} className="text-gray-700 font-bold hover:underline cursor-pointer disabled:opacity-50">
+                          Save & Move to Payment
+                        </button>
+                      )}
+                      {a.status === 'payment_pending' && (
+                        <span className="text-orange-600 font-bold text-[11px]">⏳ Awaiting Payment</span>
+                      )}
+                      {['waiting', 'in_consultation'].includes(a.status) && (
+                        <button onClick={() => advanceStatus(a.id, 'cancelled')} disabled={busyId === a.id} className="text-rose-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
+                          Cancel
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

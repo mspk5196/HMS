@@ -5,6 +5,7 @@
  */
 
 const q = require('./patient.queries');
+const paymentQueries = require('../payment/payment.queries');
 const { AppError } = require('../../utils/errors');
 
 /* ─────────────────────────────────────────────
@@ -97,7 +98,16 @@ const closeWalkInVisit = async (appointmentId, doctorFee, closedBy) => {
   if (appt.status === 'payment_pending') {
     throw new AppError('This visit is already pending payment', 400);
   }
-  await q.markAppointmentPaymentPending(appointmentId, Number(doctorFee) || 0);
+
+  let finalFee = Number(doctorFee) || 0;
+  if (!finalFee && appt.doctor_id) {
+    const rate = await paymentQueries.getDoctorFeeRate(appt.doctor_id);
+    if (rate && rate.opd_fee) {
+      finalFee = Number(rate.opd_fee);
+    }
+  }
+
+  await q.markAppointmentPaymentPending(appointmentId, finalFee);
 };
 
 /** Actually finalize (close) an appointment after payment. Used by payment module. */

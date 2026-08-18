@@ -3,7 +3,7 @@ import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, todayISO } from './pharmacyUtils';
 
-const emptyLine = { medicine_id: '', quantity: '', discount_percent: '' };
+const emptyLine = { medicine_id: '', unit_type: 'tablet', quantity: '', discount_percent: '' };
 
 export default function DispenseCounter() {
   const [medicines, setMedicines] = useState([]);
@@ -13,8 +13,6 @@ export default function DispenseCounter() {
   const [prescriptionTerms, setPrescriptionTerms] = useState('');
   const [lines, setLines] = useState([{ ...emptyLine }]);
   const [discountAmount, setDiscountAmount] = useState('0');
-  const [paymentMode, setPaymentMode] = useState('cash');
-  const [paidAmount, setPaidAmount] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [generatedBill, setGeneratedBill] = useState(null);
@@ -58,7 +56,7 @@ export default function DispenseCounter() {
       const results = await apiFetch('/pharmacy/suggest', { method: 'POST', body: JSON.stringify({ terms }) });
       const suggested = results
         .filter((r) => r.total_stock > 0)
-        .map((r) => ({ medicine_id: String(r.id), quantity: '1', discount_percent: '' }));
+        .map((r) => ({ medicine_id: String(r.id), unit_type: 'tablet', quantity: '1', discount_percent: '' }));
       if (suggested.length) setLines(suggested);
       else setErrorMsg('No matching medicines with stock were found for that prescription.');
     } catch (err) {
@@ -66,15 +64,17 @@ export default function DispenseCounter() {
     }
   };
 
-  const validLines = lines.filter((l) => l.medicine_id && l.quantity);
+  const validLines = lines.filter((l) => l.medicine_id && l.quantity && Number(l.quantity) > 0);
   const subtotal = validLines.reduce((sum, l) => {
     const med = medicineById[l.medicine_id];
     if (!med) return sum;
-    const price = Number(med.selling_price ?? 0);
-    return sum + Number(l.quantity) * price * (1 - (Number(l.discount_percent) || 0) / 100);
+    const ratio = med.tablets_per_strip && Number(med.tablets_per_strip) > 0 ? Number(med.tablets_per_strip) : 1;
+    const unitType = l.unit_type || 'tablet';
+    const baseQty = unitType === 'strip' ? Number(l.quantity) * ratio : Number(l.quantity);
+    const pricePerTablet = Number(med.selling_price ?? med.price ?? 0);
+    return sum + baseQty * pricePerTablet * (1 - (Number(l.discount_percent) || 0) / 100);
   }, 0);
-  // selling_price isn't on the medicine row (it lives on the batch); estimate the charge for "check by party" preview only —
-  // the server computes the authoritative FIFO price when the bill is generated.
+
   const estimatedNet = Math.max(subtotal - (Number(discountAmount) || 0), 0);
 
   const handleGenerate = async (e) => {
@@ -90,11 +90,12 @@ export default function DispenseCounter() {
         body: JSON.stringify({
           patient_id: patient.id,
           bill_date: todayISO(),
-          payment_mode: paymentMode,
+          payment_mode: 'cash',
           discount_amount: Number(discountAmount) || 0,
-          paid_amount: paidAmount === '' ? undefined : Number(paidAmount),
+          paid_amount: 0,
           items: validLines.map((l) => ({
             medicine_id: Number(l.medicine_id),
+            unit_type: l.unit_type || 'tablet',
             quantity: Number(l.quantity),
             discount_percent: Number(l.discount_percent) || 0,
           })),
@@ -115,7 +116,6 @@ export default function DispenseCounter() {
     setPrescriptionTerms('');
     setLines([{ ...emptyLine }]);
     setDiscountAmount('0');
-    setPaidAmount('');
   };
 
   if (generatedBill) {
@@ -128,7 +128,7 @@ export default function DispenseCounter() {
         <h1 className="text-xl font-bold text-gray-800 tracking-tight">
           Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Dispense to Patient</span>
         </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Charge a patient for medicines and generate their bill.</p>
+        <p className="text-xs text-gray-500 mt-0.5">Dispense medicines to a patient. The bill will be added to Collect Payment page for payment collection.</p>
       </div>
       {errorMsg && <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl">{errorMsg}</div>}
 
@@ -187,24 +187,57 @@ export default function DispenseCounter() {
 
         <div className="space-y-2">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Items to Charge</span>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {lines.map((l, idx) => {
               const med = medicineById[l.medicine_id];
+              const ratio = med?.tablets_per_strip && Number(med.tablets_per_strip) > 0 ? Number(med.tablets_per_strip) : 1;
+              const unitType = l.unit_type || 'tablet';
+              const qtyNum = Number(l.quantity) || 0;
+              const baseQty = unitType === 'strip' ? qtyNum * ratio : qtyNum;
+
               return (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                  <MedicineSearchSelect
-                    value={l.medicine_id}
-                    onChange={(id) => updateLine(idx, 'medicine_id', id)}
-                    medicines={medicines}
-                    className="col-span-6"
-                    compact
-                  />
-                  <input type="number" min="1" placeholder="Qty" value={l.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} className={`${inputCls} col-span-2`} />
-                  <input type="number" min="0" max="100" placeholder="Disc %" value={l.discount_percent} onChange={(e) => updateLine(idx, 'discount_percent', e.target.value)} className={`${inputCls} col-span-2`} />
-                  <div className="col-span-1 text-[11px] text-gray-500 text-right">{med ? formatCurrency(med.selling_price) : ''}</div>
-                  <button type="button" onClick={() => removeLine(idx)} disabled={lines.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+                <div key={idx} className="bg-gray-50/70 p-3 rounded-lg border border-gray-100 space-y-1.5">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <MedicineSearchSelect
+                      value={l.medicine_id}
+                      onChange={(id) => updateLine(idx, 'medicine_id', id)}
+                      medicines={medicines}
+                      className="col-span-4"
+                      compact
+                    />
+                    <select
+                      value={l.unit_type || 'tablet'}
+                      onChange={(e) => updateLine(idx, 'unit_type', e.target.value)}
+                      className={`${inputCls} col-span-3 font-semibold bg-white`}
+                    >
+                      {ratio > 1 ? (
+                        <>
+                          <option value="tablet">Tablet(s)</option>
+                          <option value="strip">Strip(s) ({ratio} tabs/strip)</option>
+                        </>
+                      ) : (
+                        <option value="tablet">{med?.unit || 'Unit(s)'}</option>
+                      )}
+                    </select>
+                    <input type="number" min="1" placeholder="Qty" value={l.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} className={`${inputCls} col-span-2 font-bold`} />
+                    <input type="number" min="0" max="100" placeholder="Disc %" value={l.discount_percent} onChange={(e) => updateLine(idx, 'discount_percent', e.target.value)} className={`${inputCls} col-span-2`} />
+                    <button type="button" onClick={() => removeLine(idx)} disabled={lines.length === 1} className="text-rose-500 hover:text-rose-700 disabled:opacity-30 cursor-pointer col-span-1 flex justify-end">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  {med && qtyNum > 0 && (
+                    <div className="text-[11px] text-blue-700 font-medium flex items-center justify-between px-1">
+                      <span>
+                        Dispensing: <strong className="text-blue-900">{baseQty} tablet{baseQty === 1 ? '' : 's'}</strong>
+                        {ratio > 1 && unitType === 'strip' && ` (${qtyNum} strip${qtyNum === 1 ? '' : 's'} × ${ratio})`}
+                        {ratio > 1 && unitType === 'tablet' && ` (${(qtyNum / ratio).toFixed(2)} strip${qtyNum / ratio === 1 ? '' : 's'})`}
+                      </span>
+                      <span>
+                        Rate: {formatCurrency(med.selling_price ?? med.price ?? 0)}/tablet
+                        {ratio > 1 && ` (${formatCurrency((med.selling_price ?? med.price ?? 0) * ratio)}/strip)`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -212,32 +245,20 @@ export default function DispenseCounter() {
           <button type="button" onClick={addLine} className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">+ Add another item</button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="max-w-xs">
           <Field label="Bill Discount (₹)">
             <input type="number" min="0" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Payment Mode">
-            <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} className={inputCls}>
-              <option value="cash">Cash</option>
-              <option value="upi">UPI</option>
-              <option value="card">Card</option>
-              <option value="insurance">Insurance</option>
-              <option value="credit">Credit</option>
-            </select>
-          </Field>
-          <Field label="Paid Amount" hint="Leave blank to mark fully paid.">
-            <input type="number" min="0" step="0.01" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} className={inputCls} placeholder="Full amount" />
           </Field>
         </div>
 
         <div className="bg-blue-50/70 border border-blue-100 rounded-lg px-4 py-3 flex items-center justify-between">
-          <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wide">Estimated Charge (check with party)</span>
+          <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wide">Estimated Total Bill</span>
           <span className="text-lg font-extrabold text-blue-900">{formatCurrency(estimatedNet)}</span>
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
           <button type="submit" disabled={isSaving} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50">
-            {isSaving ? 'Generating…' : 'Generate Charge & Bill'}
+            {isSaving ? 'Dispensing…' : 'Dispense Medicines & Save to Payment Queue'}
           </button>
         </div>
       </form>
@@ -249,7 +270,7 @@ function Receipt({ bill, onNewSale }) {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-4 py-3 rounded-xl">
-        Bill {bill.bill_number} generated. {bill.payment_status === 'paid' ? 'Fully paid and closed.' : 'Balance pending — settle it from Bill History.'}
+        Bill {bill.bill_number} generated. Added to <strong>Collect Payment</strong> page for payment collection.
       </div>
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-dashed border-gray-200 pb-3">

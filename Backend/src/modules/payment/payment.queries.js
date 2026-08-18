@@ -128,6 +128,38 @@ const listPendingIPD = async ({ search } = {}) => {
   return rows;
 };
 
+/** Pharmacy bills that have payment_status IN ('pending', 'partial') */
+const listPendingPharmacy = async ({ search } = {}) => {
+  let where = `WHERE pb.payment_status IN ('pending', 'partial') AND pb.balance_amount > 0`;
+  const params = [];
+  if (search) {
+    where += ` AND (p.full_name LIKE ? OR p.mobile_number LIKE ? OR pb.bill_number LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  const [rows] = await db.query(`
+    SELECT
+      pb.id AS pharmacy_bill_id,
+      pb.bill_number,
+      pb.bill_date,
+      pb.net_amount,
+      pb.paid_amount,
+      pb.balance_amount AS balance_due,
+      pb.payment_status,
+      p.id AS patient_id,
+      p.full_name AS patient_name,
+      p.mobile_number,
+      p.age_years,
+      p.gender,
+      u.username AS generated_by_name
+    FROM pharmacy_bills pb
+    JOIN patients p ON p.id = pb.patient_id
+    LEFT JOIN users u ON u.id = pb.generated_by
+    ${where}
+    ORDER BY pb.bill_date DESC
+  `, params);
+  return rows;
+};
+
 /* ─────────────────────────────────────────────
    RECEIPT GENERATION
 ───────────────────────────────────────────── */
@@ -293,6 +325,62 @@ const recordIPDPayment = async ({ admissionId, amount, paymentMode, notes, recei
   }
 };
 
+/**
+ * Record Pharmacy Bill payment. Updates pharmacy_bills table (paid_amount, balance_amount, payment_status, closed_at),
+ * creates a receipt entry in payment_receipts & payment_receipt_items.
+ */
+const recordPharmacyPayment = async ({ pharmacyBillId, amount, paymentMode, notes, receivedBy }) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[bill]] = await conn.execute(
+      `SELECT pb.*, p.id AS patient_id FROM pharmacy_bills pb
+       JOIN patients p ON p.id = pb.patient_id
+       WHERE pb.id = ?`, [pharmacyBillId]
+    );
+    if (!bill) throw new Error('Pharmacy bill not found');
+
+    const balance = Number(bill.balance_amount);
+    const payAmt = Math.min(Number(amount), balance > 0 ? balance : Number(amount));
+
+    const newAmtPaid = Number(bill.paid_amount) + payAmt;
+    const newBalance = Math.max(0, Number(bill.net_amount) - newAmtPaid);
+    const newStatus = newBalance <= 0 ? 'paid' : 'partial';
+
+    await conn.execute(
+      `UPDATE pharmacy_bills
+       SET paid_amount = ?, balance_amount = ?, payment_status = ?, payment_mode = ?,
+           closed_at = IF(? <= 0, NOW(), closed_at)
+       WHERE id = ?`,
+      [newAmtPaid, newBalance, newStatus, paymentMode || 'cash', newBalance, pharmacyBillId]
+    );
+
+    // Generate receipt
+    const receiptNumber = await generateReceiptNumber();
+    const [rcptResult] = await conn.execute(
+      `INSERT INTO payment_receipts (receipt_number, patient_id, payment_date, total_amount, payment_mode, received_by, notes)
+       VALUES (?, ?, CURDATE(), ?, ?, ?, ?)`,
+      [receiptNumber, bill.patient_id, payAmt, paymentMode || 'cash', receivedBy || null, notes || null]
+    );
+    const receiptId = rcptResult.insertId;
+
+    await conn.execute(
+      `INSERT INTO payment_receipt_items (receipt_id, fee_type, description, amount)
+       VALUES (?, 'pharmacy', ?, ?)`,
+      [receiptId, `Pharmacy Bill #${bill.bill_number}`, payAmt]
+    );
+
+    await conn.commit();
+    return { receiptNumber, amount: payAmt, balance: newBalance, closed: newBalance <= 0 };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
 /** Get all receipts for a patient */
 const listReceiptsByPatient = async (patientId) => {
   const [rows] = await db.query(`
@@ -313,7 +401,9 @@ module.exports = {
   getDoctorFeeRate,
   listPendingOPD,
   listPendingIPD,
+  listPendingPharmacy,
   recordOPDPayment,
   recordIPDPayment,
+  recordPharmacyPayment,
   listReceiptsByPatient,
 };
