@@ -301,7 +301,11 @@ const listBills = async ({ patientId, appointmentId, admissionId, paymentStatus,
   return { rows, total };
 };
 
-const getBill = async (id) => {
+const getBill = async (idOrNumber) => {
+  const isNumeric = !Number.isNaN(Number(idOrNumber)) && Number(idOrNumber) > 0;
+  const whereClause = isNumeric ? `WHERE pb.id = ? OR pb.bill_number = ?` : `WHERE pb.bill_number = ?`;
+  const params = isNumeric ? [Number(idOrNumber), String(idOrNumber)] : [String(idOrNumber)];
+
   const [rows] = await db.execute(
     `SELECT pb.*, p.full_name AS patient_name, p.mobile_number AS patient_mobile,
             u.username AS generated_by_name,
@@ -315,8 +319,8 @@ const getBill = async (id) => {
      LEFT JOIN admissions adm ON adm.id = pb.admission_id
      LEFT JOIN employees e ON e.id = COALESCE(pb.doctor_id, appt.doctor_id, adm.admitting_doctor_id)
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-     WHERE pb.id = ?`,
-    [id]
+     ${whereClause}`,
+    params
   );
   const bill = rows[0] ?? null;
   if (!bill) return null;
@@ -328,7 +332,7 @@ const getBill = async (id) => {
      JOIN medicines m ON m.id = pbi.medicine_id
      LEFT JOIN medicine_batches mb ON mb.id = pbi.batch_id
      WHERE pbi.pharmacy_bill_id = ?`,
-    [id]
+    [bill.id]
   );
   bill.items = items;
   return bill;

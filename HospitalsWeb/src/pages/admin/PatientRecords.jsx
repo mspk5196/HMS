@@ -476,25 +476,55 @@ function PatientHistory({ patient, onBack, onError }) {
                       <span className="text-gray-500">— {displayDate(a.appointment_date)} · Dr. {a.doctor_name || '—'}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">{a.status.replace(/_/g, ' ')}</span>
-                      <button
-                        onClick={() => setSelectedReceipt({
-                          type: 'opd',
-                          data: {
-                            appointment_id: a.id,
-                            patient_name: patient.full_name,
-                            mobile_number: patient.mobile_number,
-                            age_years: patient.age_years,
-                            gender: patient.gender,
-                            doctor_name: a.doctor_name,
-                            doctor_fee: a.doctor_fee,
-                            bill_date: a.appointment_date,
-                          }
-                        })}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                      >
-                        🧾 View Receipt
-                      </button>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                        a.status === 'closed' ? 'bg-emerald-50 text-emerald-700' :
+                        a.status === 'payment_pending' ? 'bg-amber-50 text-amber-700' :
+                        'bg-blue-50 text-blue-700'
+                      }`}>
+                        {a.status.replace(/_/g, ' ')}
+                      </span>
+                      {a.status === 'closed' ? (
+                        <button
+                          onClick={() => setSelectedReceipt({
+                            type: 'opd',
+                            data: {
+                              appointment_id: a.id,
+                              patient_name: patient.full_name,
+                              mobile_number: patient.mobile_number,
+                              age_years: patient.age_years,
+                              gender: patient.gender,
+                              doctor_name: a.doctor_name,
+                              doctor_fee: a.doctor_fee,
+                              bill_date: a.appointment_date,
+                              is_paid: true,
+                            }
+                          })}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          🧾 View Receipt
+                        </button>
+                      ) : a.status === 'payment_pending' ? (
+                        <button
+                          onClick={() => setSelectedReceipt({
+                            type: 'opd',
+                            data: {
+                              appointment_id: a.id,
+                              patient_name: patient.full_name,
+                              mobile_number: patient.mobile_number,
+                              age_years: patient.age_years,
+                              gender: patient.gender,
+                              doctor_name: a.doctor_name,
+                              doctor_fee: a.doctor_fee,
+                              bill_date: a.appointment_date,
+                              is_bill: true,
+                              is_paid: false,
+                            }
+                          })}
+                          className="text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          📄 View Bill
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -536,44 +566,20 @@ function PatientHistory({ patient, onBack, onError }) {
                   return (
                     <div
                       key={c.id}
-                      className="p-3.5 text-xs space-y-1.5 hover:bg-gray-50/80 transition-colors flex items-center justify-between"
+                      onClick={() => setDetailView({ type: 'consultation', id: c.id })}
+                      className="p-3.5 text-xs space-y-1.5 cursor-pointer hover:bg-gray-50/80 transition-colors"
                     >
-                      <div
-                        onClick={() => setDetailView({ type: 'consultation', id: c.id })}
-                        className="cursor-pointer space-y-1 flex-1 min-w-0 pr-4"
-                      >
-                        <div className="font-bold text-gray-900">{displayDate(c.appointment_date)} · Dr. {c.doctor_name || '—'}</div>
-                        <div className="text-gray-600">Diagnosis: {c.diagnosis || '—'}</div>
-                        {items.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {items.map((it, i) => (
-                              <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-medium">
-                                {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedReceipt({
-                            type: 'opd',
-                            data: {
-                              appointment_id: c.appointment_id,
-                              patient_name: patient.full_name,
-                              mobile_number: patient.mobile_number,
-                              age_years: patient.age_years,
-                              gender: patient.gender,
-                              doctor_name: c.doctor_name,
-                              bill_date: c.appointment_date,
-                            }
-                          });
-                        }}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
-                      >
-                        🧾 View Receipt
-                      </button>
+                      <div className="font-bold text-gray-900">{displayDate(c.appointment_date)} · Dr. {c.doctor_name || '—'}</div>
+                      <div className="text-gray-600">Diagnosis: {c.diagnosis || '—'}</div>
+                      {items.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {items.map((it, i) => (
+                            <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-medium">
+                              {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -603,27 +609,54 @@ function PatientHistory({ patient, onBack, onError }) {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
                         b.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                       }`}>{b.payment_status}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedReceipt({
-                            type: 'pharmacy',
-                            data: {
-                              pharmacy_bill_id: b.id,
-                              bill_number: b.bill_number,
-                              patient_name: patient.full_name,
-                              mobile_number: patient.mobile_number,
-                              age_years: patient.age_years,
-                              gender: patient.gender,
-                              net_amount: b.net_amount,
-                              bill_date: b.bill_date,
-                            }
-                          });
-                        }}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                      >
-                        🧾 View Receipt
-                      </button>
+                      {b.payment_status === 'paid' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedReceipt({
+                              type: 'pharmacy',
+                              data: {
+                                pharmacy_bill_id: b.id,
+                                bill_number: b.bill_number,
+                                patient_name: patient.full_name,
+                                mobile_number: patient.mobile_number,
+                                age_years: patient.age_years,
+                                gender: patient.gender,
+                                net_amount: b.net_amount,
+                                bill_date: b.bill_date,
+                                is_paid: true,
+                              }
+                            });
+                          }}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          🧾 View Receipt
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedReceipt({
+                              type: 'pharmacy',
+                              data: {
+                                pharmacy_bill_id: b.id,
+                                bill_number: b.bill_number,
+                                patient_name: patient.full_name,
+                                mobile_number: patient.mobile_number,
+                                age_years: patient.age_years,
+                                gender: patient.gender,
+                                net_amount: b.net_amount,
+                                bill_date: b.bill_date,
+                                is_bill: true,
+                                is_paid: false,
+                              }
+                            });
+                          }}
+                          className="text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          📄 View Bill
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -648,13 +681,22 @@ function PatientHistory({ patient, onBack, onError }) {
                           type: (r.fee_types || '').includes('pharmacy') ? 'pharmacy' : (r.fee_types || '').includes('ipd') ? 'ipd' : 'opd',
                           data: {
                             receipt_number: r.receipt_number,
+                            pharmacy_bill_id: r.pharmacy_bill_id,
+                            bill_number: r.bill_number,
+                            appointment_id: r.appointment_id,
+                            admission_id: r.admission_id,
                             patient_name: patient.full_name,
                             mobile_number: patient.mobile_number,
                             age_years: patient.age_years,
                             gender: patient.gender,
+                            doctor_name: r.doctor_name,
+                            doctor_qualification: r.doctor_qualification,
+                            net_amount: r.total_amount,
                             amount_paid_now: r.total_amount,
+                            balance_due: 0,
                             payment_mode: r.payment_mode,
                             payment_date: r.payment_date || r.created_at,
+                            is_paid: true,
                           }
                         })}
                         className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"

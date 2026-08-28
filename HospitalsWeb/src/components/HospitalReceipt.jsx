@@ -5,20 +5,34 @@ const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFract
 
 export default function HospitalReceipt({ type, data, onClose }) {
   const [pharmacyItems, setPharmacyItems] = useState(data?.items || []);
+  const [fetchedDocInfo, setFetchedDocInfo] = useState({ name: '', qualification: '' });
+  const [fetchedBillNum, setFetchedBillNum] = useState('');
   const [loadingItems, setLoadingItems] = useState(false);
 
-  // If it's a pharmacy receipt and full bill items aren't attached yet, fetch them
+  // If it's a pharmacy receipt/bill and full items or doctor aren't attached yet, fetch the full bill
   useEffect(() => {
-    if (type === 'pharmacy' && data?.pharmacy_bill_id && (!data.items || data.items.length === 0)) {
+    const billKey = data?.pharmacy_bill_id || data?.bill_number;
+    if (type === 'pharmacy' && billKey && (!data.items || data.items.length === 0 || !data.doctor_name)) {
       (async () => {
         try {
           setLoadingItems(true);
-          const fullBill = await apiFetch(`/pharmacy/bills/${data.pharmacy_bill_id}`);
-          if (fullBill && Array.isArray(fullBill.items)) {
-            setPharmacyItems(fullBill.items);
+          const fullBill = await apiFetch(`/pharmacy/bills/${billKey}`);
+          if (fullBill) {
+            if (Array.isArray(fullBill.items)) {
+              setPharmacyItems(fullBill.items);
+            }
+            if (fullBill.doctor_name) {
+              setFetchedDocInfo({
+                name: fullBill.doctor_name,
+                qualification: fullBill.doctor_qualification || fullBill.doctor_designation || '',
+              });
+            }
+            if (fullBill.bill_number) {
+              setFetchedBillNum(fullBill.bill_number);
+            }
           }
         } catch (err) {
-          console.error('Failed to load pharmacy bill line items:', err);
+          console.error('Failed to load pharmacy bill details:', err);
         } finally {
           setLoadingItems(false);
         }
@@ -28,14 +42,26 @@ export default function HospitalReceipt({ type, data, onClose }) {
 
   if (!data) return null;
 
-  const receiptTitle = type === 'opd'
-    ? 'OPD CONSULTATION RECEIPT'
-    : type === 'ipd'
-    ? 'IPD DISCHARGE & SETTLEMENT RECEIPT'
-    : 'PHARMACY TAX INVOICE & RECEIPT';
+  const isPaid = Boolean(
+    data.is_paid ||
+    data.payment_status === 'paid' ||
+    (data.receipt_number && Number(data.amount_paid_now || data.amount_paid || data.total_amount || 0) > 0 && !data.is_bill)
+  );
+
+  const receiptTitle = isPaid
+    ? (type === 'opd'
+        ? 'OPD CONSULTATION RECEIPT'
+        : type === 'ipd'
+        ? 'IPD DISCHARGE & SETTLEMENT RECEIPT'
+        : 'PHARMACY PAYMENT RECEIPT & TAX INVOICE')
+    : (type === 'opd'
+        ? 'OPD CONSULTATION BILL / ESTIMATE'
+        : type === 'ipd'
+        ? 'IPD DISCHARGE BILL / SUMMARY'
+        : 'PHARMACY BILL / ESTIMATE');
 
   const receiptNo = data.receipt_number || data.receiptNumber || `RCPT-${Date.now().toString().slice(-6)}`;
-  const billNo = data.bill_number || data.billNumber || (type === 'opd' ? `OPD-${data.appointment_id || ''}` : type === 'ipd' ? `IPD-${data.admission_id || ''}` : `PB-${data.pharmacy_bill_id || ''}`);
+  const billNo = data.bill_number || data.billNumber || fetchedBillNum || (type === 'opd' ? `OPD-${data.appointment_id || ''}` : type === 'ipd' ? `IPD-${data.admission_id || ''}` : `PB-${data.pharmacy_bill_id || ''}`);
   const dateStr = data.payment_date || data.bill_date || data.discharge_datetime || new Date().toISOString();
   const formattedDate = new Date(dateStr).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
@@ -44,15 +70,15 @@ export default function HospitalReceipt({ type, data, onClose }) {
   const patientName = data.patient_name || '—';
   const mobile = data.mobile_number || data.mobile || '—';
   const ageGender = data.age_years ? `${data.age_years} Yrs / ${data.gender || '—'}` : '—';
-  const doctorName = data.doctor_name || '—';
-  const doctorQualification = data.doctor_qualification || data.doctor_designation || '';
+  const doctorName = data.doctor_name || fetchedDocInfo.name || '—';
+  const doctorQualification = data.doctor_qualification || data.doctor_designation || fetchedDocInfo.qualification || '';
   const paymentMode = (data.payment_mode || 'cash').toUpperCase();
   const receivedBy = data.received_by_name || data.generated_by_name || 'Billing Desk';
 
   // Amount computations
   const netAmount = Number(data.net_amount || data.final_bill_amount || data.total_amount || data.doctor_fee || 0);
-  const paidNow = Number(data.amount_paid_now || data.amount_paid || data.amount || netAmount);
-  const balanceDue = Number(data.balance_due || data.balance || 0);
+  const paidNow = isPaid ? Number(data.amount_paid_now || data.amount_paid || data.amount || netAmount) : Number(data.paid_amount || data.amount_paid || 0);
+  const balanceDue = Number(data.balance_due !== undefined ? data.balance_due : data.balance !== undefined ? data.balance : (netAmount - paidNow));
 
   const handlePrint = () => {
     window.print();
@@ -83,18 +109,27 @@ export default function HospitalReceipt({ type, data, onClose }) {
         {/* Action Header bar (hidden on print) */}
         <div className="no-print bg-gray-900 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-emerald-400 font-bold text-sm">✓ Payment Successful</span>
-            <span className="text-gray-400 text-xs">| {receiptNo}</span>
+            {isPaid ? (
+              <>
+                <span className="text-emerald-400 font-bold text-sm">✓ Payment Completed</span>
+                <span className="text-gray-400 text-xs">| {receiptNo}</span>
+              </>
+            ) : (
+              <>
+                <span className="text-amber-400 font-bold text-sm">📄 Payment Pending / Bill</span>
+                <span className="text-gray-400 text-xs">| {billNo}</span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={handlePrint}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+              className={`${isPaid ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231a1.125 1.125 0 01-1.12-1.227L6.34 18m11.318-4.171A3 3 0 0015 11.25H9a3 3 0 00-2.658 1.579M18 10.5H6M6 6h12" />
               </svg>
-              Print Receipt
+              {isPaid ? 'Print Receipt' : 'Print Bill'}
             </button>
             {onClose && (
               <button
@@ -120,7 +155,7 @@ export default function HospitalReceipt({ type, data, onClose }) {
               (Opp. Palaniammal Girls HR SEC School, Near Dr. Ravindran Hospital) | 24 Hours Emergency & Medical Facility
             </p>
             <div className="pt-2">
-              <span className="inline-block bg-blue-900 text-white font-extrabold text-[11px] px-4 py-1 rounded-full uppercase tracking-wider shadow-sm">
+              <span className={`inline-block ${isPaid ? 'bg-blue-900' : 'bg-amber-800'} text-white font-extrabold text-[11px] px-4 py-1 rounded-full uppercase tracking-wider shadow-sm`}>
                 {receiptTitle}
               </span>
             </div>
@@ -129,10 +164,14 @@ export default function HospitalReceipt({ type, data, onClose }) {
           {/* Metadata Grid */}
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-200/80 grid grid-cols-2 gap-4 text-[11px]">
             <div className="space-y-1">
-              <div className="flex"><span className="w-28 font-bold text-gray-500">Receipt No:</span><span className="font-extrabold text-gray-900">{receiptNo}</span></div>
+              {isPaid ? (
+                <div className="flex"><span className="w-28 font-bold text-gray-500">Receipt No:</span><span className="font-extrabold text-gray-900">{receiptNo}</span></div>
+              ) : (
+                <div className="flex"><span className="w-28 font-bold text-gray-500">Status:</span><span className="font-extrabold text-amber-700 uppercase">UNPAID / BILL</span></div>
+              )}
               <div className="flex"><span className="w-28 font-bold text-gray-500">Reference / Bill #:</span><span className="font-semibold text-blue-700">{billNo}</span></div>
               <div className="flex"><span className="w-28 font-bold text-gray-500">Date & Time:</span><span className="font-semibold text-gray-800">{formattedDate}</span></div>
-              <div className="flex"><span className="w-28 font-bold text-gray-500">Payment Mode:</span><span className="font-bold text-emerald-700">{paymentMode}</span></div>
+              <div className="flex"><span className="w-28 font-bold text-gray-500">Payment Mode:</span><span className="font-bold text-emerald-700">{isPaid ? paymentMode : 'Pending Settlement'}</span></div>
             </div>
             <div className="space-y-1">
               <div className="flex"><span className="w-28 font-bold text-gray-500">Patient Name:</span><span className="font-bold text-gray-900">{patientName}</span></div>
