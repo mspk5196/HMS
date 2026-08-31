@@ -4,6 +4,7 @@ import HREmployees from './HREmployees';
 import DepartmentRole from './departmentrole/DepartmentRole';
 import ShiftRoster from './shiftroster/ShiftRoster';
 import Attendance from './Attendance';
+import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 import Leave from './Leave';
 import Fine from './Fine';
 import Payroll from './Payroll';
@@ -52,6 +53,8 @@ export default function AdminDashboard({ user, onLogout }) {
         return <ShiftRoster />;
       case 'attendance':
         return <Attendance />;
+      case 'biometric-punches':
+        return <EmployeeBiometricPunches />;
       case 'leave':
         return <Leave />;
       case 'fine':

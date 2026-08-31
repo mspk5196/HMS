@@ -79,6 +79,33 @@ const listUnmatchedPunches = asyncHandler(async (req, res) => {
   return res.json(success(await svc.getUnmatchedPunches(fromDate, toDate)));
 });
 
+/** GET /api/attendance/punches — list raw biometric punches */
+const listRawPunches = asyncHandler(async (req, res) => {
+  const { employeeId, employeeCode, departmentId, fromDate, toDate, search, page = 1, limit = 50 } = req.query;
+  const result = await q.listRawPunches({
+    employeeId: employeeId ? Number(employeeId) : null,
+    employeeCode: employeeCode || null,
+    departmentId: departmentId ? Number(departmentId) : null,
+    fromDate: fromDate || null,
+    toDate: toDate || null,
+    search: search || null,
+    page: Number(page),
+    limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+/** GET /api/attendance/punches/employee/:id — get full biometric timeline for employee */
+const getEmployeeTimeline = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { fromDate, toDate } = req.query;
+  const from = fromDate || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const to = toDate || new Date().toISOString().slice(0, 10);
+  const data = await q.getEmployeeBiometricTimeline(Number(id), from, to);
+  if (!data) return res.status(404).json(fail('Employee not found'));
+  return res.json(success(data));
+});
+
 /* ─────────────────────────────────────────────
    ADMIN MANUAL MARK
 ───────────────────────────────────────────── */
@@ -182,12 +209,88 @@ const getEmployeeBuffer = asyncHandler(async (req, res) => {
   return res.json(success(buffer));
 });
 
+/* ─────────────────────────────────────────────
+   BIOMETRIC DEVICE CONTROLLERS
+───────────────────────────────────────────── */
+const esslSvc = require('./essl.service');
+const q = require('./attendance.queries');
+
+/** GET /api/attendance/devices — list all configured biometric devices */
+const listDevices = asyncHandler(async (req, res) => {
+  const devices = await q.listBiometricDevices();
+  return res.json(success(devices));
+});
+
+/** POST /api/attendance/devices — add a new biometric device */
+const createDevice = asyncHandler(async (req, res) => {
+  const { name, ip_address, port, comm_key, device_type, location, auto_sync_enabled, sync_interval_mins } = req.body;
+  if (!name || !ip_address) {
+    return res.status(400).json(fail('Device name and IP address are required.'));
+  }
+  const id = await q.createBiometricDevice({
+    name, ip_address, port: Number(port) || 4370,
+    comm_key, device_type, location, auto_sync_enabled, sync_interval_mins,
+  });
+  return res.status(201).json(created({ id }, 'Biometric device added successfully'));
+});
+
+/** PUT /api/attendance/devices/:id — update device config */
+const updateDevice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updated = await q.updateBiometricDevice(Number(id), req.body);
+  if (!updated) return res.status(404).json(fail('Device not found'));
+  return res.json(success(null, 'Biometric device updated'));
+});
+
+/** DELETE /api/attendance/devices/:id — remove device */
+const deleteDevice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const deleted = await q.deleteBiometricDevice(Number(id));
+  if (!deleted) return res.status(404).json(fail('Device not found'));
+  return res.json(success(null, 'Biometric device deleted'));
+});
+
+/** POST /api/attendance/devices/:id/test — test live TCP/IP connection */
+const testDevice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const device = await q.getBiometricDevice(Number(id));
+  if (!device) return res.status(404).json(fail('Device not found'));
+
+  const result = await esslSvc.testDeviceConnection({
+    ip_address: device.ip_address,
+    port: device.port || 4370,
+  });
+
+  if (result.online) {
+    await q.updateDeviceSyncStatus(device.id, { status: 'online' });
+  } else {
+    await q.updateDeviceSyncStatus(device.id, { status: 'unreachable' });
+  }
+
+  return res.json(success(result));
+});
+
+/** POST /api/attendance/devices/:id/sync — download punches from device now */
+const syncDevice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await esslSvc.syncBiometricDevice(Number(id), svc);
+  return res.json(success(result, `Synced ${result.newPunchesInserted} new punches from ${result.deviceName}`));
+});
+
+/** POST /api/attendance/devices/sync-all — sync all active devices */
+const syncAllDevices = asyncHandler(async (req, res) => {
+  const results = await esslSvc.syncAllActiveDevices(svc);
+  return res.json(success(results, 'All active biometric devices synced.'));
+});
+
 module.exports = {
   listSummaries,
   getSummary,
   processDay,
   importPunches,
   listUnmatchedPunches,
+  listRawPunches,
+  getEmployeeTimeline,
   manualMark,
   listBiometricWindows,
   createBiometricWindow,
@@ -197,4 +300,12 @@ module.exports = {
   getBufferSummary,
   manualPunch,
   getEmployeeBuffer,
+  listDevices,
+  createDevice,
+  updateDevice,
+  deleteDevice,
+  testDevice,
+  syncDevice,
+  syncAllDevices,
 };
+

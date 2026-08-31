@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -111,6 +112,8 @@ export default function Attendance() {
         onChange={setTab}
         tabs={[
           { value: 'daily', label: 'Daily Log' },
+          { value: 'punches', label: 'Employee Punch Logs' },
+          { value: 'devices', label: 'Biometric Devices & Sync' },
           { value: 'corrections', label: 'Corrections' },
           { value: 'buffer', label: 'Buffer Pool' },
           { value: 'windows', label: 'Biometric Windows' },
@@ -119,6 +122,12 @@ export default function Attendance() {
 
       {tab === 'daily' && (
         <DailyLog departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+      )}
+      {tab === 'punches' && (
+        <EmployeeBiometricPunches />
+      )}
+      {tab === 'devices' && (
+        <BiometricDevices onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'corrections' && (
         <Corrections onError={(e) => fail(e)} onSuccess={flash} />
@@ -144,6 +153,7 @@ function DailyLog({ departments, onError, onSuccess }) {
   const [meta, setMeta] = useState({ total: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [markingId, setMarkingId] = useState(null);
   const [markStatus, setMarkStatus] = useState('present');
   const [isSaving, setIsSaving] = useState(false);
@@ -165,6 +175,20 @@ function DailyLog({ departments, onError, onSuccess }) {
   }, [date, deptFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSyncBiometric = async () => {
+    try {
+      setIsSyncing(true);
+      const results = await apiFetch('/attendance/devices/sync-all', { method: 'POST' });
+      const totalNew = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.newPunchesInserted || 0), 0) : 0;
+      onSuccess(`Biometric sync complete! ${totalNew} new punches downloaded.`);
+      await load();
+    } catch (err) {
+      onError(err, 'Biometric sync failed. Please check device IP and network connection.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleProcess = async () => {
     try {
@@ -224,14 +248,34 @@ function DailyLog({ departments, onError, onSuccess }) {
             {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-        <button
-          onClick={handleProcess}
-          disabled={isProcessing}
-          className="sm:ml-auto bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
-          title="Read raw biometric punches for this date and compute the daily summary"
-        >
-          {isProcessing ? 'Processing…' : 'Process Punches'}
-        </button>
+        <div className="sm:ml-auto flex items-center gap-2.5">
+          <button
+            onClick={handleSyncBiometric}
+            disabled={isSyncing || isProcessing}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            title="Connect to local eSSL biometric device and download latest punches"
+          >
+            {isSyncing ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                Syncing…
+              </>
+            ) : (
+              <>⚡ Sync Biometric</>
+            )}
+          </button>
+          <button
+            onClick={handleProcess}
+            disabled={isProcessing || isSyncing}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+            title="Read raw biometric punches for this date and compute the daily summary"
+          >
+            {isProcessing ? 'Processing…' : 'Process Punches'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
@@ -825,3 +869,509 @@ function BiometricWindows({ staffRoles, onError, onSuccess }) {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BIOMETRIC DEVICES & eSSL SYNC
+═══════════════════════════════════════════════════════════════════════ */
+
+function BiometricDevices({ onError, onSuccess }) {
+  const [devices, setDevices] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncingId, setSyncingId] = useState(null);
+  const [testingId, setTestingId] = useState(null);
+  const [testResult, setTestResult] = useState({});
+  const [showModal, setShowModal] = useState(false);
+  const [editingDevice, setEditingDevice] = useState(null);
+  const [form, setForm] = useState({
+    name: '',
+    ip_address: '',
+    port: '4370',
+    comm_key: '0',
+    device_type: 'essl_standalone',
+    location: 'Main Entrance',
+    auto_sync_enabled: true,
+    sync_interval_mins: '15',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await apiFetch('/attendance/devices');
+      setDevices(Array.isArray(data) ? data : []);
+    } catch (err) {
+      onError(err, 'Failed to load biometric devices.');
+      setDevices([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
+
+  const handleOpenAdd = () => {
+    setEditingDevice(null);
+    setForm({
+      name: '',
+      ip_address: '192.168.1.201',
+      port: '4370',
+      comm_key: '0',
+      device_type: 'essl_standalone',
+      location: 'Main Entrance Reception',
+      auto_sync_enabled: true,
+      sync_interval_mins: '15',
+    });
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (dev) => {
+    setEditingDevice(dev);
+    setForm({
+      name: dev.name || '',
+      ip_address: dev.ip_address || '',
+      port: String(dev.port || 4370),
+      comm_key: dev.comm_key || '0',
+      device_type: dev.device_type || 'essl_standalone',
+      location: dev.location || '',
+      auto_sync_enabled: Boolean(dev.auto_sync_enabled),
+      sync_interval_mins: String(dev.sync_interval_mins || 15),
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.name || !form.ip_address) {
+      onError(new Error('Device Name and IP address are required.'));
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      if (editingDevice) {
+        await apiFetch(`/attendance/devices/${editingDevice.id}`, {
+          method: 'PUT',
+          body: {
+            ...form,
+            port: Number(form.port) || 4370,
+            sync_interval_mins: Number(form.sync_interval_mins) || 15,
+          },
+        });
+        onSuccess('Biometric device updated successfully.');
+      } else {
+        await apiFetch('/attendance/devices', {
+          method: 'POST',
+          body: {
+            ...form,
+            port: Number(form.port) || 4370,
+            sync_interval_mins: Number(form.sync_interval_mins) || 15,
+          },
+        });
+        onSuccess('Biometric device added successfully.');
+      }
+      setShowModal(false);
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Failed to save biometric device.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to remove device "${name}"?`)) return;
+    try {
+      await apiFetch(`/attendance/devices/${id}`, { method: 'DELETE' });
+      onSuccess(`Device "${name}" removed.`);
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Failed to delete device.');
+    }
+  };
+
+  const handleTestConnection = async (id) => {
+    try {
+      setTestingId(id);
+      setTestResult((prev) => ({ ...prev, [id]: null }));
+      const res = await apiFetch(`/attendance/devices/${id}/test`, { method: 'POST' });
+      setTestResult((prev) => ({ ...prev, [id]: res }));
+      if (res?.online) {
+        onSuccess(`Connected to eSSL device successfully! (Session #${res.session_id || 'OK'})`);
+      } else {
+        onError(new Error(res?.error || 'Device is unreachable on LAN.'));
+      }
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Connection test failed.');
+      setTestResult((prev) => ({ ...prev, [id]: { online: false, error: err.message } }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleSyncNow = async (id) => {
+    try {
+      setSyncingId(id);
+      const res = await apiFetch(`/attendance/devices/${id}/sync`, { method: 'POST' });
+      onSuccess(
+        `Sync complete! Downloaded ${res.totalLogsFetched} records (${res.newPunchesInserted} new punches inserted). Attendance recalculated for affected dates.`
+      );
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Sync failed. Check device network connection and power.');
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const handleSyncAll = async () => {
+    try {
+      setIsSyncingAll(true);
+      const results = await apiFetch('/attendance/devices/sync-all', { method: 'POST' });
+      const totalNew = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.newPunchesInserted || 0), 0) : 0;
+      onSuccess(`All active devices synced! ${totalNew} new punches registered.`);
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Failed to sync all devices.');
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Action Bar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-bold text-gray-900">Local eSSL Biometric Machines</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Connect directly to your local eSSL / ZKTeco devices via LAN TCP/IP (Port 4370) to pull live punch logs.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleSyncAll}
+            disabled={isSyncingAll || isLoading}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {isSyncingAll ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                Syncing All Devices…
+              </>
+            ) : (
+              <>⚡ Sync All Active Devices</>
+            )}
+          </button>
+          <button
+            onClick={handleOpenAdd}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+          >
+            ➕ Add Biometric Device
+          </button>
+        </div>
+      </div>
+
+      {/* Device Cards Grid */}
+      {isLoading ? (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-8 text-center text-xs text-gray-400">
+          Loading biometric devices…
+        </div>
+      ) : devices.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200/80 p-8 text-center space-y-3">
+          <div className="text-3xl">📟</div>
+          <div className="text-xs font-bold text-gray-900">No Biometric Devices Configured</div>
+          <p className="text-xs text-gray-500 max-w-md mx-auto">
+            Add your local eSSL biometric device's IP address (e.g. 192.168.1.201) to automatically download attendance punches.
+          </p>
+          <button
+            onClick={handleOpenAdd}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+          >
+            ➕ Configure First eSSL Device
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {devices.map((dev) => {
+            const isSyncingThis = syncingId === dev.id;
+            const isTestingThis = testingId === dev.id;
+            const res = testResult[dev.id];
+
+            return (
+              <div
+                key={dev.id}
+                className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-5 space-y-4 hover:border-gray-300 transition-colors"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-gray-900">{dev.name}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                          dev.status === 'online'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : dev.status === 'unreachable'
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        ● {dev.status}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 font-medium flex items-center gap-1.5">
+                      <span>📍 {dev.location || 'Main Hospital Entrance'}</span>
+                      <span>·</span>
+                      <span className="capitalize">{dev.device_type.replace(/_/g, ' ')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenEdit(dev)}
+                      className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="Edit Device"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDelete(dev.id, dev.name)}
+                      className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Remove Device"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+
+                {/* Connection Specs */}
+                <div className="bg-gray-50/80 rounded-lg p-3 border border-gray-100 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-400 text-[10px] font-bold uppercase block">IP Address &amp; Port</span>
+                    <span className="font-mono font-bold text-blue-700">{dev.ip_address}:{dev.port || 4370}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-[10px] font-bold uppercase block">Auto-Sync</span>
+                    <span className="font-semibold text-gray-700">
+                      {dev.auto_sync_enabled ? `Enabled (${dev.sync_interval_mins || 15}m)` : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="col-span-2 pt-1 border-t border-gray-200/60 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500">
+                      Last Synced:{' '}
+                      <strong className="text-gray-800">
+                        {dev.last_sync_at
+                          ? new Date(dev.last_sync_at).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'Never'}
+                      </strong>
+                    </span>
+                    {dev.last_sync_count > 0 && (
+                      <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                        +{dev.last_sync_count} punches
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Test Result Banner */}
+                {res && (
+                  <div
+                    className={`p-2.5 rounded-lg text-xs font-medium ${
+                      res.online ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+                    }`}
+                  >
+                    {res.online ? `✓ Device Online · Connected on port ${dev.port || 4370}` : `✕ ${res.error}`}
+                  </div>
+                )}
+
+                {/* Card Actions */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => handleSyncNow(dev.id)}
+                    disabled={isSyncingThis || isTestingThis}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSyncingThis ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        Downloading Punches…
+                      </>
+                    ) : (
+                      <>⚡ Sync Punches Now</>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleTestConnection(dev.id)}
+                    disabled={isTestingThis || isSyncingThis}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isTestingThis ? 'Testing…' : '🔍 Test Connection'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Help & Setup Guide Card */}
+      <div className="bg-blue-50/60 rounded-xl border border-blue-100 p-5 space-y-3 text-xs text-blue-900">
+        <h3 className="font-bold text-blue-950 flex items-center gap-2 text-sm">
+          <span>📖</span> How to Connect your Local eSSL Device
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
+          <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
+            <span className="font-bold text-blue-800 block">1. Device IP Configuration</span>
+            <p className="text-gray-600">
+              On the eSSL machine, press <strong>M/OK &gt; Comm. &gt; Ethernet</strong>. Set IP (e.g. <code className="text-blue-700">192.168.1.201</code>), Netmask <code className="text-blue-700">255.255.255.0</code>, Port <code className="text-blue-700">4370</code>.
+            </p>
+          </div>
+          <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
+            <span className="font-bold text-blue-800 block">2. LAN / Wi-Fi Network</span>
+            <p className="text-gray-600">
+              Ensure this hospital server computer and the eSSL biometric machine are connected to the same local router / subnet.
+            </p>
+          </div>
+          <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
+            <span className="font-bold text-blue-800 block">3. Employee Code Matching</span>
+            <p className="text-gray-600">
+              Staff registered on the biometric device (User ID / Enroll ID) must match their <strong>Emp Code</strong> in Neha Hospital staff records.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Add / Edit Device Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 bg-gray-900 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm">
+                {editingDevice ? `Edit Device: ${editingDevice.name}` : 'Add Local eSSL Biometric Device'}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-xs font-bold">
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Device Name</label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. eSSL Main Entrance"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg font-semibold text-gray-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">IP Address</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.ip_address}
+                    onChange={(e) => setForm((f) => ({ ...f, ip_address: e.target.value }))}
+                    placeholder="192.168.1.201"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono font-bold text-blue-700"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Port (Default 4370)</label>
+                  <input
+                    type="number"
+                    required
+                    value={form.port}
+                    onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))}
+                    placeholder="4370"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Device Model / Protocol</label>
+                  <select
+                    value={form.device_type}
+                    onChange={(e) => setForm((f) => ({ ...f, device_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-semibold bg-white"
+                  >
+                    <option value="essl_standalone">eSSL Standalone (Port 4370 TCP)</option>
+                    <option value="zkteco">ZKTeco Terminal</option>
+                    <option value="essl_adms_push">eSSL ADMS Cloud Push</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Comm Key / Password</label>
+                  <input
+                    type="text"
+                    value={form.comm_key}
+                    onChange={(e) => setForm((f) => ({ ...f, comm_key: e.target.value }))}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Physical Location</label>
+                <input
+                  type="text"
+                  value={form.location}
+                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                  placeholder="e.g. OPD Reception, Ground Floor"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-gray-100">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={form.auto_sync_enabled}
+                    onChange={(e) => setForm((f) => ({ ...f, auto_sync_enabled: e.target.checked }))}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  Enable Auto-Sync
+                </label>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Saving…' : editingDevice ? 'Update Device' : 'Save Device'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

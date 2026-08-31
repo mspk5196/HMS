@@ -87,6 +87,115 @@ const getUnmatchedPunches = async (fromDate, toDate) => {
   return rows;
 };
 
+/** Fetch all raw biometric punches with employee details and flexible filters */
+const listRawPunches = async ({ employeeId, employeeCode, departmentId, fromDate, toDate, search, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const conditions = [];
+  const params = [];
+
+  if (employeeId) {
+    conditions.push('arp.employee_id = ?');
+    params.push(employeeId);
+  }
+  if (employeeCode) {
+    conditions.push('arp.employee_code = ?');
+    params.push(employeeCode);
+  }
+  if (departmentId) {
+    conditions.push('e.department_id = ?');
+    params.push(departmentId);
+  }
+  if (fromDate) {
+    conditions.push('DATE(arp.punch_time) >= ?');
+    params.push(fromDate);
+  }
+  if (toDate) {
+    conditions.push('DATE(arp.punch_time) <= ?');
+    params.push(toDate);
+  }
+  if (search) {
+    conditions.push('(e.full_name LIKE ? OR arp.employee_code LIKE ? OR arp.device_id LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT arp.*,
+            e.full_name AS employee_name,
+            e.employee_code AS registered_employee_code,
+            d.name AS department_name,
+            sr.name AS designation_name,
+            s.name AS shift_name,
+            s.start_time AS shift_start_time,
+            s.end_time AS shift_end_time,
+            s.biometric_in_start, s.biometric_in_end,
+            s.biometric_out_start, s.biometric_out_end
+     FROM attendance_raw_punches arp
+     LEFT JOIN employees e ON e.id = arp.employee_id
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     LEFT JOIN employee_shifts es ON (es.employee_id = e.id AND es.is_active = 1)
+     LEFT JOIN shifts s ON s.id = es.shift_id
+     ${whereClause}
+     ORDER BY arp.punch_time DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const [[{ total }]] = await db.query(
+    `SELECT COUNT(*) AS total
+     FROM attendance_raw_punches arp
+     LEFT JOIN employees e ON e.id = arp.employee_id
+     ${whereClause}`,
+    params
+  );
+
+  return { rows, total };
+};
+
+/** Get comprehensive biometric punch timeline & daily summary for a specific employee */
+const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
+  // 1. Employee Info & Assigned Shift
+  const [empRows] = await db.query(
+    `SELECT e.*, d.name AS department_name, sr.name AS designation_name,
+            s.name AS shift_name, s.start_time AS shift_start, s.end_time AS shift_end,
+            s.biometric_in_start, s.biometric_in_end, s.biometric_out_start, s.biometric_out_end,
+            s.grace_period_minutes
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     LEFT JOIN employee_shifts es ON (es.employee_id = e.id AND es.is_active = 1)
+     LEFT JOIN shifts s ON s.id = es.shift_id
+     WHERE e.id = ?`,
+    [employeeId]
+  );
+  const employee = empRows[0] ?? null;
+  if (!employee) return null;
+
+  // 2. Raw Punches in Date Range
+  const [punches] = await db.query(
+    `SELECT arp.*, DATE(arp.punch_time) AS punch_date, TIME(arp.punch_time) AS punch_clock
+     FROM attendance_raw_punches arp
+     WHERE (arp.employee_id = ? OR arp.employee_code = ?)
+       AND DATE(arp.punch_time) BETWEEN ? AND ?
+     ORDER BY arp.punch_time ASC`,
+    [employeeId, employee.employee_code, fromDate, toDate]
+  );
+
+  // 3. Processed Daily Summaries in Date Range
+  const [summaries] = await db.query(
+    `SELECT ads.*, DATE(ads.attendance_date) AS summary_date
+     FROM attendance_daily_summary ads
+     WHERE ads.employee_id = ?
+       AND ads.attendance_date BETWEEN ? AND ?
+     ORDER BY ads.attendance_date ASC`,
+    [employeeId, fromDate, toDate]
+  );
+
+  return { employee, punches, summaries };
+};
+
 /* ─────────────────────────────────────────────
    BIOMETRIC WINDOW
 ───────────────────────────────────────────── */
@@ -436,12 +545,235 @@ const deleteRawPunches = async (employeeId, date) => {
   );
 };
 
+/* ─────────────────────────────────────────────
+   BIOMETRIC DEVICES (eSSL / ZKTeco Terminals)
+───────────────────────────────────────────── */
+
+/** Helper to parse multiple .env devices (JSON, comma-separated, or single IP) */
+const getEnvDevices = () => {
+  const devices = [];
+
+  // 1. JSON Array: ESSL_DEVICES='[{"name":"Main Reception","ip":"192.168.1.201","port":4370,"location":"Reception"},{"name":"ICU","ip":"192.168.1.202","port":4370,"location":"ICU"}]'
+  if (process.env.ESSL_DEVICES) {
+    try {
+      const parsed = JSON.parse(process.env.ESSL_DEVICES);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((d, idx) => {
+          const ip = d.ip || d.ip_address;
+          if (ip) {
+            devices.push({
+              id: idx + 1,
+              name: d.name || `eSSL Device ${idx + 1}`,
+              device_type: d.device_type || 'essl_standalone',
+              ip_address: ip,
+              port: Number(d.port) || 4370,
+              comm_key: String(d.comm_key || '0'),
+              location: d.location || `Location ${idx + 1}`,
+              status: 'offline',
+              auto_sync_enabled: d.auto_sync_enabled !== false ? 1 : 0,
+              sync_interval_mins: Number(d.sync_interval_mins) || 15,
+              is_from_env: true,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to parse ESSL_DEVICES JSON from .env:', e.message);
+    }
+  }
+
+  // 2. Comma-separated list: ESSL_DEVICE_IPS=192.168.1.201,192.168.1.202
+  if (devices.length === 0 && process.env.ESSL_DEVICE_IPS) {
+    const ips = process.env.ESSL_DEVICE_IPS.split(',').map((s) => s.trim()).filter(Boolean);
+    ips.forEach((ip, idx) => {
+      devices.push({
+        id: idx + 1,
+        name: `eSSL Device ${idx + 1} (${ip})`,
+        device_type: 'essl_standalone',
+        ip_address: ip,
+        port: Number(process.env.ESSL_DEVICE_PORT) || 4370,
+        comm_key: process.env.ESSL_DEVICE_COMM_KEY || '0',
+        location: `Location ${idx + 1}`,
+        status: 'offline',
+        auto_sync_enabled: 1,
+        sync_interval_mins: Number(process.env.ESSL_AUTO_SYNC_INTERVAL_MINS) || 15,
+        is_from_env: true,
+      });
+    });
+  }
+
+  // 3. Single device: ESSL_DEVICE_IP=192.168.1.201
+  if (devices.length === 0 && process.env.ESSL_DEVICE_IP) {
+    devices.push({
+      id: 1,
+      name: process.env.ESSL_DEVICE_NAME || 'eSSL Main Entrance',
+      device_type: 'essl_standalone',
+      ip_address: process.env.ESSL_DEVICE_IP,
+      port: Number(process.env.ESSL_DEVICE_PORT) || 4370,
+      comm_key: process.env.ESSL_DEVICE_COMM_KEY || '0',
+      location: process.env.ESSL_DEVICE_LOCATION || 'Main Entrance Reception',
+      status: 'offline',
+      auto_sync_enabled: process.env.ESSL_AUTO_SYNC_ENABLED !== 'false' ? 1 : 0,
+      sync_interval_mins: Number(process.env.ESSL_AUTO_SYNC_INTERVAL_MINS) || 15,
+      is_from_env: true,
+    });
+  }
+
+  return devices;
+};
+
+/** Ensure biometric_devices table exists and seed from .env if needed */
+const ensureBiometricDevicesTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS \`biometric_devices\` (
+      \`id\` bigint unsigned NOT NULL AUTO_INCREMENT,
+      \`name\` varchar(100) NOT NULL,
+      \`device_type\` enum('essl_standalone', 'essl_adms_push', 'zkteco') NOT NULL DEFAULT 'essl_standalone',
+      \`ip_address\` varchar(50) NOT NULL,
+      \`port\` int unsigned NOT NULL DEFAULT 4370,
+      \`comm_key\` varchar(50) NULL DEFAULT '0',
+      \`serial_number\` varchar(100) NULL DEFAULT NULL,
+      \`location\` varchar(100) NULL DEFAULT 'Main Entrance',
+      \`status\` enum('online', 'offline', 'unreachable') NOT NULL DEFAULT 'offline',
+      \`last_sync_at\` datetime NULL DEFAULT NULL,
+      \`last_sync_count\` int unsigned NOT NULL DEFAULT 0,
+      \`auto_sync_enabled\` tinyint(1) NOT NULL DEFAULT 1,
+      \`sync_interval_mins\` int unsigned NOT NULL DEFAULT 15,
+      \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  `);
+
+  // Upsert any devices defined in .env
+  const envDevices = getEnvDevices();
+  for (const dev of envDevices) {
+    try {
+      await db.query(`
+        INSERT INTO biometric_devices (id, name, device_type, ip_address, port, comm_key, location, auto_sync_enabled, sync_interval_mins)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name),
+          ip_address = VALUES(ip_address),
+          port = VALUES(port),
+          comm_key = VALUES(comm_key),
+          location = VALUES(location);
+      `, [dev.id, dev.name, dev.device_type, dev.ip_address, dev.port, dev.comm_key, dev.location, dev.auto_sync_enabled, dev.sync_interval_mins]);
+    } catch (e) {
+      console.warn(`Failed to seed device ${dev.name}:`, e.message);
+    }
+  }
+};
+
+/** List all configured biometric devices */
+const listBiometricDevices = async () => {
+  try {
+    await ensureBiometricDevicesTable();
+    const [rows] = await db.query(
+      `SELECT * FROM biometric_devices ORDER BY id ASC`
+    );
+    if (rows && rows.length > 0) return rows;
+    return getEnvDevices();
+  } catch (err) {
+    console.error('listBiometricDevices query error:', err);
+    return getEnvDevices();
+  }
+};
+
+/** Get biometric device by ID */
+const getBiometricDevice = async (id) => {
+  try {
+    await ensureBiometricDevicesTable();
+    const [rows] = await db.execute(
+      `SELECT * FROM biometric_devices WHERE id = ?`,
+      [id]
+    );
+    if (rows[0]) return rows[0];
+  } catch (err) {
+    console.error('getBiometricDevice error:', err);
+  }
+  const envDevices = getEnvDevices();
+  return envDevices.find((d) => d.id === Number(id)) || envDevices[0] || null;
+};
+
+/** Create a new biometric device entry */
+const createBiometricDevice = async (data) => {
+  await ensureBiometricDevicesTable();
+  const { name, device_type, ip_address, port, comm_key, location, auto_sync_enabled, sync_interval_mins } = data;
+  const [res] = await db.execute(
+    `INSERT INTO biometric_devices
+       (name, device_type, ip_address, port, comm_key, location, auto_sync_enabled, sync_interval_mins, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'offline')`,
+    [
+      name,
+      device_type || 'essl_standalone',
+      ip_address,
+      port || 4370,
+      comm_key || '0',
+      location || 'Main Entrance',
+      auto_sync_enabled !== undefined ? (auto_sync_enabled ? 1 : 0) : 1,
+      sync_interval_mins || 15,
+    ]
+  );
+  return res.insertId;
+};
+
+/** Update an existing biometric device entry */
+const updateBiometricDevice = async (id, data) => {
+  await ensureBiometricDevicesTable();
+  const { name, device_type, ip_address, port, comm_key, location, auto_sync_enabled, sync_interval_mins, status } = data;
+  const fields = [];
+  const params = [];
+
+  if (name !== undefined) { fields.push('name = ?'); params.push(name); }
+  if (device_type !== undefined) { fields.push('device_type = ?'); params.push(device_type); }
+  if (ip_address !== undefined) { fields.push('ip_address = ?'); params.push(ip_address); }
+  if (port !== undefined) { fields.push('port = ?'); params.push(port); }
+  if (comm_key !== undefined) { fields.push('comm_key = ?'); params.push(comm_key); }
+  if (location !== undefined) { fields.push('location = ?'); params.push(location); }
+  if (auto_sync_enabled !== undefined) { fields.push('auto_sync_enabled = ?'); params.push(auto_sync_enabled ? 1 : 0); }
+  if (sync_interval_mins !== undefined) { fields.push('sync_interval_mins = ?'); params.push(sync_interval_mins); }
+  if (status !== undefined) { fields.push('status = ?'); params.push(status); }
+
+  if (!fields.length) return false;
+  params.push(id);
+
+  const [res] = await db.execute(
+    `UPDATE biometric_devices SET ${fields.join(', ')} WHERE id = ?`,
+    params
+  );
+  return res.affectedRows > 0;
+};
+
+/** Delete a biometric device entry */
+const deleteBiometricDevice = async (id) => {
+  await ensureBiometricDevicesTable();
+  const [res] = await db.execute(
+    `DELETE FROM biometric_devices WHERE id = ?`,
+    [id]
+  );
+  return res.affectedRows > 0;
+};
+
+/** Update device live status and last sync timestamp */
+const updateDeviceSyncStatus = async (id, { status, last_sync_at, last_sync_count }) => {
+  await ensureBiometricDevicesTable();
+  await db.execute(
+    `UPDATE biometric_devices
+     SET status = ?, last_sync_at = ?, last_sync_count = ?
+     WHERE id = ?`,
+    [status || 'offline', last_sync_at || new Date(), last_sync_count || 0, id]
+  );
+};
+
 module.exports = {
   bulkInsertPunches,
   resolveEmployeeCodes,
   linkOrphanPunches,
   getUnprocessedPunches,
   getUnmatchedPunches,
+  listRawPunches,
+  getEmployeeBiometricTimeline,
   getCorrectionRequest,
   getBiometricWindow,
   listBiometricWindows,
@@ -460,4 +792,12 @@ module.exports = {
   createCorrectionRequest,
   reviewCorrectionRequest,
   deleteRawPunches,
+  ensureBiometricDevicesTable,
+  listBiometricDevices,
+  getBiometricDevice,
+  createBiometricDevice,
+  updateBiometricDevice,
+  deleteBiometricDevice,
+  updateDeviceSyncStatus,
 };
+

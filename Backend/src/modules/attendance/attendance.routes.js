@@ -29,6 +29,8 @@ router.post('/process', ctrl.processDay);
 // Punch import (eSSL / eTimeTracker)
 router.post('/punches/import', ctrl.importPunches);
 router.get('/punches/unmatched', ctrl.listUnmatchedPunches);
+router.get('/punches', ctrl.listRawPunches);
+router.get('/punches/employee/:id', ctrl.getEmployeeTimeline);
 
 // Admin manual mark
 router.post('/mark', ctrl.manualMark);
@@ -43,9 +45,14 @@ router.get('/corrections', ctrl.listCorrections);
 router.post('/corrections', ctrl.createCorrection);
 router.patch('/corrections/:id/review', ctrl.reviewCorrection);
 
-// Buffer summary
-router.get('/buffer', ctrl.getBufferSummary);
-router.get('/buffer/employee/:id', ctrl.getEmployeeBuffer);
+// Biometric Devices & eSSL Live Sync
+router.get('/devices', ctrl.listDevices);
+router.post('/devices', ctrl.createDevice);
+router.post('/devices/sync-all', ctrl.syncAllDevices);
+router.put('/devices/:id', ctrl.updateDevice);
+router.delete('/devices/:id', ctrl.deleteDevice);
+router.post('/devices/:id/test', ctrl.testDevice);
+router.post('/devices/:id/sync', ctrl.syncDevice);
 
 // Registered last so it cannot shadow any static route above.
 router.get('/:employeeId/:date', ctrl.getSummary);
