@@ -203,8 +203,18 @@ const listSalaryLogs = asyncHandler(async (req, res) => {
   return res.json(paginated(result.rows, result.total, page, limit));
 });
 
+const bulkImportEmployees = asyncHandler(async (req, res) => {
+  const rows = Array.isArray(req.body) ? req.body : req.body?.employees || [];
+  if (!rows.length) {
+    return res.status(400).json(fail('No employee records provided for import.'));
+  }
+  const result = await svc.bulkImportEmployees(rows);
+  const msg = `Bulk import complete: ${result.inserted} created, ${result.updated} updated${result.errors?.length ? `, ${result.errors.length} failed` : ''}.`;
+  return res.status(200).json(success(result, msg));
+});
+
 module.exports = {
-  listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee,
+  listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee, bulkImportEmployees,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

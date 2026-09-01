@@ -35,10 +35,16 @@ const db = mysql.createPool({
   // calendar dates, so that off-by-one is a correctness bug, not a display one.
   // DATETIME/TIMESTAMP (punch times) still come back as Date objects.
   dateStrings: ['DATE'],
-  ssl: {
-    rejectUnauthorized: true,
-    ca: formatCaCert(process.env.DB_CA_CERT)
-  },
+  ...(process.env.DB_CA_CERT
+    ? {
+        ssl: {
+          rejectUnauthorized: true,
+          ca: formatCaCert(process.env.DB_CA_CERT),
+        },
+      }
+    : process.env.DB_SSL === 'true'
+    ? { ssl: { rejectUnauthorized: false } }
+    : {}),
 });
 
 (async () => {

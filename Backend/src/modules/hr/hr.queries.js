@@ -689,8 +689,184 @@ const listSalaryLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
   return { rows, total };
 };
 
+/**
+ * Bulk imports an array of employee records.
+ * Automatically resolves/creates departments and designations,
+ * upserts employees by employee_code, and sets baseline salaries.
+ */
+const bulkImportEmployees = async (rows = []) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { total: 0, inserted: 0, updated: 0, errors: [] };
+  }
+
+  // 1. Fetch current departments and staff roles to cache lookups
+  const [allDepts] = await db.query(`SELECT id, name FROM departments`);
+  const deptMap = new Map();
+  allDepts.forEach((d) => {
+    deptMap.set(String(d.id), d.id);
+    deptMap.set(d.name.trim().toLowerCase(), d.id);
+  });
+
+  const [allRoles] = await db.query(`SELECT id, department_id, name FROM staff_roles`);
+  const roleMap = new Map();
+  allRoles.forEach((r) => {
+    roleMap.set(String(r.id), r.id);
+    roleMap.set(`${r.department_id}_${r.name.trim().toLowerCase()}`, r.id);
+  });
+
+  let inserted = 0;
+  let updated = 0;
+  const errors = [];
+
+  for (let idx = 0; idx < rows.length; idx++) {
+    const row = rows[idx];
+    const rowNum = idx + 2; // spreadsheet row number (1-based + 1 header)
+
+    const empCode = String(row.employee_code || row.employeeCode || row['Employee Code'] || row['Code'] || '').trim();
+    const fullName = String(row.full_name || row.fullName || row.name || row['Full Name'] || row['Name'] || '').trim();
+
+    if (!empCode) {
+      errors.push({ row: rowNum, error: 'Employee Code is required.' });
+      continue;
+    }
+    if (!fullName) {
+      errors.push({ row: rowNum, employee_code: empCode, error: 'Full Name is required.' });
+      continue;
+    }
+
+    try {
+      // Resolve Department
+      const rawDept = String(row.department_name || row.department || row['Department Name'] || row['Department'] || row.department_id || 'General').trim();
+      let deptId = deptMap.get(rawDept.toLowerCase()) || deptMap.get(rawDept);
+
+      if (!deptId) {
+        const [deptRes] = await db.query(
+          `INSERT INTO departments (name, description) VALUES (?, 'Created via bulk employee import')`,
+          [rawDept]
+        );
+        deptId = deptRes.insertId;
+        deptMap.set(rawDept.toLowerCase(), deptId);
+        deptMap.set(String(deptId), deptId);
+      }
+
+      // Resolve Role / Designation
+      const rawRole = String(row.designation_name || row.designation || row.position || row['Designation'] || row['Role'] || row.designation_id || 'Staff Member').trim();
+      const roleKey = `${deptId}_${rawRole.toLowerCase()}`;
+      let designationId = roleMap.get(roleKey) || roleMap.get(rawRole);
+
+      if (!designationId) {
+        const [roleRes] = await db.query(
+          `INSERT INTO staff_roles (department_id, name, basic_salary, hra, da, pf_applicable, esi_applicable, casual_leave_count, privilege_leave_count)
+           VALUES (?, ?, ?, 0, 0, 1, 1, 12, 15)`,
+          [deptId, rawRole, Number(row.basic_salary || row['Basic Salary'] || 0)]
+        );
+        designationId = roleRes.insertId;
+        roleMap.set(roleKey, designationId);
+        roleMap.set(String(designationId), designationId);
+      }
+
+      // Format Dates
+      const parseDate = (d) => {
+        if (!d) return null;
+        if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+        const str = String(d).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+        return null;
+      };
+
+      const dateOfJoining = parseDate(row.date_of_joining || row['Date of Joining'] || row.dateOfJoining) || new Date().toISOString().slice(0, 10);
+      const dateOfBirth = parseDate(row.date_of_birth || row['Date of Birth'] || row.dateOfBirth);
+
+      // Sanitize fields
+      const rawGender = String(row.gender || row['Gender'] || '').toLowerCase();
+      const gender = ['male', 'female', 'other'].includes(rawGender) ? rawGender : 'male';
+      const phone = row.phone || row['Mobile'] || row['Phone'] || null;
+      const address = row.address || row['Address'] || null;
+      const qualification = row.qualification || row['Qualification'] || null;
+      const experienceDescription = row.experience_description || row['Experience'] || row['Experience Description'] || 'Healthcare professional';
+      const salaryType = String(row.salary_type || row['Salary Type'] || 'monthly').toLowerCase().includes('day') ? 'per_day' : 'monthly';
+      const basicSalary = Number(row.basic_salary || row['Basic Salary'] || row['Salary'] || 0);
+      const perDaySalary = Number(row.per_day_salary || row['Per Day Salary'] || 0);
+      const perNightSalary = Number(row.per_night_salary || row['Per Night Salary'] || 0);
+      const bankName = row.bank_name || row['Bank Name'] || null;
+      const bankAccountNo = row.bank_account_no || row['Bank Account No'] || row['Account No'] || null;
+      const bankIfsc = row.bank_ifsc || row['Bank IFSC'] || row['IFSC'] || null;
+      const uanNumber = row.uan_number || row['UAN Number'] || row['UAN'] || null;
+      const esiNumber = row.esi_number || row['ESI Number'] || row['ESI'] || null;
+      const pfEnrolled = [1, '1', true, 'true', 'yes', 'y'].includes(String(row.pf_enrolled || row['PF Enrolled'] || '').toLowerCase()) ? 1 : 0;
+      const esiEnrolled = [1, '1', true, 'true', 'yes', 'y'].includes(String(row.esi_enrolled || row['ESI Enrolled'] || '').toLowerCase()) ? 1 : 0;
+      const status = String(row.status || row['Status'] || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active';
+
+      // Check existing
+      const [existingRows] = await db.query(`SELECT id FROM employees WHERE employee_code = ?`, [empCode]);
+
+      let employeeId;
+      if (existingRows.length > 0) {
+        employeeId = existingRows[0].id;
+        await db.query(
+          `UPDATE employees
+           SET full_name = ?, department_id = ?, designation_id = ?, date_of_joining = ?,
+               date_of_birth = ?, gender = ?, phone = ?, address = ?, qualification = ?,
+               experience_description = ?, salary_type = ?, basic_salary = ?, per_day_salary = ?,
+               per_night_salary = ?, bank_name = ?, bank_account_no = ?, bank_ifsc = ?,
+               uan_number = ?, pf_enrolled = ?, esi_number = ?, esi_enrolled = ?, status = ?
+           WHERE id = ?`,
+          [
+            fullName, deptId, designationId, dateOfJoining, dateOfBirth, gender, phone, address, qualification,
+            experienceDescription, salaryType, basicSalary, perDaySalary, perNightSalary, bankName,
+            bankAccountNo, bankIfsc, uanNumber, pfEnrolled, esiNumber, esiEnrolled, status, employeeId
+          ]
+        );
+        updated++;
+      } else {
+        const [insertRes] = await db.query(
+          `INSERT INTO employees (
+            employee_code, full_name, department_id, designation_id, date_of_joining,
+            date_of_birth, gender, phone, address, qualification, experience_description,
+            salary_type, basic_salary, per_day_salary, per_night_salary, bank_name,
+            bank_account_no, bank_ifsc, uan_number, pf_enrolled, esi_number, esi_enrolled, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            empCode, fullName, deptId, designationId, dateOfJoining, dateOfBirth, gender, phone, address, qualification,
+            experienceDescription, salaryType, basicSalary, perDaySalary, perNightSalary, bankName,
+            bankAccountNo, bankIfsc, uanNumber, pfEnrolled, esiNumber, esiEnrolled, status
+          ]
+        );
+        employeeId = insertRes.insertId;
+        inserted++;
+      }
+
+      // Upsert baseline salary structure if basic salary is set
+      if (basicSalary > 0 && employeeId) {
+        try {
+          await db.query(
+            `INSERT INTO salary_structures (
+               employee_id, salary_basis, fixed_salary, basic_da_amount, hra_amount,
+               pf_applicable, esi_applicable, effective_from
+             ) VALUES (?, 'monthly', ?, ?, 0, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+               fixed_salary = VALUES(fixed_salary),
+               basic_da_amount = VALUES(basic_da_amount),
+               pf_applicable = VALUES(pf_applicable),
+               esi_applicable = VALUES(esi_applicable)`,
+            [employeeId, basicSalary, basicSalary, pfEnrolled, esiEnrolled, dateOfJoining]
+          );
+        } catch (e) {
+          // ignore duplicate or non-fatal structure errors
+        }
+      }
+    } catch (rowErr) {
+      errors.push({ row: rowNum, employee_code: empCode, error: rowErr.message });
+    }
+  }
+
+  return { total: rows.length, inserted, updated, errors };
+};
+
 module.exports = {
-  listEmployees, listDoctors, getEmployee, getEmployeeByCode, createEmployee, updateEmployee,
+  listEmployees, listDoctors, getEmployee, getEmployeeByCode, createEmployee, updateEmployee, bulkImportEmployees,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

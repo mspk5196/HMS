@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import EmployeeBiometricPunches from './EmployeeBiometricPunches';
+import BulkPunchesImportModal, { downloadPunchesExcelTemplate } from './BulkPunchesImportModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -70,6 +71,7 @@ export default function Attendance() {
   const [tab, setTab] = useState('daily'); // 'daily' | 'corrections' | 'buffer' | 'windows'
   const [departments, setDepartments] = useState([]);
   const [staffRoles, setStaffRoles] = useState([]);
+  const [showPunchesModal, setShowPunchesModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -101,6 +103,25 @@ export default function Attendance() {
           <p className="text-xs text-gray-500 mt-0.5">
             Daily punches, corrections, the monthly late-buffer pool, and biometric window overrides.
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={downloadPunchesExcelTemplate}
+            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Download blank biometric punches Excel template"
+          >
+            <span>📥 Punches Template</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPunchesModal(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>📤 Bulk Upload Punches</span>
+          </button>
         </div>
       </div>
 
@@ -138,6 +159,12 @@ export default function Attendance() {
       {tab === 'windows' && (
         <BiometricWindows staffRoles={staffRoles} onError={(e) => fail(e)} onSuccess={flash} />
       )}
+
+      <BulkPunchesImportModal
+        isOpen={showPunchesModal}
+        onClose={() => setShowPunchesModal(false)}
+        onSuccess={(msg) => flash(msg)}
+      />
     </div>
   );
 }

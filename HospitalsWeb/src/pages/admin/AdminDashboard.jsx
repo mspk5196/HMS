@@ -28,15 +28,14 @@ import DoctorFeeSettings from './DoctorFeeSettings';
 import Settings from './Settings';
 import UsersAuthentication from './UsersAuthentication';
 import Approvals from './Approvals';
+import { apiFetch } from '../../util/api';
 
 export default function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('hr-employees');
 
   const handleLogoutClick = async () => {
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/logout`, {
-        method: 'POST',
-      });
+      await apiFetch('/auth/logout', { method: 'POST' });
     } catch (e) {
       // Ignore failures
     }

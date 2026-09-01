@@ -118,12 +118,10 @@ function Runs({ onError, onSuccess }) {
   const [runs, setRuns] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
   const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [newMonth, setNewMonth] = useState(now.getMonth() + 1);
-  const [newYear, setNewYear] = useState(now.getFullYear());
-  const [isCreating, setIsCreating] = useState(false);
-
+  const [genMonth, setGenMonth] = useState(now.getMonth() + 1);
+  const [genYear, setGenYear] = useState(now.getFullYear());
   const [selectedRunId, setSelectedRunId] = useState(null);
 
   const load = useCallback(async () => {
@@ -141,21 +139,23 @@ function Runs({ onError, onSuccess }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const createRun = async (e) => {
+  const handleGeneratePayroll = async (e) => {
     e.preventDefault();
     try {
-      setIsCreating(true);
-      await apiFetch('/salary/payroll-runs', {
+      setIsGenerating(true);
+      const res = await apiFetch('/salary/payroll-runs/generate', {
         method: 'POST',
-        body: JSON.stringify({ period_month: Number(newMonth), period_year: Number(newYear) }),
+        body: JSON.stringify({ period_month: Number(genMonth), period_year: Number(genYear) }),
       });
-      onSuccess(`Payroll run created for ${MONTH_NAMES[newMonth - 1]} ${newYear}.`);
-      setShowCreate(false);
+      onSuccess(`Payroll generated for ${MONTH_NAMES[genMonth - 1]} ${genYear}: ${res.calcResult?.calculated || 0} payslip(s) calculated based on attendance & basic salary.`);
       await load();
+      if (res.run?.id) {
+        setSelectedRunId(res.run.id);
+      }
     } catch (err) {
-      onError(err, 'Failed to create the run.');
+      onError(err, 'Failed to generate payroll for selected month.');
     } finally {
-      setIsCreating(false);
+      setIsGenerating(false);
     }
   };
 
@@ -177,75 +177,105 @@ function Runs({ onError, onSuccess }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowCreate((v) => !v)}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showCreate ? 'Cancel' : '+ New Payroll Run'}
-        </button>
+    <div className="space-y-6">
+      {/* Quick Month Payroll Generator Card */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-lg space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Payroll Engine</span>
+            <h2 className="text-base font-extrabold text-white mt-0.5">Generate Monthly Salary &amp; Payslips</h2>
+            <p className="text-xs text-blue-200 mt-1 max-w-xl">
+              Calculates gross earnings, attendance-based Loss of Pay (LOP), late buffer deductions, fines, and statutory PF/ESI for every active staff member.
+            </p>
+          </div>
+
+          <form onSubmit={handleGeneratePayroll} className="flex flex-wrap items-center gap-3 bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20">
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-bold text-blue-200 uppercase block">Select Month</label>
+              <select
+                value={genMonth}
+                onChange={(e) => setGenMonth(e.target.value)}
+                className="px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs cursor-pointer border border-gray-200"
+              >
+                {MONTH_NAMES.map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-bold text-blue-200 uppercase block">Year</label>
+              <input
+                type="number"
+                value={genYear}
+                onChange={(e) => setGenYear(e.target.value)}
+                className="w-20 px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs border border-gray-200"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isGenerating}
+              className="mt-3.5 sm:mt-0 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-4 py-2 rounded-lg shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-end"
+            >
+              {isGenerating ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  Calculating…
+                </>
+              ) : (
+                <>⚡ Generate &amp; Calculate Payroll</>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
-      {showCreate && (
-        <form onSubmit={createRun} className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-sm flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Month</label>
-            <select
-              value={newMonth}
-              onChange={(e) => setNewMonth(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
-            >
-              {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Year</label>
-            <input
-              type="number"
-              value={newYear}
-              onChange={(e) => setNewYear(e.target.value)}
-              className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isCreating}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-          >
-            {isCreating ? 'Creating…' : 'Create Run'}
-          </button>
-        </form>
-      )}
-
+      {/* Payroll Run History List */}
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-gray-900">Payroll Runs</h2>
-          <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{meta.total} total</span>
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
+          <div>
+            <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Payroll Run History</h2>
+            <span className="text-[11px] text-gray-500 font-semibold">{meta.total} Total Monthly Runs on Record</span>
+          </div>
         </div>
+
         {isLoading ? (
-          <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
+          <div className="p-8 text-center text-xs text-gray-400">Loading payroll runs…</div>
         ) : runs.length === 0 ? (
-          <div className="p-8 text-center text-xs text-gray-500">No payroll runs yet.</div>
+          <div className="p-8 text-center text-xs text-gray-500">
+            No payroll runs yet. Select a month above and click <strong>Generate &amp; Calculate Payroll</strong>.
+          </div>
         ) : (
           <div className="divide-y divide-gray-100">
             {runs.map((r) => (
-              <div key={r.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-gray-900">{MONTH_NAMES[r.period_month - 1]} {r.period_year}</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">
-                    {r.item_count} payslip{r.item_count === 1 ? '' : 's'} · total net {money(r.total_net)}
+              <div key={r.id} className="p-4 hover:bg-gray-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-sm border border-blue-200">
+                    📅
+                  </div>
+                  <div>
+                    <div className="text-sm font-extrabold text-gray-900">
+                      {MONTH_NAMES[r.period_month - 1]} {r.period_year}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      <span className="font-semibold text-gray-700">{r.item_count} payslips calculated</span> · total net payable: <strong className="text-emerald-700">{money(r.total_net)}</strong>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+
+                <div className="flex items-center gap-2.5 flex-shrink-0">
                   <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border capitalize ${statusStyle[r.status] || ''}`}>
                     {r.status}
                   </span>
                   <button
                     onClick={() => setSelectedRunId(r.id)}
-                    className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-blue-200"
                   >
-                    Open
+                    Open Details &amp; Payslips →
                   </button>
                 </div>
               </div>
@@ -268,6 +298,7 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
+  const [itemSearch, setItemSearch] = useState('');
   const [payslipFor, setPayslipFor] = useState(null);
   const [payslip, setPayslip] = useState(null);
 
@@ -283,7 +314,7 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
   const loadItems = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, meta: m } = await apiFetch(`/salary/payroll-runs/${runId}/items?page=${page}&limit=25`, { withMeta: true });
+      const { data, meta: m } = await apiFetch(`/salary/payroll-runs/${runId}/items?page=${page}&limit=100`, { withMeta: true });
       setItems(Array.isArray(data) ? data : []);
       setMeta(m || { total: 0 });
     } catch (err) {
@@ -342,104 +373,177 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
     return <div className="p-8 text-center text-xs text-gray-400">Loading…</div>;
   }
 
+  const filteredItems = itemSearch
+    ? items.filter(
+        (it) =>
+          (it.full_name || '').toLowerCase().includes(itemSearch.toLowerCase()) ||
+          (it.employee_code || '').toLowerCase().includes(itemSearch.toLowerCase()) ||
+          (it.department_name || '').toLowerCase().includes(itemSearch.toLowerCase())
+      )
+    : items;
+
+  // Compute Run Summaries
+  const totalGross = items.reduce((sum, it) => sum + (Number(it.gross_pay) || 0), 0);
+  const totalLop = items.reduce((sum, it) => sum + (Number(it.lop_amount) || 0), 0);
+  const totalLateDeduction = items.reduce((sum, it) => sum + (Number(it.buffer_late_deduction) || 0), 0);
+  const totalFines = items.reduce((sum, it) => sum + (Number(it.fines_amount) || 0), 0);
+  const totalNet = items.reduce((sum, it) => sum + (Number(it.net_pay) || 0), 0);
+
   const totalPages = meta.pages || 1;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div>
-          <h2 className="text-base font-bold text-gray-900">{MONTH_NAMES[run.period_month - 1]} {run.period_year}</h2>
-          <p className="text-[11px] text-gray-500">Status: <span className="capitalize font-semibold">{run.status}</span></p>
+    <div className="space-y-5">
+      {/* Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="p-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 transition-colors cursor-pointer text-gray-700 shadow-xs"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-extrabold text-gray-900">
+                {MONTH_NAMES[run.period_month - 1]} {run.period_year} Payroll
+              </h2>
+              <span
+                className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border uppercase ${
+                  run.status === 'locked' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}
+              >
+                {run.status}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Calculated on biometric attendance, buffer pools, and base salary structures.
+            </p>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+
+        <div className="flex items-center gap-2.5">
           <button
             onClick={calculate}
             disabled={busy || run.status !== 'draft'}
-            className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            {busy ? 'Working…' : 'Calculate'}
+            {busy ? 'Recalculating…' : '⚡ Recalculate Payroll'}
           </button>
           <button
             onClick={lock}
             disabled={busy || run.status !== 'draft'}
-            className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+            className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            Lock &amp; Confirm
+            🔒 Lock &amp; Confirm Run
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+      {/* Summary KPI Cards Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Staff Calculated</span>
+          <span className="text-xl font-extrabold text-gray-900 mt-1 block">{items.length}</span>
+        </div>
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Gross Salary</span>
+          <span className="text-base font-extrabold text-blue-900 mt-1 block">{money(totalGross)}</span>
+        </div>
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+          <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">LOP Absences</span>
+          <span className="text-base font-extrabold text-orange-700 mt-1 block">-{money(totalLop)}</span>
+        </div>
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+          <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Late Deductions</span>
+          <span className="text-base font-extrabold text-amber-700 mt-1 block">-{money(totalLateDeduction)}</span>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl shadow-xs col-span-2 sm:col-span-1">
+          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Net Payable</span>
+          <span className="text-base font-extrabold text-emerald-900 mt-1 block">{money(totalNet)}</span>
+        </div>
+      </div>
+
+      {/* Main Payslips Table Card */}
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden space-y-0">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
+          <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+            Employee Payslips ({filteredItems.length} Records)
+          </h3>
+          <div>
+            <input
+              type="text"
+              placeholder="Search staff / code…"
+              value={itemSearch}
+              onChange={(e) => setItemSearch(e.target.value)}
+              className="px-2.5 py-1 border border-gray-200 rounded-lg text-xs bg-white font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
         {isLoading ? (
-          <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
-        ) : items.length === 0 ? (
-          <div className="p-8 text-center text-xs text-gray-500">
-            No payslips yet — click <strong>Calculate</strong> to run the salary engine for every active employee.
+          <div className="p-12 text-center text-xs text-gray-400">Loading payroll items…</div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-12 text-center text-xs text-gray-500 space-y-2">
+            <div>No payslips found matching your filters.</div>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[900px]">
+            <table className="w-full text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-2.5">Employee</th>
                   <th className="text-center px-3 py-2.5">Present</th>
-                  <th className="text-center px-3 py-2.5">LOP</th>
-                  <th className="text-center px-3 py-2.5">Gross</th>
+                  <th className="text-center px-3 py-2.5">LOP Days</th>
+                  <th className="text-center px-3 py-2.5">Gross Pay</th>
+                  <th className="text-center px-3 py-2.5">LOP Deduction</th>
+                  <th className="text-center px-3 py-2.5">Late Deduction</th>
                   <th className="text-center px-3 py-2.5">PF (Emp)</th>
                   <th className="text-center px-3 py-2.5">ESI (Emp)</th>
                   <th className="text-center px-3 py-2.5">Fines</th>
-                  <th className="text-center px-3 py-2.5">Net Pay</th>
-                  <th className="text-center px-3 py-2.5">Payslip</th>
+                  <th className="text-center px-3 py-2.5">Net Payable</th>
+                  <th className="text-center px-3 py-2.5">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {items.map((it) => (
-                  <tr key={it.id} className="hover:bg-gray-50/60">
+                {filteredItems.map((it) => (
+                  <tr key={it.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-4 py-2.5">
                       <div className="font-bold text-gray-900">{it.full_name}</div>
-                      <div className="text-[10px] text-gray-400">{it.employee_code} · {it.department_name || '—'}</div>
+                      <div className="text-[10px] text-gray-400 font-mono">{it.employee_code} · {it.department_name || '—'}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{it.days_present}</td>
-                    <td className={`px-3 py-2.5 text-center font-semibold ${Number(it.days_lop) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{it.days_lop}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{money(it.gross_pay)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-500">{money(it.pf_employee_amount)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-500">{money(it.esi_employee_amount)}</td>
-                    <td className={`px-3 py-2.5 text-center ${Number(it.fines_amount) > 0 ? 'text-rose-600 font-semibold' : 'text-gray-400'}`}>{money(it.fines_amount)}</td>
-                    <td className="px-3 py-2.5 text-center font-bold text-gray-900">{money(it.net_pay)}</td>
+                    <td className="px-3 py-2.5 text-center font-bold text-gray-800">{it.days_present}</td>
+                    <td className={`px-3 py-2.5 text-center font-semibold ${Number(it.days_lop) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                      {it.days_lop}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono font-semibold text-gray-900">{money(it.gross_pay)}</td>
+                    <td className={`px-3 py-2.5 text-center font-mono ${Number(it.lop_amount) > 0 ? 'text-orange-600 font-bold' : 'text-gray-400'}`}>
+                      {Number(it.lop_amount) > 0 ? `-${money(it.lop_amount)}` : '—'}
+                    </td>
+                    <td className={`px-3 py-2.5 text-center font-mono ${Number(it.buffer_late_deduction) > 0 ? 'text-amber-700 font-bold' : 'text-gray-400'}`}>
+                      {Number(it.buffer_late_deduction) > 0 ? `-${money(it.buffer_late_deduction)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-500">{money(it.pf_employee_amount)}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-gray-500">{money(it.esi_employee_amount)}</td>
+                    <td className={`px-3 py-2.5 text-center font-mono ${Number(it.fines_amount) > 0 ? 'text-rose-600 font-bold' : 'text-gray-400'}`}>
+                      {Number(it.fines_amount) > 0 ? `-${money(it.fines_amount)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono font-extrabold text-emerald-800 bg-emerald-50/40">
+                      {money(it.net_pay)}
+                    </td>
                     <td className="px-3 py-2.5 text-center">
-                      <button onClick={() => openPayslip(it.employee_id)} className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer">
-                        View
+                      <button
+                        onClick={() => openPayslip(it.employee_id)}
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer"
+                      >
+                        🧾 View Payslip
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {items.length > 0 && (
-          <div className="p-3 border-t border-gray-100 flex items-center justify-between">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="text-[11px] font-semibold text-gray-500">Page {page} of {totalPages}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer disabled:opacity-40"
-            >
-              Next
-            </button>
           </div>
         )}
       </div>
@@ -465,67 +569,161 @@ function PayslipView({ payslip, onBack }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h2 className="text-base font-bold text-gray-900">
-          Payslip — {item.full_name} — {MONTH_NAMES[run.period_month - 1]} {run.period_year}
-        </h2>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 max-w-xl print:shadow-none">
-        <div className="grid grid-cols-2 gap-y-1 gap-x-6 pb-4 border-b border-gray-100 text-xs">
-          <div><span className="text-gray-400">Employee Code</span><br /><span className="font-semibold text-gray-800">{item.employee_code}</span></div>
-          <div><span className="text-gray-400">Department</span><br /><span className="font-semibold text-gray-800">{item.department_name || '—'}</span></div>
-          <div><span className="text-gray-400">Role</span><br /><span className="font-semibold text-gray-800">{item.role_name || '—'}</span></div>
-          <div><span className="text-gray-400">Day Rate</span><br /><span className="font-semibold text-gray-800">{money(day_rate)}</span></div>
-        </div>
-
-        <div className="py-3 border-b border-gray-100">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Attendance</div>
-          <PayslipRow label="Days present" value={item.days_present} />
-          <PayslipRow label="Paid leave days" value={item.days_paid_leave} />
-          <PayslipRow label="LOP days" value={item.days_lop} />
-          <PayslipRow label="Shifts worked" value={item.shifts_worked} />
-        </div>
-
-        <div className="py-3 border-b border-gray-100">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Earnings</div>
-          <PayslipRow label="Monthly salary" value={money(item.base_salary_component)} />
-          <PayslipRow label="Night shift allowance" value={money(item.night_shift_component)} />
-          <PayslipRow label="Paid extra days" value={money(item.overtime_amount)} />
-          <PayslipRow label="Gross pay" value={money(item.gross_pay)} strong />
-        </div>
-
-        <div className="py-3 border-b border-gray-100">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Deductions</div>
-          <PayslipRow label="LOP" value={money(item.lop_amount)} />
-          <PayslipRow label="Late buffer excess" value={money(item.buffer_late_deduction)} />
-          <PayslipRow label="Fines" value={money(item.fines_amount)} />
-          <PayslipRow label="PF (employee)" value={money(item.pf_employee_amount)} />
-          <PayslipRow label="ESI (employee)" value={money(item.esi_employee_amount)} />
-        </div>
-
-        <div className="py-3 border-b border-gray-100">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employer Contribution (not deducted from pay)</div>
-          <PayslipRow label="PF (employer)" value={money(item.pf_employer_amount)} />
-          <PayslipRow label="ESI (employer)" value={money(item.esi_employer_amount)} />
-        </div>
-
-        <div className="pt-3 flex items-center justify-between">
-          <span className="text-sm font-extrabold text-gray-900">Net Pay</span>
-          <span className="text-lg font-extrabold text-emerald-700">{money(item.net_pay)}</span>
+      <div className="flex items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="p-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 transition-colors cursor-pointer text-gray-700 shadow-xs">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">
+              Salary Payslip — {item.full_name} ({item.employee_code})
+            </h2>
+            <p className="text-xs text-gray-500">
+              Period: {MONTH_NAMES[run.period_month - 1]} {run.period_year}
+            </p>
+          </div>
         </div>
 
         <button
           onClick={() => window.print()}
-          className="mt-4 w-full border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-semibold px-4 py-2 rounded-lg cursor-pointer transition-colors print:hidden"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
         >
-          Print Payslip
+          <span>🖨️ Print Official Payslip</span>
         </button>
+      </div>
+
+      {/* Printable Payslip Card */}
+      <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-8 max-w-2xl mx-auto print:border-none print:shadow-none print:p-2 text-gray-800">
+        
+        {/* Hospital Header */}
+        <div className="text-center pb-4 border-b-2 border-blue-900 space-y-1">
+          <h1 className="text-xl font-extrabold text-blue-950 uppercase tracking-wide">NEHA HOSPITAL</h1>
+          <p className="text-[11px] text-gray-600 leading-snug">
+            47, South Park Street (Kambar Veethi, Ganga Nagar, near Dr. Ravindran Hospital and opposite Palaniammal Girls Higher Secondary School),<br />
+            Kutchery Medu, Gobichettipalayam, Tamil Nadu - 638452 | 24 Hours Emergency Service
+          </p>
+          <div className="inline-block bg-blue-50 text-blue-900 font-extrabold text-xs px-4 py-1 rounded-full uppercase tracking-wider mt-1 border border-blue-200">
+            Salary Payslip for {MONTH_NAMES[run.period_month - 1]} {run.period_year}
+          </div>
+        </div>
+
+        {/* Employee Info Box */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2.5 gap-x-4 py-4 border-b border-gray-200 text-xs">
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Employee Name</span>
+            <div className="font-extrabold text-gray-900 text-sm">{item.full_name}</div>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Employee Code</span>
+            <div className="font-mono font-bold text-blue-800">{item.employee_code}</div>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Department</span>
+            <div className="font-semibold text-gray-800">{item.department_name || 'General'}</div>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Designation / Role</span>
+            <div className="font-semibold text-gray-800">{item.role_name || 'Staff'}</div>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Daily Day Rate</span>
+            <div className="font-mono font-bold text-gray-900">{money(day_rate)}</div>
+          </div>
+          <div>
+            <span className="text-[10px] text-gray-400 font-bold uppercase">Bank Account / UAN</span>
+            <div className="font-mono text-gray-700">{item.bank_account_no || item.uan_number || '—'}</div>
+          </div>
+        </div>
+
+        {/* Attendance Summary */}
+        <div className="py-3 border-b border-gray-200 bg-gray-50/60 px-3 rounded-xl my-3 text-xs">
+          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Monthly Attendance Record</div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="bg-white p-2 rounded-lg border border-gray-200">
+              <span className="text-[10px] text-gray-400 block">Days Present</span>
+              <span className="font-extrabold text-emerald-800 text-sm">{item.days_present}</span>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200">
+              <span className="text-[10px] text-gray-400 block">Paid Leaves</span>
+              <span className="font-bold text-blue-800 text-sm">{item.days_paid_leave}</span>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200">
+              <span className="text-[10px] text-gray-400 block">LOP Absences</span>
+              <span className={`font-bold text-sm ${Number(item.days_lop) > 0 ? 'text-orange-600' : 'text-gray-600'}`}>{item.days_lop}</span>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200">
+              <span className="text-[10px] text-gray-400 block">Shifts Worked</span>
+              <span className="font-bold text-gray-800 text-sm">{item.shifts_worked}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Breakdown: Earnings & Deductions Columns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 border-b border-gray-200 text-xs">
+          {/* Earnings */}
+          <div className="space-y-2 pr-2 sm:border-r border-gray-200">
+            <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Earnings (A)</div>
+            <PayslipRow label="Base Monthly Salary" value={money(item.base_salary_component)} />
+            <PayslipRow label="Night Shift Allowance" value={money(item.night_shift_component)} />
+            <PayslipRow label="Paid Extra Days Overtime" value={money(item.overtime_amount)} />
+            <div className="pt-2 border-t border-gray-200">
+              <PayslipRow label="Gross Earnings" value={money(item.gross_pay)} strong />
+            </div>
+          </div>
+
+          {/* Deductions */}
+          <div className="space-y-2 pl-0 sm:pl-2">
+            <div className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider">Deductions (B)</div>
+            <PayslipRow label="Loss of Pay (LOP)" value={money(item.lop_amount)} />
+            <PayslipRow label="Late Attendance Buffer" value={money(item.buffer_late_deduction)} />
+            <PayslipRow label="Disciplinary Fines" value={money(item.fines_amount)} />
+            <PayslipRow label="Employee PF (12%)" value={money(item.pf_employee_amount)} />
+            <PayslipRow label="Employee ESI (0.75%)" value={money(item.esi_employee_amount)} />
+            <div className="pt-2 border-t border-gray-200">
+              <PayslipRow
+                label="Total Deductions"
+                value={money(
+                  (Number(item.lop_amount) || 0) +
+                  (Number(item.buffer_late_deduction) || 0) +
+                  (Number(item.fines_amount) || 0) +
+                  (Number(item.pf_employee_amount) || 0) +
+                  (Number(item.esi_employee_amount) || 0)
+                )}
+                strong
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Employer Statutory Contributions */}
+        <div className="py-2.5 border-b border-gray-200 text-xs">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employer Contribution (Non-Deductible)</div>
+          <div className="grid grid-cols-2 gap-4">
+            <PayslipRow label="Employer PF (12%)" value={money(item.pf_employer_amount)} />
+            <PayslipRow label="Employer ESI (3.25%)" value={money(item.esi_employer_amount)} />
+          </div>
+        </div>
+
+        {/* Net Salary Payable */}
+        <div className="py-4 flex items-center justify-between bg-emerald-50/80 px-4 rounded-xl my-4 border border-emerald-200">
+          <div>
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Net Take-Home Pay (A - B)</span>
+            <span className="text-xs text-gray-600 font-medium">Disbursed to registered bank account</span>
+          </div>
+          <span className="text-xl font-extrabold text-emerald-900">{money(item.net_pay)}</span>
+        </div>
+
+        {/* Signatures */}
+        <div className="pt-8 grid grid-cols-2 text-center text-xs text-gray-500">
+          <div>
+            <div className="border-t border-gray-300 w-36 mx-auto pt-1 font-semibold text-gray-700">Employee Signature</div>
+          </div>
+          <div>
+            <div className="border-t border-gray-300 w-36 mx-auto pt-1 font-semibold text-gray-700">Authorized Signatory</div>
+          </div>
+        </div>
       </div>
     </div>
   );

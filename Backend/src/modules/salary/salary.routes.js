@@ -55,6 +55,7 @@ router.post('/night-shift-rates', ctrl.addNightShiftRate);
 router.get('/payroll-runs', ctrl.listRuns);
 router.get('/payroll-runs/:id', ctrl.getRun);
 router.post('/payroll-runs', ctrl.createRun);
+router.post('/payroll-runs/generate', ctrl.generatePayroll);
 router.post('/payroll-runs/:id/calculate', ctrl.calculateRun);
 router.post('/payroll-runs/:id/lock', ctrl.lockRun);
 router.get('/payroll-runs/:id/items', ctrl.listItems);

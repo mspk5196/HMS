@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import { isoDate } from '../../util/mappers';
 import AddMemberForm from './departmentrole/AddMemberForm';
+import BulkEmployeeImportModal, { downloadEmployeeExcelTemplate } from './BulkEmployeeImportModal';
 
 const PAGE_SIZE = 25;
 
@@ -75,6 +76,7 @@ export default function HREmployees() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({});
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -281,13 +283,32 @@ export default function HREmployees() {
           </p>
         </div>
 
-        <button
-          onClick={() => setViewMode('add')}
-          disabled={departments.length === 0}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 self-start sm:self-auto"
-        >
-          <span>+</span> Add Employee
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => downloadEmployeeExcelTemplate(departments)}
+            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Download blank Excel spreadsheet template"
+          >
+            <span>📥 Excel Template</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowBulkModal(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>📤 Bulk Upload Staff</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('add')}
+            disabled={departments.length === 0}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <span>+</span> Add Employee
+          </button>
+        </div>
       </div>
 
       {/* Split View Layout: Left Employee List, Right Employee Workspace */}
@@ -553,6 +574,16 @@ export default function HREmployees() {
           )}
         </div>
       </div>
+
+      <BulkEmployeeImportModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        departments={departments}
+        onSuccess={(msg) => {
+          flash(msg);
+          fetchEmployees();
+        }}
+      />
     </div>
   );
 }

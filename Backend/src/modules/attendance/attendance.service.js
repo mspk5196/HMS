@@ -365,11 +365,28 @@ const importPunches = async (rows) => {
 
   const { inserted } = await q.bulkInsertPunches(toInsert);
 
+  // Link orphan punches
+  await q.linkOrphanPunches();
+
+  // Automatically recalculate attendance summaries for all affected dates
+  const affectedDates = [...new Set(toInsert.map((r) => String(r.punch_time).slice(0, 10)).filter(Boolean))];
+  let recalculatedDays = 0;
+  for (const dt of affectedDates) {
+    try {
+      await processDay(dt);
+      recalculatedDays++;
+    } catch (e) {
+      console.warn(`Failed to auto-process attendance for date ${dt}:`, e.message);
+    }
+  }
+
   return {
     received: rows.length,
     inserted,
     duplicatesIgnored: rows.length - inserted,
     unmatchedCodes: [...unmatchedCodes],
+    affectedDates,
+    recalculatedDays,
   };
 };
 

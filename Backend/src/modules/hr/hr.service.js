@@ -129,6 +129,7 @@ const updateEmployeeSalary = async (employeeId, data, userId) => {
 
 module.exports = {
   createEmployee, updateEmployee,
+  bulkImportEmployees: q.bulkImportEmployees,
   createShift, updateShift, deleteShift,
   createDepartment, updateDepartment, deleteDepartment,
   createDesignation, createRole,

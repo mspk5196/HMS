@@ -12,6 +12,7 @@ const canViewRoster = requirePermissions(['hr_roster.view']);
 // Employees — NOTE: static routes MUST precede /employees/:id
 router.get('/employees/remapping-logs', canViewEmployees, ctrl.listRemappingLogs);
 router.get('/employees/salary-logs', canViewEmployees, ctrl.listSalaryLogs);
+router.post('/employees/bulk-import', gate('hr_employee.create', ctrl.bulkImportEmployees));
 // Doctor lookup — used by doctor pickers across appointment/admission booking;
 // deliberately ungated beyond login, same as the old open /employees list was.
 router.get('/employees/doctors', ctrl.listDoctors);

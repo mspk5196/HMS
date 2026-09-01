@@ -130,6 +130,39 @@ const calculateRun = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/salary/payroll-runs/generate
+ * Body: { period_month, period_year }
+ * Creates or retrieves draft run, calculates payroll, and returns the result.
+ */
+const generatePayroll = asyncHandler(async (req, res) => {
+  const month = Number(req.body.period_month ?? req.body.pay_month);
+  const year = Number(req.body.period_year ?? req.body.pay_year);
+  if (!month || !year) {
+    return res.status(400).json(fail('period_month and period_year are required'));
+  }
+
+  let run = await q.findPayrollRunByPeriod(month, year);
+  if (!run) {
+    const d = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const runId = await q.createPayrollRun({
+      period_month: month,
+      period_year: year,
+      salary_date_type: 'last_day_of_month',
+      salary_date: d,
+    });
+    run = await q.getPayrollRun(runId);
+  }
+
+  const calcResult = await svc.calculatePayrollForRun(run.id);
+  const items = await q.listPayrollItems(run.id);
+  return res.json(success({
+    run,
+    calcResult,
+    items,
+  }, `Payroll generated for ${month}/${year}: ${calcResult.calculated} payslips calculated.`));
+});
+
+/**
  * POST /api/salary/payroll-runs/:id/lock
  * HR confirms and locks the run. Irreversible: it also marks fines deducted.
  */
@@ -237,7 +270,7 @@ module.exports = {
   listStructures, createStructure, updateStructure, getEffectiveSalary, addRevision,
   getConfig, updateConfig,
   listNightShiftRates, addNightShiftRate,
-  listRuns, getRun, createRun, calculateRun, lockRun, getPayslip,
+  listRuns, getRun, createRun, calculateRun, generatePayroll, lockRun, getPayslip,
   listItems,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,

@@ -1,0 +1,96 @@
+services:
+  # ─── MySQL Database ──────────────────────────────────────────────────────────
+  nehahospital-mysql:
+    image: mysql:8.0
+    container_name: nehahospital-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-nehahospitals}
+      MYSQL_USER: ${MYSQL_USER:-neha_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-neha_password}
+    ports:
+      - "3312:3306"
+    volumes:
+      - nehahospital_mysql_data:/var/lib/mysql
+      - ./Sql/neha_hospital_schema-v6-after-biometric.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nehahospital-network
+
+  # ─── Backend API ─────────────────────────────────────────────────────────────
+  nehahospital-backend:
+    # build:
+    #   context: ./Backend
+    #   dockerfile: Dockerfile
+    image: pcdpbit/nehahospital-backend:${IMG_TAG}
+    container_name: nehahospital-backend
+    restart: unless-stopped
+    ports:
+      - "5006:5000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-5000}
+      DB_HOST: ${DB_HOST:-nehahospital-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-neha_user}
+      DB_PASS: ${DB_PASS:-neha_password}
+      DB_NAME: ${DB_NAME:-nehahospitals}
+      DB_SSL: ${DB_SSL:-false}
+      JWT_SECRET: ${JWT_SECRET:-4f59beb64dedad712f0ab2cfd455a1a98997bb6f167a605e1e474c1ddd6e2e361068033ff05bf075b2c9a3c798518b0c4035458ecd4637a65f21f89c9a65c76a}
+      JWT_REFRESH_TOKEN: ${JWT_REFRESH_TOKEN:-52382e23887684704eadaced2daef0862acaef97afb6cc3d98467254767538f32c4b5871a9724b83823677f0c79084f97d56b03e38499177127e0f7a543020bf}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      PROTECTED_ROUTES_ENABLED: ${PROTECTED_ROUTES_ENABLED:-true}
+      WEB_ORIGIN: ${WEB_ORIGIN:-https://neha.tylo.co.in,http://localhost:8086,http://localhost:5173}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-10000}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-900000}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-15}
+      ESSL_DEVICE_IP: ${ESSL_DEVICE_IP:-192.168.1.201}
+      ESSL_DEVICE_PORT: ${ESSL_DEVICE_PORT:-4370}
+      ESSL_DEVICE_COMM_KEY: ${ESSL_DEVICE_COMM_KEY:-0}
+      ESSL_DEVICE_NAME: ${ESSL_DEVICE_NAME:-eSSL Main Entrance}
+      ESSL_DEVICE_LOCATION: ${ESSL_DEVICE_LOCATION:-Main Entrance Reception}
+      ESSL_AUTO_SYNC_ENABLED: ${ESSL_AUTO_SYNC_ENABLED:-true}
+      ESSL_AUTO_SYNC_INTERVAL_MINS: ${ESSL_AUTO_SYNC_INTERVAL_MINS:-15}
+    depends_on:
+      nehahospital-mysql:
+        condition: service_healthy
+    networks:
+      - nehahospital-network
+
+  # ─── Frontend Web ────────────────────────────────────────────────────────────
+  nehahospital-frontend:
+    # build:
+    #   context: ./HospitalsWeb
+    #   dockerfile: Dockerfile
+    #   args:
+    #     VITE_API_URL: ${VITE_API_URL:-https://neha.tylo.co.in/api}
+    image: pcdpbit/nehahospital-frontend:${IMG_TAG}
+    container_name: nehahospital-frontend
+    restart: unless-stopped
+    ports:
+      - "8086:80"
+    depends_on:
+      - nehahospital-backend
+    networks:
+      - nehahospital-network
+
+# ─── Isolated Docker Network ─────────────────────────────────────────────────
+networks:
+  nehahospital-network:
+    name: nehahospital-network
+    driver: bridge
+
+# ─── Persistent Storage ──────────────────────────────────────────────────────
+volumes:
+  nehahospital_mysql_data:
+    name: nehahospital_mysql_data
