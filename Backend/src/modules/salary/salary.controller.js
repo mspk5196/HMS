@@ -4,6 +4,7 @@
  */
 
 const svc = require('./salary.service');
+const q = require('./salary.queries');
 const asyncHandler = require('../../middleware/asyncHandler');
 const { success, created, paginated, fail } = require('../../utils/response');
 
@@ -154,11 +155,12 @@ const generatePayroll = asyncHandler(async (req, res) => {
   }
 
   const calcResult = await svc.calculatePayrollForRun(run.id);
-  const items = await q.listPayrollItems(run.id);
+  const items = await svc.getPayrollItems(run.id, 1, 500);
   return res.json(success({
     run,
     calcResult,
-    items,
+    items: items.rows || [],
+    total: items.total || 0,
   }, `Payroll generated for ${month}/${year}: ${calcResult.calculated} payslips calculated.`));
 });
 

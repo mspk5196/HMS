@@ -317,11 +317,11 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
   const offset = (page - 1) * limit;
   const [rows] = await db.query(
     `SELECT pi.*, e.full_name, e.employee_code,
-            d.name AS department_name, des.name AS designation_name
+            d.name AS department_name, COALESCE(sr.name, '') AS designation_name
      FROM payroll_items pi
      JOIN employees e ON e.id = pi.employee_id
      LEFT JOIN departments d ON d.id = e.department_id
-     LEFT JOIN designations des ON des.id = e.designation_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      WHERE pi.payroll_run_id = ?
      ORDER BY e.full_name
      LIMIT ? OFFSET ?`,
@@ -570,7 +570,7 @@ module.exports = {
   getNightShiftRate, addNightShiftRate, listNightShiftRates,
   listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
   updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
-  getPayrollItems, upsertPayrollItem,
+  getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,
   listFineTypes, createFineType, updateFineType, getFineTypeByTriggerRule,
   listOvertimeEntries, createOvertimeEntry, countPaidExtraDays,

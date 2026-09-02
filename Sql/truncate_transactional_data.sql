@@ -1,10 +1,9 @@
 -- ==============================================================================
--- Neha Hospital Management System — Database Reset / Truncate Script
+-- Neha Hospital Management System — Complete Reset / Truncate Script
 -- ==============================================================================
 -- Purpose: Truncates all transactional, patient, clinical, pharmacy, attendance,
---          payroll, and activity logs while preserving essential master data,
---          configurations, RBAC permissions, and system setup required for
---          the application to run cleanly.
+--          payroll, activity logs, departments, staff roles, and shifts.
+--          Preserves RBAC core permissions, system configs, and Admin account.
 -- ==============================================================================
 
 SET NAMES utf8mb4;
@@ -25,6 +24,7 @@ TRUNCATE TABLE `appointments`;
 TRUNCATE TABLE `patients`;
 TRUNCATE TABLE `payment_receipt_items`;
 TRUNCATE TABLE `payment_receipts`;
+TRUNCATE TABLE `doctor_fee_rates`;
 
 -- Reset all hospital beds to available
 UPDATE `beds` SET `status` = 'available' WHERE `status` != 'available';
@@ -44,7 +44,7 @@ TRUNCATE TABLE `medicines`;
 TRUNCATE TABLE `pharmacy_suppliers`;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. HR, ATTENDANCE, LEAVE & PAYROLL ACTIVITY
+-- 3. HR, ATTENDANCE, LEAVE, PAYROLL, DEPARTMENTS & SHIFTS
 -- ─────────────────────────────────────────────────────────────────────────────
 TRUNCATE TABLE `attendance_raw_punches`;
 TRUNCATE TABLE `attendance_daily_summary`;
@@ -67,6 +67,14 @@ TRUNCATE TABLE `employee_salary_logs`;
 TRUNCATE TABLE `employee_role_remapping_logs`;
 TRUNCATE TABLE `employees`;
 
+-- Truncate Departments, Roles/Designations, Shifts & Policies
+TRUNCATE TABLE `week_off_policies`;
+TRUNCATE TABLE `role_leave_policies`;
+TRUNCATE TABLE `staff_roles`;
+TRUNCATE TABLE `designations`;
+TRUNCATE TABLE `departments`;
+TRUNCATE TABLE `shifts`;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. LOGS, WORKFLOWS & USER ACCOUNTS (PRESERVE ADMIN)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -81,14 +89,11 @@ UPDATE `users` SET `employee_id` = NULL WHERE `id` = 1;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ==============================================================================
--- Summary of Preserved Master Configuration Tables (NOT Truncated):
+-- Summary of Preserved Master Configuration Tables:
 --  - modules, actions, permissions, module_actions, approval_workflows
 --  - roles, role_permissions, system_config
---  - departments, staff_roles, designations, shifts
 --  - leave_types, fine_types, payroll_config, salary_structures
---  - role_leave_policies, week_off_policies
 --  - buildings, floors, wards, room_types, rooms, beds
---  - medicine_categories, medicine_form_factors
---  - biometric_devices, doctor_fee_rates
+--  - medicine_categories, medicine_form_factors, biometric_devices
 --  - users (Administrator id=1 preserved)
 -- ==============================================================================
