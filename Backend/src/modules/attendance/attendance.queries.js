@@ -126,17 +126,18 @@ const listRawPunches = async ({ employeeId, employeeCode, departmentId, fromDate
             e.employee_code AS registered_employee_code,
             d.name AS department_name,
             sr.name AS designation_name,
-            s.name AS shift_name,
-            s.start_time AS shift_start_time,
-            s.end_time AS shift_end_time,
-            s.biometric_in_start, s.biometric_in_end,
-            s.biometric_out_start, s.biometric_out_end
+            COALESCE(s.name, sr.shift_name, 'Day Shift') AS shift_name,
+            COALESCE(s.start_time, sr.shift_start_time, '09:00:00') AS shift_start_time,
+            COALESCE(s.end_time, sr.shift_end_time, '17:00:00') AS shift_end_time,
+            COALESCE(s.biometric_in_start, sr.biometric_in_start) AS biometric_in_start,
+            COALESCE(s.biometric_in_end, sr.biometric_in_end) AS biometric_in_end,
+            COALESCE(s.biometric_out_start, sr.biometric_out_start) AS biometric_out_start,
+            COALESCE(s.biometric_out_end, sr.biometric_out_end) AS biometric_out_end
      FROM attendance_raw_punches arp
-     LEFT JOIN employees e ON e.id = arp.employee_id
+     LEFT JOIN employees e ON (e.id = arp.employee_id OR e.employee_code = arp.employee_code)
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-     LEFT JOIN employee_shifts es ON (es.employee_id = e.id AND es.is_active = 1)
-     LEFT JOIN shifts s ON s.id = es.shift_id
+     LEFT JOIN shifts s ON s.id = sr.default_shift_id
      ${whereClause}
      ORDER BY arp.punch_time DESC
      LIMIT ? OFFSET ?`,
@@ -146,7 +147,7 @@ const listRawPunches = async ({ employeeId, employeeCode, departmentId, fromDate
   const [[{ total }]] = await db.query(
     `SELECT COUNT(*) AS total
      FROM attendance_raw_punches arp
-     LEFT JOIN employees e ON e.id = arp.employee_id
+     LEFT JOIN employees e ON (e.id = arp.employee_id OR e.employee_code = arp.employee_code)
      ${whereClause}`,
     params
   );
@@ -159,14 +160,18 @@ const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
   // 1. Employee Info & Assigned Shift
   const [empRows] = await db.query(
     `SELECT e.*, d.name AS department_name, sr.name AS designation_name,
-            s.name AS shift_name, s.start_time AS shift_start, s.end_time AS shift_end,
-            s.biometric_in_start, s.biometric_in_end, s.biometric_out_start, s.biometric_out_end,
-            s.grace_period_minutes
+            COALESCE(s.name, sr.shift_name, 'Day Shift') AS shift_name,
+            COALESCE(s.start_time, sr.shift_start_time, '09:00:00') AS shift_start,
+            COALESCE(s.end_time, sr.shift_end_time, '17:00:00') AS shift_end,
+            COALESCE(s.biometric_in_start, sr.biometric_in_start) AS biometric_in_start,
+            COALESCE(s.biometric_in_end, sr.biometric_in_end) AS biometric_in_end,
+            COALESCE(s.biometric_out_start, sr.biometric_out_start) AS biometric_out_start,
+            COALESCE(s.biometric_out_end, sr.biometric_out_end) AS biometric_out_end,
+            COALESCE(s.grace_period_minutes, sr.grace_period_minutes, 10) AS grace_period_minutes
      FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-     LEFT JOIN employee_shifts es ON (es.employee_id = e.id AND es.is_active = 1)
-     LEFT JOIN shifts s ON s.id = es.shift_id
+     LEFT JOIN shifts s ON s.id = sr.default_shift_id
      WHERE e.id = ?`,
     [employeeId]
   );

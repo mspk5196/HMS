@@ -10,18 +10,33 @@
  */
 
 const MODULES = [
-  { code: 'patient', name: 'Patients', group: 'Patients & Clinical', order: 1 },
-  { code: 'appointment', name: 'Appointments', group: 'Patients & Clinical', order: 2 },
-  { code: 'consultation', name: 'Consultations', group: 'Patients & Clinical', order: 3 },
-  { code: 'admission', name: 'Admissions', group: 'Patients & Clinical', order: 4 },
-  { code: 'discharge', name: 'Discharge & Billing', group: 'Patients & Clinical', order: 5 },
-  { code: 'facility', name: 'Beds & Rooms Setup', group: 'Patients & Clinical', order: 6 },
-  { code: 'payment', name: 'Payments', group: 'Financial', order: 7 },
-  { code: 'hr_employee', name: 'Employees', group: 'HR & Staff', order: 8 },
-  { code: 'hr_department', name: 'Departments & Roles', group: 'HR & Staff', order: 9 },
-  { code: 'hr_shift', name: 'Shifts', group: 'HR & Staff', order: 10 },
-  { code: 'hr_roster', name: 'Shift Roster', group: 'HR & Staff', order: 11 },
-  { code: 'leave', name: 'Leave Management', group: 'HR & Staff', order: 12 },
+  // ─── Staff & HR ───
+  { code: 'hr_employee', name: 'Employees', group: 'Staff & HR', order: 1 },
+  { code: 'hr_department', name: 'Departments & Roles', group: 'Staff & HR', order: 2 },
+  { code: 'hr_shift', name: 'Shifts', group: 'Staff & HR', order: 3 },
+  { code: 'hr_roster', name: 'Shift Roster', group: 'Staff & HR', order: 4 },
+  { code: 'attendance', name: 'Attendance', group: 'Staff & HR', order: 5 },
+  { code: 'biometric', name: 'Biometric Logs', group: 'Staff & HR', order: 6 },
+  { code: 'leave', name: 'Leave Management', group: 'Staff & HR', order: 7 },
+  { code: 'fine', name: 'Fine Engine', group: 'Staff & HR', order: 8 },
+  { code: 'payroll', name: 'Payroll', group: 'Staff & HR', order: 9 },
+
+  // ─── Patients & Clinical ───
+  { code: 'patient', name: 'Patients', group: 'Patients & Clinical', order: 10 },
+  { code: 'appointment', name: 'Appointments', group: 'Patients & Clinical', order: 11 },
+  { code: 'consultation', name: 'Consultations & Rx', group: 'Patients & Clinical', order: 12 },
+  { code: 'admission', name: 'Admissions & Beds', group: 'Patients & Clinical', order: 13 },
+  { code: 'discharge', name: 'Discharge & Billing', group: 'Patients & Clinical', order: 14 },
+  { code: 'facility', name: 'Beds & Rooms Setup', group: 'Patients & Clinical', order: 15 },
+
+  // ─── Financial ───
+  { code: 'payment', name: 'Payments & Fee Rates', group: 'Financial', order: 16 },
+
+  // ─── Pharmacy ───
+  { code: 'pharmacy', name: 'Pharmacy (Stock & Dispense)', group: 'Pharmacy', order: 17 },
+
+  // ─── Administration ───
+  { code: 'users', name: 'Users & Authentication', group: 'Administration', order: 18 },
 ];
 
 // action code -> { name, special (bool) }
@@ -33,14 +48,55 @@ const STANDARD_ACTIONS = ['view', 'create', 'edit', 'delete'];
  * Special entries: { code, name, approvable } — code must be unique within the module.
  */
 const MODULE_ACTIONS = {
-  patient: ['view', 'create', 'edit'],
-  appointment: [
+  hr_employee: [
+    'view', 'create', 'edit', 'delete',
+    { code: 'remap', name: 'Remap Employee', approvable: true },
+    { code: 'set_salary', name: 'Set Salary', approvable: true },
+    { code: 'bulk_import', name: 'Bulk Import Staff', approvable: true },
+  ],
+  hr_department: ['view', 'create', 'edit', 'delete'],
+  hr_shift: ['view', 'create', 'edit', 'delete'],
+  hr_roster: [
+    'view',
+    { code: 'save_day', name: 'Save Roster Day', approvable: false },
+    { code: 'bulk_save', name: 'Bulk Save Roster', approvable: true },
+    { code: 'swap_shift', name: 'Swap Shift', approvable: false },
+    { code: 'set_week_off', name: 'Set Week Off', approvable: false },
+  ],
+  attendance: [
     'view', 'create', 'edit',
+    { code: 'recalculate', name: 'Recalculate Attendance', approvable: false },
+    { code: 'import_punches', name: 'Import Attendance Punches', approvable: true },
+  ],
+  biometric: [
+    'view', 'create', 'edit', 'delete',
+    { code: 'sync_device', name: 'Sync Punches from Device', approvable: false },
+  ],
+  leave: [
+    'view', 'create', 'edit', 'delete',
+    { code: 'set_balance', name: 'Set Leave Balance', approvable: true },
+    { code: 'review_reporting', name: 'Review — Reporting Manager', approvable: false },
+    { code: 'review_hr', name: 'Review — HR', approvable: false },
+    { code: 'record_absence', name: 'Record Unexplained Absence', approvable: false },
+    { code: 'create_holiday', name: 'Create Holiday', approvable: true },
+  ],
+  fine: [
+    'view', 'create', 'edit', 'delete',
+    { code: 'waive_fine', name: 'Waive Fine', approvable: true },
+  ],
+  payroll: [
+    'view', 'create', 'edit',
+    { code: 'generate_payroll', name: 'Generate Monthly Payroll', approvable: true },
+    { code: 'approve_payroll', name: 'Approve Payroll Run', approvable: true },
+  ],
+  patient: ['view', 'create', 'edit', 'delete'],
+  appointment: [
+    'view', 'create', 'edit', 'delete',
     { code: 'close_visit', name: 'Close Visit', approvable: true },
   ],
-  consultation: ['view', 'create'],
+  consultation: ['view', 'create', 'edit'],
   admission: [
-    'view', 'create',
+    'view', 'create', 'edit',
     { code: 'assign_bed', name: 'Assign Bed', approvable: true },
     { code: 'release_bed', name: 'Release Bed', approvable: true },
     { code: 'add_note', name: 'Add Daily Note', approvable: false },
@@ -72,27 +128,15 @@ const MODULE_ACTIONS = {
     { code: 'collect_opd', name: 'Collect OPD Payment', approvable: true },
     { code: 'collect_ipd', name: 'Collect IPD Payment', approvable: true },
   ],
-  hr_employee: [
-    'view', 'create', 'edit',
-    { code: 'remap', name: 'Remap Employee', approvable: true },
-    { code: 'set_salary', name: 'Set Salary', approvable: true },
-  ],
-  hr_department: ['view', 'create', 'edit', 'delete'],
-  hr_shift: ['view', 'create', 'edit', 'delete'],
-  hr_roster: [
-    'view',
-    { code: 'save_day', name: 'Save Roster Day', approvable: false },
-    { code: 'bulk_save', name: 'Bulk Save Roster', approvable: true },
-    { code: 'swap_shift', name: 'Swap Shift', approvable: false },
-    { code: 'set_week_off', name: 'Set Week Off', approvable: false },
-  ],
-  leave: [
+  pharmacy: [
     'view', 'create', 'edit', 'delete',
-    { code: 'set_balance', name: 'Set Leave Balance', approvable: true },
-    { code: 'review_reporting', name: 'Review — Reporting Manager', approvable: false },
-    { code: 'review_hr', name: 'Review — HR', approvable: false },
-    { code: 'record_absence', name: 'Record Unexplained Absence', approvable: false },
-    { code: 'create_holiday', name: 'Create Holiday', approvable: true },
+    { code: 'dispense_medicine', name: 'Dispense Medicine', approvable: false },
+    { code: 'create_purchase_order', name: 'Create Purchase Order', approvable: true },
+    { code: 'receive_goods_grn', name: 'Receive GRN Goods', approvable: true },
+  ],
+  users: [
+    'view', 'create', 'edit', 'delete',
+    { code: 'reset_password', name: 'Reset User Password', approvable: true },
   ],
 };
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { canViewTab } from '../util/permissions';
 
 export default function Navbar({ activeTab, setActiveTab, onLogout, user }) {
   // Navigation structure based on system modules
@@ -279,6 +280,14 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user }) {
     }
   ];
 
+  // Filter navigation items and sections based on role permissions
+  const filteredSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => canViewTab(user, item.id)),
+    }))
+    .filter((section) => section.items.length > 0);
+
   return (
     <aside className="w-56 bg-[#1b3b82] text-white min-h-screen flex flex-col flex-shrink-0 shadow-lg select-none">
       {/* Brand Header */}
@@ -298,7 +307,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user }) {
 
       {/* Navigation Sections */}
       <div className="flex-1 overflow-y-auto py-3 px-3 space-y-5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {navSections.map((section, idx) => (
+        {filteredSections.map((section, idx) => (
           <div key={idx}>
             <div className="text-[10px] font-bold text-blue-200/60 uppercase tracking-wider px-3 mb-1.5">
               {section.title}

@@ -1,5 +1,5 @@
 const db = require('../../config/db');
-const { MODULES } = require('./actionCatalog');
+const { MODULES, buildCatalog } = require('./actionCatalog');
 
 const groupByModuleCode = Object.fromEntries(MODULES.map((m) => [m.code, m.group]));
 
@@ -7,7 +7,82 @@ const groupByModuleCode = Object.fromEntries(MODULES.map((m) => [m.code, m.group
    PERMISSION CATALOG (modules × actions)
 ───────────────────────────────────────────── */
 
+let catalogSynced = false;
+
+const syncCatalogToDb = async () => {
+  try {
+    const catalog = buildCatalog();
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 1. Sync modules
+      for (const m of MODULES) {
+        await conn.execute(
+          `INSERT INTO modules (code, name, display_order)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), display_order = VALUES(display_order)`,
+          [m.code, m.name, m.order]
+        );
+      }
+
+      const [modRows] = await conn.execute(`SELECT id, code FROM modules`);
+      const modIdByCode = Object.fromEntries(modRows.map((r) => [r.code, r.id]));
+
+      // 2. Sync standard & special actions
+      for (const item of catalog) {
+        await conn.execute(
+          `INSERT INTO actions (code, name, is_special)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), is_special = VALUES(is_special)`,
+          [item.action, item.label, item.isSpecial ? 1 : 0]
+        );
+      }
+
+      const [actRows] = await conn.execute(`SELECT id, code FROM actions`);
+      const actIdByCode = Object.fromEntries(actRows.map((r) => [r.code, r.id]));
+
+      // 3. Sync permissions
+      for (const item of catalog) {
+        const moduleId = modIdByCode[item.module];
+        const actionId = actIdByCode[item.action];
+        if (!moduleId || !actionId) continue;
+
+        const description = `${item.label} — ${item.module}`;
+        await conn.execute(
+          `INSERT INTO permissions (module_id, action_id, code, description)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE description = VALUES(description), module_id = VALUES(module_id), action_id = VALUES(action_id)`,
+          [moduleId, actionId, item.code, description]
+        );
+
+        if (item.approvable) {
+          await conn.execute(
+            `INSERT INTO approval_workflows (permission_code, enabled, level1_type, level2_enabled, level2_type)
+             VALUES (?, 0, 'role', 0, 'role')
+             ON DUPLICATE KEY UPDATE permission_code = permission_code`,
+            [item.code]
+          );
+        }
+      }
+
+      await conn.commit();
+      catalogSynced = true;
+    } catch (e) {
+      await conn.rollback();
+      console.error('RBAC syncCatalogToDb transaction error:', e);
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('RBAC catalog sync failed:', err);
+  }
+};
+
 const getPermissionCatalog = async () => {
+  if (!catalogSynced) {
+    await syncCatalogToDb();
+  }
   const [modules] = await db.execute(`SELECT id, code, name, display_order FROM modules ORDER BY display_order`);
   const [perms] = await db.execute(
     `SELECT p.id, p.code, p.description, p.module_id, a.code AS action_code, a.name AS action_name, a.is_special
