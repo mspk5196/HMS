@@ -3,6 +3,7 @@ import { apiFetch } from '../../../util/api';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
 import HospitalReceipt from '../../../components/HospitalReceipt';
+import PageHeader from '../../../components/PageHeader';
 
 export default function BillHistory() {
   const [bills, setBills] = useState([]);
@@ -75,12 +76,11 @@ export default function BillHistory() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Bill History</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Every pharmacy bill generated for a patient, with payment status and receipts.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Bill History"
+        subtitle="Every pharmacy bill generated for a patient, with payment status and receipts."
+      />
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 

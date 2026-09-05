@@ -268,14 +268,142 @@ const createOvertime = asyncHandler(async (req, res) => {
   );
 });
 
-/* ─── PAYROLL EXCEL EXPORT ─── */
+/* ─── PAYROLL CALCULATION SUMMARY & EXCEL EXPORT ─── */
 
 const XLSX = require('xlsx');
 
 /**
+ * GET /api/salary/payroll-runs/:id/calculation-summary
+ * Returns comprehensive breakdown and EPFO/ESI challan summary for the run.
+ */
+const getCalculationSummary = asyncHandler(async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = await svc.getPayrollRun(runId);
+  if (!run) return res.status(404).json(fail('Payroll run not found'));
+
+  const cfg = await svc.getPayrollConfig();
+  const { rows: items } = await q.getPayrollItems(runId, 1, 10000);
+
+  let totalStaff = items.length;
+  let totalFixedSalary = 0;
+  let totalEarnedBasic = 0;
+  let totalEarnedHra = 0;
+  let totalGross = 0;
+  let totalEarnedGross = 0;
+  let totalLopAmt = 0;
+  let totalFines = 0;
+  let totalNet = 0;
+
+  let pfEnrolledCount = 0;
+  let totalPfWages = 0;
+  let totalPfEmployee = 0;
+  let totalPfEmployerEps = 0;
+  let totalPfEmployerEpf = 0;
+  let totalPfEmployer = 0;
+
+  let esiCoveredCount = 0;
+  let totalEsiWages = 0;
+  let totalEsiEmployee = 0;
+  let totalEsiEmployer = 0;
+
+  for (const it of items) {
+    const fixed = Number(it.base_salary_component || 0);
+    const earnedBasic = Number(it.earned_basic || 0);
+    const earnedHra = Number(it.earned_hra || 0);
+    const gross = Number(it.gross_pay || 0);
+    const lop = Number(it.lop_amount || 0);
+    const earnedGross = Math.max(0, gross - lop);
+    const fines = Number(it.fines_amount || 0);
+    const net = Number(it.net_pay || 0);
+
+    const pfWage = Number(it.pf_wage || 0);
+    const pfEmp = Number(it.pf_employee_amount || 0);
+    const pfEps = Number(it.pf_employer_eps_amount || 0);
+    const pfEpf = Number(it.pf_employer_epf_amount || 0);
+    const pfEmplr = Number(it.pf_employer_amount || (pfEps + pfEpf));
+
+    const esiWage = Number(it.esi_wage || 0);
+    const esiEmp = Number(it.esi_employee_amount || 0);
+    const esiEmplr = Number(it.esi_employer_amount || 0);
+
+    totalFixedSalary += fixed;
+    totalEarnedBasic += earnedBasic;
+    totalEarnedHra += earnedHra;
+    totalGross += gross;
+    totalEarnedGross += earnedGross;
+    totalLopAmt += lop;
+    totalFines += fines;
+    totalNet += net;
+
+    if (pfWage > 0 || pfEmp > 0) {
+      pfEnrolledCount++;
+      totalPfWages += pfWage;
+      totalPfEmployee += pfEmp;
+      totalPfEmployerEps += pfEps;
+      totalPfEmployerEpf += pfEpf;
+      totalPfEmployer += pfEmplr;
+    }
+
+    if (esiWage > 0 || esiEmp > 0) {
+      esiCoveredCount++;
+      totalEsiWages += esiWage;
+      totalEsiEmployee += esiEmp;
+      totalEsiEmployer += esiEmplr;
+    }
+  }
+
+  // EPFO statutory challan calculation
+  const ac01 = Math.round(totalPfEmployerEpf + totalPfEmployee); // EPF Share (Employer 3.67% + Employee 12%)
+  const ac02 = Math.round(totalPfWages * 0.005); // Admin charges 0.5%
+  const ac10 = Math.round(totalPfEmployerEps); // EPS share (8.33%)
+  const ac21 = Math.round(totalPfWages * 0.005); // EDLI charges 0.5%
+  const totalEpfoChallan = ac01 + ac02 + ac10 + ac21;
+
+  const totalEsiChallan = totalEsiEmployee + totalEsiEmployer;
+
+  return res.json(success({
+    run,
+    config: cfg,
+    items,
+    summary: {
+      totalStaff,
+      totalFixedSalary,
+      totalEarnedBasic,
+      totalEarnedHra,
+      totalGross,
+      totalEarnedGross,
+      totalLopAmt,
+      totalFines,
+      totalNet,
+      pf: {
+        enrolledCount: pfEnrolledCount,
+        totalPfWages,
+        totalPfEmployee,
+        totalPfEmployerEps,
+        totalPfEmployerEpf,
+        totalPfEmployer,
+        ac01,
+        ac02,
+        ac10,
+        ac21,
+        totalEpfoChallan,
+      },
+      esi: {
+        coveredCount: esiCoveredCount,
+        totalEsiWages,
+        totalEsiEmployee,
+        totalEsiEmployer,
+        totalEsiChallan,
+      },
+    },
+  }));
+});
+
+/**
  * GET /api/salary/payroll-runs/:id/export
- * Streams a .xlsx file with all employee payslip lines for the run.
- * Overtime compensation is intentionally excluded per business requirement.
+ * Streams a multi-sheet .xlsx file:
+ *  Sheet 1: SALARY STATEMENT (matching 06 STAFF ATTENDANCE  JUNE-2026.xlsx)
+ *  Sheet 2: EPF & ESI CALCULATION (matching EPF & ESI CALCULATION.xlsx)
  */
 const exportPayrollRun = asyncHandler(async (req, res) => {
   const runId = Number(req.params.id);
@@ -286,45 +414,164 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
 
   const MONTH_NAMES = ['January','February','March','April','May','June',
                        'July','August','September','October','November','December'];
-  const periodLabel = `${MONTH_NAMES[(run.period_month || 1) - 1]} ${run.period_year}`;
+  const monthName = MONTH_NAMES[(run.period_month || 1) - 1];
+  const periodLabel = `${monthName} ${run.period_year}`;
+  const daysInMo = svc.daysInMonth(run.period_month, run.period_year);
 
-  const sheetData = [
+  // ───────────────────────────────────────────────
+  // Sheet 1: SALARY STATEMENT
+  // ───────────────────────────────────────────────
+  const salaryRows = [
+    [`SALARY STATEMENT FOR THE MONTH OF ${periodLabel.toUpperCase()}`],
+    [],
     [
-      'Emp Code', 'Name', 'Department', 'Role',
-      'Days Present', 'Days Leave (Paid)', 'Days LOP', 'Shifts Worked',
-      'Base Salary (₹)', 'Night Shift Extra (₹)', 'Gross Pay (₹)',
-      'LOP Deduction (₹)', 'Late/Buffer Deduction (₹)',
-      'EPF Employee (₹)', 'ESI Employee (₹)', 'Fines Deducted (₹)',
-      'Net Pay (₹)',
-    ],
-    ...rows.map((r) => [
-      r.employee_code,
-      r.full_name,
-      r.department_name || '',
-      r.designation_name || '',
-      Number(r.days_present ?? 0),
-      Number(r.days_paid_leave ?? 0),
-      Number(r.days_lop ?? 0),
-      Number(r.shifts_worked ?? 0),
-      Number(r.base_salary_component ?? 0),
-      Number(r.night_shift_component ?? 0),
-      Number(r.gross_pay ?? 0),
-      Number(r.lop_amount ?? 0),
-      Number(r.buffer_late_deduction ?? 0),
-      Number(r.pf_employee_amount ?? 0),
-      Number(r.esi_employee_amount ?? 0),
-      Number(r.fines_amount ?? 0),
-      Number(r.net_pay ?? 0),
-    ]),
+      'S.No', 'E.ID', 'PF UAN No.', 'E.S.I. No.', 'NAME OF THE STAFF', 'DEPT',
+      'BANK A/c No.', 'IFSC Code', 'BASIC+DA (70%)', 'HRA (30%)', 'TOTAL FIXED SALARY',
+      'MONTH DAYS', 'WKD DAYS', 'LOP DAYS', 'LOP AMT',
+      'EARNED BASIC', 'EARNED HRA', 'EARNED SALARY', 'OT DAYS', 'OT AMT',
+      'GROSS SALARY', 'ADV / FINES', 'SALARY FOR PF', 'SALARY FOR ESI',
+      'PF DED (12%)', 'ESI DED (0.75%)', 'TTL DED', 'NET SALARY'
+    ]
   ];
 
+  rows.forEach((r, idx) => {
+    const fixed = Number(r.base_salary_component || 0);
+    const fixedBasic = Math.round(fixed * 0.7);
+    const fixedHra = fixed - fixedBasic;
+    const earnedBasic = Number(r.earned_basic || 0);
+    const earnedHra = Number(r.earned_hra || 0);
+    const earnedSalary = earnedBasic + earnedHra;
+    const wkdDays = Number(r.days_present || 0);
+    const lopDays = Number(r.days_lop || 0);
+    const lopAmt = Number(r.lop_amount || 0);
+    const otAmt = Number(r.overtime_amount || 0);
+    const earnedGross = Math.max(0, Number(r.gross_pay || 0) - lopAmt);
+    const fines = Number(r.fines_amount || 0);
+    const pfWage = Number(r.pf_wage || 0);
+    const esiWage = Number(r.esi_wage || 0);
+    const pfDed = Number(r.pf_employee_amount || 0);
+    const esiDed = Number(r.esi_employee_amount || 0);
+    const ttlDed = pfDed + esiDed + fines;
+    const netSalary = Number(r.net_pay || 0);
+
+    salaryRows.push([
+      idx + 1,
+      r.employee_code || '',
+      r.uan_number || '',
+      r.esi_number || (fixed > 21000 ? 'OUT OF COVER' : ''),
+      r.full_name || '',
+      r.department_name || '',
+      r.bank_account_no || '',
+      r.bank_ifsc || '',
+      fixedBasic,
+      fixedHra,
+      fixed,
+      daysInMo,
+      wkdDays,
+      lopDays,
+      lopAmt,
+      earnedBasic,
+      earnedHra,
+      earnedSalary,
+      0,
+      otAmt,
+      earnedGross,
+      fines,
+      pfWage,
+      esiWage,
+      pfDed,
+      esiDed,
+      ttlDed,
+      netSalary
+    ]);
+  });
+
+  // ───────────────────────────────────────────────
+  // Sheet 2: EPF & ESI CALCULATION
+  // ───────────────────────────────────────────────
+  const calcRows = [
+    [`ESI CEILING LIMIT - 21000`, ``, `${periodLabel.toUpperCase()}`, `PF CEILING LIMIT - 15000`],
+    [
+      'S.No', 'NAME', 'GROSS 100%', 'EMPLOYER 3.25%', 'EMPLOYEE 0.75%', 'TOTAL ESI 4.5%',
+      '', 'NAME', 'GROSS 70%', 'EMPLOYEE 12% EPF', 'EMPLOYER 8.33% EPS', 'EMPLOYER 3.67% EPF', 'TOTAL EMPLOYER 12%'
+    ]
+  ];
+
+  let totalEsiGross = 0;
+  let totalEsiEmplr = 0;
+  let totalEsiEmp = 0;
+  let totalPfGross = 0;
+  let totalPfEmp = 0;
+  let totalPfEps = 0;
+  let totalPfEpf = 0;
+
+  rows.forEach((r, idx) => {
+    const esiWage = Number(r.esi_wage || 0);
+    const esiEmp = Number(r.esi_employee_amount || 0);
+    const esiEmplr = Number(r.esi_employer_amount || 0);
+    const esiTotal = esiEmp + esiEmplr;
+
+    const pfWage = Number(r.pf_wage || 0);
+    const pfEmp = Number(r.pf_employee_amount || 0);
+    const pfEps = Number(r.pf_employer_eps_amount || 0);
+    const pfEpf = Number(r.pf_employer_epf_amount || 0);
+    const pfEmplrTotal = pfEps + pfEpf;
+
+    totalEsiGross += esiWage;
+    totalEsiEmplr += esiEmplr;
+    totalEsiEmp += esiEmp;
+    totalPfGross += pfWage;
+    totalPfEmp += pfEmp;
+    totalPfEps += pfEps;
+    totalPfEpf += pfEpf;
+
+    calcRows.push([
+      idx + 1,
+      r.full_name || '',
+      esiWage,
+      esiEmplr,
+      esiEmp,
+      esiTotal,
+      '',
+      r.full_name || '',
+      pfWage,
+      pfEmp,
+      pfEps,
+      pfEpf,
+      pfEmplrTotal
+    ]);
+  });
+
+  // Totals
+  calcRows.push([]);
+  calcRows.push([
+    'TOTAL', '', totalEsiGross, totalEsiEmplr, totalEsiEmp, totalEsiEmplr + totalEsiEmp,
+    '', 'TOTAL', totalPfGross, totalPfEmp, totalPfEps, totalPfEpf, totalPfEps + totalPfEpf
+  ]);
+  calcRows.push([]);
+  calcRows.push(['', '', '', '', '', '', '', 'EPFO CHALLAN SUMMARY', 'AMOUNT (₹)']);
+  calcRows.push(['', '', '', '', '', '', '', 'A/C 01 (Employer EPF 3.67% + Employee 12%)', totalPfEpf + totalPfEmp]);
+  calcRows.push(['', '', '', '', '', '', '', 'A/C 02 (Administration Charges 0.5%)', Math.round(totalPfGross * 0.005)]);
+  calcRows.push(['', '', '', '', '', '', '', 'A/C 10 (Employer EPS Pension 8.33%)', totalPfEps]);
+  calcRows.push(['', '', '', '', '', '', '', 'A/C 21 (EDLI Insurance 0.5%)', Math.round(totalPfGross * 0.005)]);
+  calcRows.push(['', '', '', '', '', '', '', 'GRAND TOTAL EPFO CHALLAN', (totalPfEpf + totalPfEmp) + Math.round(totalPfGross * 0.005) + totalPfEps + Math.round(totalPfGross * 0.005)]);
+  calcRows.push(['', '', '', '', '', '', '', 'TOTAL ESI CHALLAN (Employee 0.75% + Employer 3.25%)', totalEsiEmp + totalEsiEmplr]);
+
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  const colWidths = sheetData[0].map((_, ci) =>
-    Math.max(...sheetData.map((row) => String(row[ci] ?? '').length)) + 3
+
+  const wsSalary = XLSX.utils.aoa_to_sheet(salaryRows);
+  const colWidthsSalary = salaryRows[2].map((_, ci) =>
+    Math.max(10, Math.max(...salaryRows.slice(2).map((row) => String(row[ci] ?? '').length)) + 2)
   );
-  ws['!cols'] = colWidths.map((w) => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
+  wsSalary['!cols'] = colWidthsSalary.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wsSalary, 'SALARY STATEMENT');
+
+  const wsCalc = XLSX.utils.aoa_to_sheet(calcRows);
+  const colWidthsCalc = calcRows[1].map((_, ci) =>
+    Math.max(12, Math.max(...calcRows.slice(1, rows.length + 2).map((row) => String(row[ci] ?? '').length)) + 2)
+  );
+  wsCalc['!cols'] = colWidthsCalc.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, wsCalc, 'EPF & ESI CALCULATION');
 
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   const filename = `Payroll_${periodLabel.replace(' ', '_')}_Run${runId}.xlsx`;
@@ -338,7 +585,7 @@ module.exports = {
   getConfig, updateConfig,
   listNightShiftRates, addNightShiftRate,
   listRuns, getRun, createRun, calculateRun, generatePayroll, lockRun, getPayslip,
-  listItems, exportPayrollRun,
+  listItems, getCalculationSummary, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,
   listOvertime, createOvertime,

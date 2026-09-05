@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../util/api';
+import { BoltIcon, XIcon, DownloadIcon, FolderIcon, CheckIcon } from '../../components/Icons';
 
 const SAMPLE_PUNCH_DATA = [
   {
@@ -179,7 +180,7 @@ export default function BulkPunchesImportModal({ isOpen, onClose, onSuccess }) {
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-lg">
-              ⚡
+              <BoltIcon className="w-5 h-5 text-purple-700" />
             </div>
             <div>
               <h2 className="text-base font-bold text-gray-900">Bulk Import Biometric Attendance Punches</h2>
@@ -188,9 +189,9 @@ export default function BulkPunchesImportModal({ isOpen, onClose, onSuccess }) {
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 rounded-lg p-1.5 transition-colors"
+            className="text-gray-400 hover:text-gray-600 rounded-lg p-1.5 transition-colors cursor-pointer hover:bg-gray-100"
           >
-            ✕
+            <XIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -218,7 +219,8 @@ export default function BulkPunchesImportModal({ isOpen, onClose, onSuccess }) {
                 onClick={downloadPunchesExcelTemplate}
                 className="mt-3 bg-white hover:bg-purple-50 text-purple-700 border border-purple-300 font-bold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <span>📥 Download Punches Template (.xlsx)</span>
+                <DownloadIcon className="w-4 h-4 text-purple-700" />
+                <span>Download Punches Template (.xlsx)</span>
               </button>
             </div>
 
@@ -235,7 +237,7 @@ export default function BulkPunchesImportModal({ isOpen, onClose, onSuccess }) {
                 className="hidden"
               />
               <div className="w-10 h-10 rounded-full bg-purple-100/80 text-purple-600 flex items-center justify-center text-xl">
-                📂
+                <FolderIcon className="w-5 h-5 text-purple-600" />
               </div>
               <div>
                 <div className="font-bold text-gray-800 text-xs">
@@ -278,9 +280,15 @@ export default function BulkPunchesImportModal({ isOpen, onClose, onSuccess }) {
                       <tr key={i} className={r._isValid ? 'hover:bg-gray-50/60' : 'bg-rose-50/40'}>
                         <td className="p-2 whitespace-nowrap">
                           {r._isValid ? (
-                            <span className="text-emerald-700 font-bold">✓ Valid</span>
+                            <span className="text-emerald-700 font-bold flex items-center gap-1">
+                              <CheckIcon className="w-3.5 h-3.5" />
+                              <span>Valid</span>
+                            </span>
                           ) : (
-                            <span className="text-rose-600 font-bold">✕ {r._validationNote}</span>
+                            <span className="text-rose-600 font-bold flex items-center gap-1">
+                              <XIcon className="w-3.5 h-3.5" />
+                              <span>{r._validationNote}</span>
+                            </span>
                           )}
                         </td>
                         <td className="p-2 font-mono font-bold text-blue-800">{r.employee_code || '—'}</td>

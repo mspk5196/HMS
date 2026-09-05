@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 import MedicineForm from './MedicineForm';
 import AddStockBatchForm from './AddStockBatchForm';
 
@@ -121,12 +122,11 @@ export default function StockList() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Stock</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Medicine master, live stock levels and minimum-stock thresholds.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Stock"
+        subtitle="Medicine master, live stock levels and minimum-stock thresholds."
+      />
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 

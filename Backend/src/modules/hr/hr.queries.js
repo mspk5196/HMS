@@ -59,8 +59,11 @@ const listEmployees = async ({ search, departmentId, status, page = 1, limit = 5
   const params = [];
 
   if (search) {
-    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    const term = `%${search.toLowerCase().trim()}%`;
+    filters.push(
+      '(LOWER(e.full_name) LIKE ? OR LOWER(e.employee_code) LIKE ? OR LOWER(COALESCE(e.phone, "")) LIKE ? OR LOWER(COALESCE(e.uan_number, "")) LIKE ? OR LOWER(COALESCE(e.esi_number, "")) LIKE ? OR LOWER(COALESCE(d.name, "")) LIKE ? OR LOWER(COALESCE(des.name, "")) LIKE ?)'
+    );
+    params.push(term, term, term, term, term, term, term);
   }
   if (departmentId) {
     filters.push('e.department_id = ?');
@@ -87,7 +90,14 @@ const listEmployees = async ({ search, departmentId, status, page = 1, limit = 5
     [...params, limit, offset]
   );
   
-  const [[{ total }]] = await db.execute(`SELECT COUNT(*) AS total FROM employees e ${where}`, params);
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles des ON des.id = e.designation_id
+     ${where}`,
+    params
+  );
   return { rows, total };
 };
 
@@ -122,9 +132,10 @@ const createEmployee = async (data) => {
     salary_type, basic_salary, per_day_salary, per_night_salary,
     qualification, experience_description,
     aadhar_number, aadhar_doc_path, pan_number, pan_doc_path,
-    shift_category, custom_shift_start, custom_shift_end,
+    shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes,
   } = data;
   const isDayNight = shift_category === 'day_and_night';
+  const isGeneral = shift_category === 'general';
   const finalSalaryType = 'monthly';
   let finalBasicSalary = Number(basic_salary) || 0;
   let finalPerDaySalary = Number(per_day_salary) || 0;
@@ -137,6 +148,10 @@ const createEmployee = async (data) => {
     finalPerNightSalary = 0;
   }
 
+  const finalCustomBuffer = isGeneral
+    ? (custom_buffer_minutes !== undefined && custom_buffer_minutes !== null && custom_buffer_minutes !== '' ? Number(custom_buffer_minutes) : 10)
+    : null;
+
   const [result] = await db.execute(
     `INSERT INTO employees (employee_code, full_name, gender, date_of_birth, date_of_joining,
        department_id, designation_id, phone, address, status,
@@ -144,8 +159,8 @@ const createEmployee = async (data) => {
        salary_type, basic_salary, per_day_salary, per_night_salary,
        qualification, experience_description,
        aadhar_number, aadhar_doc_path, pan_number, pan_doc_path,
-       shift_category, custom_shift_start, custom_shift_end)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       employee_code,
       full_name,
@@ -174,6 +189,7 @@ const createEmployee = async (data) => {
       shift_category || null,
       custom_shift_start || null,
       custom_shift_end || null,
+      finalCustomBuffer,
     ]
   );
   return result.insertId;
@@ -181,15 +197,15 @@ const createEmployee = async (data) => {
 
 const updateEmployee = async (id, data) => {
   const allowed = [
-    'employee_code', 'full_name', 'gender', 'date_of_joining', 'department_id', 'designation_id',
-    'reporting_person_id', 'address', 'status', 'date_of_leaving',
+    'employee_code', 'full_name', 'gender', 'date_of_birth', 'date_of_joining', 'department_id', 'designation_id',
+    'reporting_person_id', 'phone', 'address', 'status', 'date_of_leaving',
     'bank_account_no', 'bank_ifsc', 'bank_name',
     'uan_number', 'esi_number',
     'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary',
     'qualification', 'experience_description',
     // Document & shift fields (v9)
     'aadhar_number', 'aadhar_doc_path', 'pan_number', 'pan_doc_path',
-    'shift_category', 'custom_shift_start', 'custom_shift_end',
+    'shift_category', 'custom_shift_start', 'custom_shift_end', 'custom_buffer_minutes',
   ];
   const booleans = ['pf_enrolled', 'esi_enrolled'];
   const fields = [];
@@ -197,24 +213,35 @@ const updateEmployee = async (id, data) => {
   for (const key of allowed) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      vals.push(data[key] === '' ? null : data[key]);
+      vals.push(data[key] === '' || data[key] === 'null' || data[key] === null ? null : data[key]);
     }
   }
   for (const key of booleans) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      vals.push(data[key] ? 1 : 0);
+      vals.push(data[key] === '1' || data[key] === 'true' || data[key] === true || data[key] === 1 ? 1 : 0);
     }
   }
 
   // Custom mappings for aliases
-  if (data.dob !== undefined) { fields.push('date_of_birth = ?'); vals.push(data.dob); }
-  if (data.phone !== undefined || data.mobile !== undefined) { fields.push('phone = ?'); vals.push(data.phone || data.mobile); }
-  if (data.is_active !== undefined) { fields.push('status = ?'); vals.push(data.is_active ? 'active' : 'inactive'); }
+  if (data.dob !== undefined && data.date_of_birth === undefined) {
+    fields.push('date_of_birth = ?');
+    vals.push(data.dob === '' || data.dob === 'null' || data.dob === null ? null : data.dob);
+  }
+  if (data.mobile !== undefined && data.phone === undefined) {
+    fields.push('phone = ?');
+    vals.push(data.mobile === '' || data.mobile === 'null' || data.mobile === null ? null : data.mobile);
+  }
+  if (data.is_active !== undefined && data.status === undefined) {
+    fields.push('status = ?');
+    vals.push(data.is_active ? 'active' : 'inactive');
+  }
 
   if (!fields.length) return;
-  vals.push(id);
-  await db.execute(`UPDATE employees SET ${fields.join(', ')} WHERE id = ?`, vals);
+  // Guard against any undefined entering MySQL2 bind parameters
+  const safeVals = vals.map((v) => (v === undefined || v === '' ? null : v));
+  safeVals.push(id);
+  await db.execute(`UPDATE employees SET ${fields.join(', ')} WHERE id = ?`, safeVals);
 
   if (data.designation_id !== undefined) {
     await syncUserRoleFromDesignation(id, data.designation_id);
@@ -355,24 +382,38 @@ const updateShiftTimings = async (data) => {
   } else {
     if (data.dayShift) {
       const { start_time, end_time, grace_period_minutes } = data.dayShift;
-      const updateData = {};
-      if (start_time) updateData.start_time = start_time;
-      if (end_time) updateData.end_time = end_time;
-      if (grace_period_minutes !== undefined) updateData.grace_period_minutes = grace_period_minutes;
-      const [rows] = await db.execute(`SELECT id FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
+      const [rows] = await db.execute(`SELECT id, start_time, end_time FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
       if (rows.length) {
-        await updateShift(rows[0].id, updateData);
+        const sTime = start_time || rows[0].start_time;
+        const eTime = end_time || rows[0].end_time;
+        await db.execute(
+          `UPDATE shifts 
+           SET start_time = ?, end_time = ?, grace_period_minutes = COALESCE(?, grace_period_minutes),
+               biometric_in_start = SUBTIME(?, '01:00:00'),
+               biometric_in_end = ?,
+               biometric_out_start = ?,
+               biometric_out_end = ADDTIME(?, '01:00:00')
+           WHERE id = ?`,
+          [sTime, eTime, grace_period_minutes !== undefined ? Number(grace_period_minutes) : null, sTime, sTime, eTime, eTime, rows[0].id]
+        );
       }
     }
     if (data.nightShift) {
       const { start_time, end_time, grace_period_minutes } = data.nightShift;
-      const updateData = {};
-      if (start_time) updateData.start_time = start_time;
-      if (end_time) updateData.end_time = end_time;
-      if (grace_period_minutes !== undefined) updateData.grace_period_minutes = grace_period_minutes;
-      const [rows] = await db.execute(`SELECT id FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
+      const [rows] = await db.execute(`SELECT id, start_time, end_time FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
       if (rows.length) {
-        await updateShift(rows[0].id, updateData);
+        const sTime = start_time || rows[0].start_time;
+        const eTime = end_time || rows[0].end_time;
+        await db.execute(
+          `UPDATE shifts 
+           SET start_time = ?, end_time = ?, grace_period_minutes = COALESCE(?, grace_period_minutes),
+               biometric_in_start = SUBTIME(?, '01:00:00'),
+               biometric_in_end = ?,
+               biometric_out_start = ?,
+               biometric_out_end = ADDTIME(?, '01:00:00')
+           WHERE id = ?`,
+          [sTime, eTime, grace_period_minutes !== undefined ? Number(grace_period_minutes) : null, sTime, sTime, eTime, eTime, rows[0].id]
+        );
       }
     }
   }
@@ -685,8 +726,9 @@ const listRemappingLogs = async ({ search, employeeId, page = 1, limit = 50 }) =
     params.push(employeeId);
   }
   if (search) {
-    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    const term = `%${search.toLowerCase().trim()}%`;
+    filters.push('(LOWER(e.full_name) LIKE ? OR LOWER(e.employee_code) LIKE ?)');
+    params.push(term, term);
   }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
@@ -773,8 +815,9 @@ const listSalaryLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
     params.push(employeeId);
   }
   if (search) {
-    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    const term = `%${search.toLowerCase().trim()}%`;
+    filters.push('(LOWER(e.full_name) LIKE ? OR LOWER(e.employee_code) LIKE ?)');
+    params.push(term, term);
   }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';

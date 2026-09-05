@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import PageHeader from '../../../components/PageHeader';
 
 export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   const [deptName, setDeptName] = useState(initialData ? initialData.name : '');
   const [roles, setRoles] = useState(
     initialData && initialData.roles && initialData.roles.length > 0
-      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, monthlyBufferMinutes: r.monthlyBufferMinutes ?? 30, isDoctor: !!r.isDoctor }))
-      : [{ roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30, isDoctor: false }]
+      ? initialData.roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: r.basicSalary, weeklyOffCount: r.weeklyOffCount ?? 4, isDoctor: !!r.isDoctor }))
+      : [{ roleName: '', basicSalary: '', weeklyOffCount: 4, isDoctor: false }]
   );
   const [errors, setErrors] = useState({});
 
@@ -23,7 +24,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
   };
 
   const addRole = () => {
-    setRoles(prev => [...prev, { roleName: '', basicSalary: '', weeklyOffCount: 4, monthlyBufferMinutes: 30, isDoctor: false }]);
+    setRoles(prev => [...prev, { roleName: '', basicSalary: '', weeklyOffCount: 4, isDoctor: false }]);
   };
 
   const removeRole = (idx) => {
@@ -51,23 +52,13 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
 
   return (
     <div className="min-h-full space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
-          title="Go back"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff & Salary &nbsp;&gt;&nbsp; Department & Role &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">{initialData ? 'Edit Department' : 'Add Department'}</span>
-          </h1>
-        </div>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        parent="Department & Role"
+        title={initialData ? 'Edit Department' : 'Add Department'}
+        subtitle="Configure department details and assign designations/staff roles."
+        onBack={onBack}
+      />
 
       {/* Form Card */}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -138,19 +129,16 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
 
           <div className="grid grid-cols-12 gap-2 px-1">
             <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">#</div>
-            <div className="col-span-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Role Name <span className="text-red-400">*</span>
             </div>
-            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="col-span-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Basic Salary (₹) <span className="text-red-400">*</span>
             </div>
-            <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Weekly Offs per month">
+            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Weekly Offs per month">
               W-Off
             </div>
-            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Monthly Buffer Minutes">
-              Buffer (min)
-            </div>
-            <div className="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Employees under this role are treated as doctors">
+            <div className="col-span-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center" title="Employees under this role are treated as doctors">
               Doctor
             </div>
             <div className="col-span-1"></div>
@@ -165,7 +153,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   </span>
                 </div>
 
-                <div className="col-span-3 space-y-1">
+                <div className="col-span-4 space-y-1">
                   <input
                     type="text"
                     value={role.roleName}
@@ -185,7 +173,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   )}
                 </div>
 
-                <div className="col-span-2 space-y-1">
+                <div className="col-span-3 space-y-1">
                   <div className="relative">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-semibold pointer-events-none">
                       ₹
@@ -211,7 +199,7 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                   )}
                 </div>
 
-                <div className="col-span-1 space-y-1">
+                <div className="col-span-2 space-y-1">
                   <input
                     type="number"
                     value={role.weeklyOffCount ?? 4}
@@ -219,23 +207,11 @@ export default function AddDepartmentForm({ onBack, onSubmit, initialData }) {
                     placeholder="4"
                     min="0" max="15"
                     title="Weekly Offs per month"
-                    className="w-full px-1 py-2.5 border border-gray-200 bg-white rounded-lg text-xs font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-1">
-                  <input
-                    type="number"
-                    value={role.monthlyBufferMinutes ?? 30}
-                    onChange={(e) => handleRoleChange(idx, 'monthlyBufferMinutes', e.target.value)}
-                    placeholder="30"
-                    min="0" max="600"
-                    title="Monthly Buffer Minutes"
                     className="w-full px-2 py-2.5 border border-gray-200 bg-white rounded-lg text-xs font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
                   />
                 </div>
 
-                <div className="col-span-2 flex items-center justify-center h-10">
+                <div className="col-span-1 flex items-center justify-center h-10">
                   <input
                     type="checkbox"
                     checked={!!role.isDoctor}

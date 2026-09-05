@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
+import {
+  BoltIcon,
+  CalendarIcon,
+  DownloadIcon,
+  SyncIcon,
+  LockIcon,
+  ReceiptIcon,
+  PrintIcon,
+  ChartBarIcon,
+  DocumentTextIcon,
+  LandmarkIcon,
+  HospitalIcon,
+} from '../../components/Icons';
 
 const MONTH_NAMES = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }));
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -80,14 +94,11 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Payroll</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Monthly runs, per-employee payslips, overtime, and the PF/ESI constants that drive them.
-        </p>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        title="Payroll"
+        subtitle="Monthly runs, per-employee payslips, overtime, and the PF/ESI constants that drive them."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -97,12 +108,14 @@ export default function Payroll() {
         onChange={setTab}
         tabs={[
           { value: 'runs', label: 'Payroll Runs' },
+          { value: 'calc', label: 'Salary & PF/ESI Calculation' },
           { value: 'overtime', label: 'Overtime' },
           { value: 'config', label: 'PF/ESI Config' },
         ]}
       />
 
       {tab === 'runs' && <Runs onError={fail} onSuccess={flash} />}
+      {tab === 'calc' && <SalaryPfEsiCalculation onError={fail} onSuccess={flash} />}
       {tab === 'overtime' && <Overtime onError={fail} onSuccess={flash} />}
       {tab === 'config' && <Config onError={fail} onSuccess={flash} />}
     </div>
@@ -227,7 +240,10 @@ function Runs({ onError, onSuccess }) {
                   Calculating…
                 </>
               ) : (
-                <>⚡ Generate &amp; Calculate Payroll</>
+                <>
+                  <BoltIcon className="w-4 h-4 text-white" />
+                  <span>Generate &amp; Calculate Payroll</span>
+                </>
               )}
             </button>
           </form>
@@ -255,7 +271,7 @@ function Runs({ onError, onSuccess }) {
               <div key={r.id} className="p-4 hover:bg-gray-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-sm border border-blue-200">
-                    📅
+                    <CalendarIcon className="w-5 h-5 text-blue-700" />
                   </div>
                   <div>
                     <div className="text-sm font-extrabold text-gray-900">
@@ -465,21 +481,28 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
             className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
             title="Download payroll spreadsheet (.xlsx) without overtime compensations"
           >
-            📥 Export Excel
+            <DownloadIcon className="w-4 h-4 text-white" />
+            <span>Export Excel</span>
           </button>
           <button
             onClick={calculate}
             disabled={busy || run.status !== 'draft'}
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            {busy ? 'Recalculating…' : '⚡ Recalculate Payroll'}
+            {busy ? 'Recalculating…' : (
+              <>
+                <SyncIcon className="w-4 h-4 text-white" />
+                <span>Recalculate Payroll</span>
+              </>
+            )}
           </button>
           <button
             onClick={lock}
             disabled={busy || run.status !== 'draft'}
             className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            🔒 Lock &amp; Confirm Run
+            <LockIcon className="w-4 h-4 text-white" />
+            <span>Lock &amp; Confirm Run</span>
           </button>
         </div>
       </div>
@@ -578,9 +601,10 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
                     <td className="px-3 py-2.5 text-center">
                       <button
                         onClick={() => openPayslip(it.employee_id)}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer"
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1.5"
                       >
-                        🧾 View Payslip
+                        <ReceiptIcon className="w-3.5 h-3.5 text-blue-600" />
+                        <span>View Payslip</span>
                       </button>
                     </td>
                   </tr>
@@ -633,7 +657,8 @@ function PayslipView({ payslip, onBack }) {
           onClick={() => window.print()}
           className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
         >
-          <span>🖨️ Print Official Payslip</span>
+          <PrintIcon className="w-4 h-4 text-white" />
+          <span>Print Official Payslip</span>
         </button>
       </div>
 
@@ -708,9 +733,15 @@ function PayslipView({ payslip, onBack }) {
           {/* Earnings */}
           <div className="space-y-2 pr-2 sm:border-r border-gray-200">
             <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Earnings (A)</div>
-            <PayslipRow label="Base Monthly Salary" value={money(item.base_salary_component)} />
-            <PayslipRow label="Night Shift Allowance" value={money(item.night_shift_component)} />
-            <PayslipRow label="Paid Extra Days Overtime" value={money(item.overtime_amount)} />
+            <PayslipRow label="Base Monthly Fixed Salary" value={money(item.base_salary_component)} />
+            <PayslipRow label="  • Basic + DA (70%)" value={money(item.earned_basic || Math.round(Number(item.base_salary_component || 0) * 0.7))} />
+            <PayslipRow label="  • HRA (30%)" value={money(item.earned_hra || (Number(item.base_salary_component || 0) - Math.round(Number(item.base_salary_component || 0) * 0.7)))} />
+            {Number(item.night_shift_component) > 0 && (
+              <PayslipRow label="Night Shift Allowance" value={money(item.night_shift_component)} />
+            )}
+            {Number(item.overtime_amount) > 0 && (
+              <PayslipRow label="Paid Extra Days Overtime" value={money(item.overtime_amount)} />
+            )}
             <div className="pt-2 border-t border-gray-200">
               <PayslipRow label="Gross Earnings" value={money(item.gross_pay)} strong />
             </div>
@@ -719,11 +750,23 @@ function PayslipView({ payslip, onBack }) {
           {/* Deductions */}
           <div className="space-y-2 pl-0 sm:pl-2">
             <div className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider">Deductions (B)</div>
-            <PayslipRow label="Loss of Pay (LOP)" value={money(item.lop_amount)} />
-            <PayslipRow label="Late Attendance Buffer" value={money(item.buffer_late_deduction)} />
-            <PayslipRow label="Disciplinary Fines" value={money(item.fines_amount)} />
-            <PayslipRow label="Employee PF (12%)" value={money(item.pf_employee_amount)} />
-            <PayslipRow label="Employee ESI (0.75%)" value={money(item.esi_employee_amount)} />
+            {Number(item.lop_amount) > 0 && (
+              <PayslipRow label={`Loss of Pay (${item.days_lop} days)`} value={money(item.lop_amount)} />
+            )}
+            {Number(item.buffer_late_deduction) > 0 && (
+              <PayslipRow label="Late Attendance Buffer" value={money(item.buffer_late_deduction)} />
+            )}
+            {Number(item.fines_amount) > 0 && (
+              <PayslipRow label="Disciplinary Fines / Advance" value={money(item.fines_amount)} />
+            )}
+            <PayslipRow
+              label={`Employee PF (12%)${Number(item.pf_wage) > 0 ? ` [Wage: ₹${Number(item.pf_wage).toLocaleString('en-IN')}]` : ''}`}
+              value={money(item.pf_employee_amount)}
+            />
+            <PayslipRow
+              label={`Employee ESI (0.75%)${Number(item.esi_wage) > 0 ? ` [Wage: ₹${Number(item.esi_wage).toLocaleString('en-IN')}]` : ''}`}
+              value={money(item.esi_employee_amount)}
+            />
             <div className="pt-2 border-t border-gray-200">
               <PayslipRow
                 label="Total Deductions"
@@ -743,9 +786,21 @@ function PayslipView({ payslip, onBack }) {
         {/* Employer Statutory Contributions */}
         <div className="py-2.5 border-b border-gray-200 text-xs">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employer Contribution (Non-Deductible)</div>
-          <div className="grid grid-cols-2 gap-4">
-            <PayslipRow label="Employer PF (12%)" value={money(item.pf_employer_amount)} />
-            <PayslipRow label="Employer ESI (3.25%)" value={money(item.esi_employer_amount)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <PayslipRow label="Employer PF Total (12%)" value={money(item.pf_employer_amount)} strong />
+              <div className="text-[11px] text-gray-500 pl-2">
+                <div>• Pension Fund (EPS 8.33%): {money(item.pf_employer_eps_amount || Math.round(Number(item.pf_wage || 0) * 0.0833))}</div>
+                <div>• Provident Fund (EPF 3.67%): {money(item.pf_employer_epf_amount || (Number(item.pf_employee_amount || 0) - Math.round(Number(item.pf_wage || 0) * 0.0833)))}</div>
+              </div>
+            </div>
+            <div>
+              <PayslipRow label="Employer ESI (3.25%)" value={money(item.esi_employer_amount)} strong />
+              <div className="text-[11px] text-gray-500 pl-2">
+                <div>• ESI Wage Base: {money(item.esi_wage)}</div>
+                <div>• Total ESI Remittance (4.5%): {money(Number(item.esi_employee_amount || 0) + Number(item.esi_employer_amount || 0))}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -768,6 +823,561 @@ function PayslipView({ payslip, onBack }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SALARY & PF/ESI CALCULATION TAB
+   Complete dynamic view based on EPF & ESI CALCULATION.xlsx and 06 STAFF ATTENDANCE JUNE-2026.xlsx
+═══════════════════════════════════════════════════════════════════════ */
+
+function SalaryPfEsiCalculation({ onError, onSuccess }) {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [subTab, setSubTab] = useState('statement'); // 'statement' | 'statutory'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [data, setData] = useState(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const { data: runs } = await apiFetch('/salary/payroll-runs?limit=50', { withMeta: true });
+      const currentRun = (runs || []).find(
+        (r) => Number(r.period_month) === Number(month) && Number(r.period_year) === Number(year)
+      );
+
+      if (currentRun) {
+        const res = await apiFetch(`/salary/payroll-runs/${currentRun.id}/calculation-summary`);
+        setData(res);
+      } else {
+        setData(null);
+      }
+    } catch (err) {
+      onError(err, 'Failed to load calculation summary.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleGenerate = async () => {
+    try {
+      setIsGenerating(true);
+      const res = await apiFetch('/salary/payroll-runs/generate', {
+        method: 'POST',
+        body: JSON.stringify({ period_month: Number(month), period_year: Number(year) }),
+      });
+      onSuccess(`Payroll calculations generated for ${MONTH_NAMES[month - 1]} ${year}.`);
+      await loadData();
+    } catch (err) {
+      onError(err, 'Failed to generate payroll calculation.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!data?.run?.id) return;
+    try {
+      setIsExporting(true);
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || '/api';
+      const res = await fetch(`${API_URL}/salary/payroll-runs/${data.run.id}/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Failed to export Excel workbook');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payroll_Salary_and_EPF_ESI_${MONTH_NAMES[month - 1]}_${year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      onSuccess('Multi-sheet Salary & EPF/ESI Excel workbook exported successfully.');
+    } catch (err) {
+      onError(err, 'Failed to export Excel workbook.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const filteredItems = (data?.items || []).filter((it) => {
+    if (!searchTerm) return true;
+    const s = searchTerm.toLowerCase();
+    return (
+      (it.full_name || '').toLowerCase().includes(s) ||
+      (it.employee_code || '').toLowerCase().includes(s) ||
+      (it.uan_number || '').toLowerCase().includes(s) ||
+      (it.esi_number || '').toLowerCase().includes(s) ||
+      (it.department_name || '').toLowerCase().includes(s)
+    );
+  });
+
+  const summary = data?.summary;
+  const daysInMo = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return (
+    <div className="space-y-5">
+      {/* Top Header & Controls Card */}
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+              <ChartBarIcon className="w-4 h-4 text-blue-600" />
+              <span>Salary &amp; PF / ESI Calculation Statement</span>
+              {data?.run && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                  data.run.status === 'locked' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  {data.run.status}
+                </span>
+              )}
+            </h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Live breakdown of monthly gross, attendance LOP, statutory 70% Basic/DA, PF (12%), and ESI (0.75% / 3.25%).
+            </p>
+          </div>
+
+          {/* Month/Year and Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="px-2.5 py-1.5 bg-gray-50 text-gray-900 rounded-lg text-xs font-bold border border-gray-200 cursor-pointer"
+            >
+              {MONTH_NAMES.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="w-20 px-2.5 py-1.5 bg-gray-50 text-gray-900 rounded-lg text-xs font-bold border border-gray-200"
+            />
+
+            {!data?.run ? (
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isGenerating ? 'Calculating…' : (
+                  <>
+                    <BoltIcon className="w-4 h-4 text-white" />
+                    <span>Calculate for Month</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || data.run.status !== 'draft'}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  title="Recalculate with latest biometric punches and settings"
+                >
+                  {isGenerating ? 'Recalculating…' : (
+                    <>
+                      <SyncIcon className="w-3.5 h-3.5" />
+                      <span>Recalculate</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  title="Export multi-sheet Excel matching hospital statements"
+                >
+                  {isExporting ? 'Exporting…' : (
+                    <>
+                      <DownloadIcon className="w-4 h-4 text-white" />
+                      <span>Export Multi-Sheet Excel</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Sub-view switcher and Search */}
+        <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-lg w-fit">
+            <button
+              onClick={() => setSubTab('statement')}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                subTab === 'statement' ? 'bg-white text-blue-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <DocumentTextIcon className="w-3.5 h-3.5" />
+              <span>Salary Statement</span>
+            </button>
+            <button
+              onClick={() => setSubTab('statutory')}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                subTab === 'statutory' ? 'bg-white text-blue-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LandmarkIcon className="w-3.5 h-3.5" />
+              <span>EPF &amp; ESI Statutory Calculation</span>
+            </button>
+          </div>
+
+          <input
+            type="text"
+            placeholder="Search staff, code, UAN, ESI…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-1 border border-gray-200 rounded-lg text-xs bg-gray-50 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-64"
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-xs text-gray-400">
+          Loading calculation data…
+        </div>
+      ) : !data?.run ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-xs text-gray-500 space-y-3">
+          <div className="flex justify-center">
+            <CalendarIcon className="w-10 h-10 text-gray-300" />
+          </div>
+          <div className="font-bold text-gray-800">No Payroll Run on Record for {MONTH_NAMES[month - 1]} {year}</div>
+          <p className="text-gray-500 text-[11px] max-w-md mx-auto">
+            Click the button below to generate the monthly calculation and payslips for all active staff based on attendance, PF/ESI ceilings, and salaries.
+          </p>
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
+          >
+            {isGenerating ? 'Calculating…' : (
+              <>
+                <BoltIcon className="w-4 h-4 text-white" />
+                <span>Generate {MONTH_NAMES[month - 1]} {year} Payroll</span>
+              </>
+            )}
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Statutory Summary KPI Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+            <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Staff Calculated</span>
+              <span className="text-lg font-extrabold text-gray-900 mt-1 block">{summary?.totalStaff || 0} Members</span>
+              <span className="text-[10px] text-gray-400">{summary?.pf?.enrolledCount || 0} PF · {summary?.esi?.coveredCount || 0} ESI</span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Gross Wages</span>
+              <span className="text-base font-extrabold text-blue-900 mt-1 block">{money(summary?.totalGross)}</span>
+              <span className="text-[10px] text-gray-400">Earned: {money(summary?.totalEarnedGross)}</span>
+            </div>
+
+            <div className="bg-blue-50/70 border border-blue-200 p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block">EPFO Total Remittance</span>
+              <span className="text-base font-extrabold text-blue-950 mt-1 block">{money(summary?.pf?.totalEpfoChallan)}</span>
+              <span className="text-[10px] text-blue-700 font-medium">Emp {money(summary?.pf?.totalPfEmployee)} + Emplr {money(summary?.pf?.totalPfEmployer)}</span>
+            </div>
+
+            <div className="bg-teal-50/70 border border-teal-200 p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider block">ESI Total Remittance</span>
+              <span className="text-base font-extrabold text-teal-950 mt-1 block">{money(summary?.esi?.totalEsiChallan)}</span>
+              <span className="text-[10px] text-teal-700 font-medium">Emp {money(summary?.esi?.totalEsiEmployee)} + Emplr {money(summary?.esi?.totalEsiEmployer)}</span>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl shadow-xs col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Net Payable</span>
+              <span className="text-base font-extrabold text-emerald-950 mt-1 block">{money(summary?.totalNet)}</span>
+              <span className="text-[10px] text-emerald-700 font-medium">Bank disbursement total</span>
+            </div>
+          </div>
+
+          {/* Sub-view 1: Salary Statement Table */}
+          {subTab === 'statement' && (
+            <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Staff Salary Statement ({filteredItems.length} Records) · {daysInMo} Days in Month
+                  </h3>
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Basic+DA (70%), HRA (30%), Loss of Pay (LOP), Overtime, Statutory PF &amp; ESI
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[1250px]">
+                  <thead>
+                    <tr className="bg-gray-100/70 border-b border-gray-200 text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+                      <th className="text-center px-2 py-2.5 w-10">S.No</th>
+                      <th className="text-left px-3 py-2.5">Staff &amp; Dept</th>
+                      <th className="text-right px-2.5 py-2.5">Fixed Gross</th>
+                      <th className="text-right px-2.5 py-2.5">Basic (70%)</th>
+                      <th className="text-right px-2.5 py-2.5">HRA (30%)</th>
+                      <th className="text-center px-2 py-2.5">Wkd</th>
+                      <th className="text-center px-2 py-2.5">LOP</th>
+                      <th className="text-right px-2 py-2.5">LOP Amt</th>
+                      <th className="text-right px-2.5 py-2.5">Earned Gross</th>
+                      <th className="text-right px-2 py-2.5">Fines</th>
+                      <th className="text-right px-2.5 py-2.5 bg-blue-50/50">PF Wage</th>
+                      <th className="text-right px-2.5 py-2.5 bg-blue-50/50 text-blue-900">PF (12%)</th>
+                      <th className="text-right px-2.5 py-2.5 bg-teal-50/50">ESI Wage</th>
+                      <th className="text-right px-2.5 py-2.5 bg-teal-50/50 text-teal-900">ESI (0.75%)</th>
+                      <th className="text-right px-3 py-2.5 bg-emerald-50/70 font-extrabold text-emerald-950">Net Salary</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredItems.map((it, idx) => {
+                      const fixed = Number(it.base_salary_component || 0);
+                      const basic70 = Math.round(fixed * 0.7);
+                      const hra30 = fixed - basic70;
+                      const lopDays = Number(it.days_lop || 0);
+                      const lopAmt = Number(it.lop_amount || 0);
+                      const earnedGross = Math.max(0, Number(it.gross_pay || 0) - lopAmt);
+
+                      return (
+                        <tr key={it.id} className="hover:bg-gray-50/70 transition-colors">
+                          <td className="px-2 py-2 text-center text-gray-400 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="px-3 py-2">
+                            <div className="font-bold text-gray-900">{it.full_name}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">
+                              {it.employee_code} · {it.department_name || 'General'}
+                              {it.bank_account_no && ` · A/c: ${it.bank_account_no}`}
+                            </div>
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono font-bold text-gray-900">{money(fixed)}</td>
+                          <td className="px-2.5 py-2 text-right font-mono text-gray-600">{money(basic70)}</td>
+                          <td className="px-2.5 py-2 text-right font-mono text-gray-600">{money(hra30)}</td>
+                          <td className="px-2 py-2 text-center font-bold text-gray-800">{it.days_present}</td>
+                          <td className={`px-2 py-2 text-center font-semibold ${lopDays > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                            {lopDays}
+                          </td>
+                          <td className={`px-2 py-2 text-right font-mono ${lopAmt > 0 ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>
+                            {lopAmt > 0 ? `-${money(lopAmt)}` : '—'}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono font-bold text-gray-900">{money(earnedGross)}</td>
+                          <td className={`px-2 py-2 text-right font-mono ${Number(it.fines_amount) > 0 ? 'text-rose-600 font-semibold' : 'text-gray-400'}`}>
+                            {Number(it.fines_amount) > 0 ? `-${money(it.fines_amount)}` : '—'}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono text-gray-600 bg-blue-50/20">{money(it.pf_wage)}</td>
+                          <td className="px-2.5 py-2 text-right font-mono font-bold text-blue-900 bg-blue-50/30">
+                            {Number(it.pf_employee_amount) > 0 ? money(it.pf_employee_amount) : '—'}
+                          </td>
+                          <td className="px-2.5 py-2 text-right font-mono text-gray-600 bg-teal-50/20">{money(it.esi_wage)}</td>
+                          <td className="px-2.5 py-2 text-right font-mono font-bold text-teal-900 bg-teal-50/30">
+                            {Number(it.esi_employee_amount) > 0 ? money(it.esi_employee_amount) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono font-extrabold text-emerald-900 bg-emerald-50/50">
+                            {money(it.net_pay)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-view 2: EPF & ESI Statutory Calculation (Matches EPF & ESI CALCULATION.xlsx) */}
+          {subTab === 'statutory' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* ESI Calculation Card */}
+                <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-teal-50/60">
+                    <div>
+                      <h4 className="text-xs font-bold text-teal-950 uppercase tracking-wider">
+                        ESI Statutory Calculation (100% Gross)
+                      </h4>
+                      <span className="text-[10px] text-teal-700 font-semibold">
+                        Ceiling: ₹21,000 · Employer 3.25% · Employee 0.75% · Total 4.5%
+                      </span>
+                    </div>
+                    <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      ROUNDUP Rule
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[500px]">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-600 uppercase">
+                        <tr>
+                          <th className="px-2 py-2 text-center w-8">#</th>
+                          <th className="px-3 py-2 text-left">Staff</th>
+                          <th className="px-2 py-2 text-right">Gross (100%)</th>
+                          <th className="px-2 py-2 text-right text-teal-800">Emplr 3.25%</th>
+                          <th className="px-2 py-2 text-right text-teal-800">Emp 0.75%</th>
+                          <th className="px-2 py-2 text-right font-bold text-teal-950">Total 4.5%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredItems.map((it, idx) => {
+                          const esiWage = Number(it.esi_wage || 0);
+                          const esiEmp = Number(it.esi_employee_amount || 0);
+                          const esiEmplr = Number(it.esi_employer_amount || 0);
+                          const esiTotal = esiEmp + esiEmplr;
+                          const outOfCover = Number(it.base_salary_component || 0) > 21000;
+
+                          return (
+                            <tr key={it.id} className="hover:bg-gray-50/60">
+                              <td className="px-2 py-1.5 text-center text-gray-400 font-mono text-[10px]">{idx + 1}</td>
+                              <td className="px-3 py-1.5">
+                                <div className="font-semibold text-gray-900">{it.full_name}</div>
+                                {outOfCover && <span className="text-[9px] text-gray-400 font-bold uppercase">OUT OF COVER (&gt;21k)</span>}
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-mono">{money(esiWage)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono text-teal-700">{money(esiEmplr)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono text-teal-700">{money(esiEmp)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono font-bold text-teal-900">{money(esiTotal)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* PF Calculation Card */}
+                <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-blue-50/60">
+                    <div>
+                      <h4 className="text-xs font-bold text-blue-950 uppercase tracking-wider">
+                        PF / EPF Statutory Calculation (70% Basic)
+                      </h4>
+                      <span className="text-[10px] text-blue-700 font-semibold">
+                        Ceiling: ₹15,000 · Employee 12% · Employer EPS 8.33% · EPF 3.67%
+                      </span>
+                    </div>
+                    <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Max ₹1,800
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[500px]">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-600 uppercase">
+                        <tr>
+                          <th className="px-2 py-2 text-center w-8">#</th>
+                          <th className="px-3 py-2 text-left">Staff</th>
+                          <th className="px-2 py-2 text-right">PF Wage (70%)</th>
+                          <th className="px-2 py-2 text-right text-blue-800">Emp 12%</th>
+                          <th className="px-2 py-2 text-right text-blue-700">EPS 8.33%</th>
+                          <th className="px-2 py-2 text-right text-blue-700">EPF 3.67%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredItems.map((it, idx) => {
+                          const pfWage = Number(it.pf_wage || 0);
+                          const pfEmp = Number(it.pf_employee_amount || 0);
+                          const pfEps = Number(it.pf_employer_eps_amount || 0);
+                          const pfEpf = Number(it.pf_employer_epf_amount || 0);
+
+                          return (
+                            <tr key={it.id} className="hover:bg-gray-50/60">
+                              <td className="px-2 py-1.5 text-center text-gray-400 font-mono text-[10px]">{idx + 1}</td>
+                              <td className="px-3 py-1.5 font-semibold text-gray-900">{it.full_name}</td>
+                              <td className="px-2 py-1.5 text-right font-mono">{money(pfWage)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono font-bold text-blue-900">{money(pfEmp)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono text-blue-700">{money(pfEps)}</td>
+                              <td className="px-2 py-1.5 text-right font-mono text-blue-700">{money(pfEpf)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Statutory Challan Breakdown Box (Matching EPFO Challan) */}
+              <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-5 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                {/* EPFO Challan Summary */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                    <span className="font-extrabold text-blue-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <LandmarkIcon className="w-4 h-4 text-blue-300 shrink-0" />
+                      <span>EPFO Statutory Challan Summary (5 Accounts)</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-semibold">{summary?.pf?.enrolledCount || 0} Subscribers</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-gray-300">
+                      <span>A/C 01 — Employer EPF (3.67%) + Employee EPF (12%)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.pf?.ac01)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>A/C 02 — EPFO Administration Charges (0.5%)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.pf?.ac02)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>A/C 10 — Pension Fund EPS (8.33%)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.pf?.ac10)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>A/C 21 — EDLI Deposit-Linked Insurance (0.5%)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.pf?.ac21)}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/20 flex justify-between items-center text-sm font-extrabold text-emerald-400">
+                    <span>Total EPFO Challan Remittance</span>
+                    <span className="text-base font-mono">{money(summary?.pf?.totalEpfoChallan)}</span>
+                  </div>
+                </div>
+
+                {/* ESI Challan Summary */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                    <span className="font-extrabold text-teal-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <HospitalIcon className="w-4 h-4 text-teal-300 shrink-0" />
+                      <span>ESIC Statutory Challan Summary (4.5%)</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-semibold">{summary?.esi?.coveredCount || 0} Covered Staff</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-gray-300">
+                      <span>Total ESI Eligible Monthly Wages</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.esi?.totalEsiWages)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Employee Contribution (0.75% ROUNDUP)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.esi?.totalEsiEmployee)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Employer Contribution (3.25% ROUNDUP)</span>
+                      <span className="font-mono font-bold text-white">{money(summary?.esi?.totalEsiEmployer)}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/20 flex justify-between items-center text-sm font-extrabold text-teal-400">
+                    <span>Total ESIC Challan Remittance</span>
+                    <span className="text-base font-mono">{money(summary?.esi?.totalEsiChallan)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -945,6 +1555,8 @@ function Overtime({ onError, onSuccess }) {
 ═══════════════════════════════════════════════════════════════════════ */
 
 const CONFIG_LABELS = {
+  BASIC_PERCENT: 'Basic + DA Share of Monthly Salary (%)',
+  HRA_PERCENT: 'HRA Share of Monthly Salary (%)',
   PF_EMPLOYEE_PERCENT: 'PF — employee contribution (%)',
   PF_EMPLOYER_EPF_PERCENT: 'PF — employer EPF share (%)',
   PF_EMPLOYER_EPS_PERCENT: 'PF — employer EPS share (%)',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch } from '../util/api';
+import { XIcon } from './Icons';
 
 /**
  * Reusable, searchable medicine selector component.
@@ -132,9 +133,9 @@ export default function MedicineSearchSelect({
             <button
               type="button"
               onClick={() => setQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 text-[10px]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
             >
-              ✕
+              <XIcon className="w-3 h-3" />
             </button>
           )}
           {isOpen && !disabled && (

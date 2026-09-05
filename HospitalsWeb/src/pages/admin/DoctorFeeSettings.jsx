@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -88,14 +89,11 @@ export default function DoctorFeeSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient & Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Doctor Fee Rates</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Set OPD consultation fee and IPD daily visit fee per doctor. These are pre-filled when closing a consultation or processing a discharge.
-        </p>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Doctor Fee Rates"
+        subtitle="Set OPD consultation fee and IPD daily visit fee per doctor. These are pre-filled when closing a consultation or processing a discharge."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />

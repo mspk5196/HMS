@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { mapEmployeeToMember } from '../../../util/mappers';
+import PageHeader from '../../../components/PageHeader';
 import AddDepartmentForm from './AddDepartmentForm';
 import DepartmentMembersView from './DepartmentMembersView';
+import {
+  ClipboardListIcon,
+  SyncIcon,
+  EditIcon,
+  TrashIcon,
+  XIcon,
+  PlusIcon,
+} from '../../../components/Icons';
 
 export default function DepartmentRole() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add-dept' | 'members-list' | 'remap-logs'
@@ -56,7 +65,7 @@ export default function DepartmentRole() {
           method: 'PATCH',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30), isDoctor: !!r.isDoctor }))
+            roles: roles.map(r => ({ id: r.id, roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), isDoctor: !!r.isDoctor }))
           })
         });
         flash(`Department "${deptName}" updated successfully.`);
@@ -65,7 +74,7 @@ export default function DepartmentRole() {
           method: 'POST',
           body: JSON.stringify({
             name: deptName,
-            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), monthlyBufferMinutes: Number(r.monthlyBufferMinutes ?? 30), isDoctor: !!r.isDoctor }))
+            roles: roles.map(r => ({ roleName: r.roleName, basicSalary: Number(r.basicSalary), weeklyOffCount: Number(r.weeklyOffCount || 4), isDoctor: !!r.isDoctor }))
           })
         });
         flash(`Department "${deptName}" added successfully with ${roles.length} role(s).`);
@@ -178,43 +187,40 @@ export default function DepartmentRole() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Department &amp; Role</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage hospital departments, staff roles, and employee department remappings.
-          </p>
-        </div>
+      <PageHeader
+        category="Staff & Salary"
+        title="Department & Role"
+        subtitle="Manage hospital departments, staff roles, and employee department remappings."
+        actions={
+          <>
+            <button
+              onClick={() => setViewMode('remap-logs')}
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+            >
+              <ClipboardListIcon className="w-3.5 h-3.5 text-gray-600" />
+              <span>Remapping Logs</span>
+            </button>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <button
-            onClick={() => setViewMode('remap-logs')}
-            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
-          >
-            📋 Remapping Logs
-          </button>
+            <button
+              onClick={() => setShowRemapModal(true)}
+              disabled={isLoading || departments.length === 0}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <SyncIcon className="w-3.5 h-3.5 text-white" />
+              <span>Remap Employee</span>
+            </button>
 
-          <button
-            onClick={() => setShowRemapModal(true)}
-            disabled={isLoading || departments.length === 0}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
-          >
-            🔄 Remap Employee
-          </button>
-
-          <button
-            onClick={() => { setEditingDept(null); setViewMode('add-dept'); }}
-            disabled={isLoading}
-            className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
-          >
-            + Add Department
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={() => { setEditingDept(null); setViewMode('add-dept'); }}
+              disabled={isLoading}
+              className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <PlusIcon className="w-3.5 h-3.5 text-white" />
+              <span>Add Department</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Department Cards Grid */}
       {departments.length === 0 ? (
@@ -239,16 +245,16 @@ export default function DepartmentRole() {
                       <button
                         onClick={() => handleEditClick(dept)}
                         title="Edit Department"
-                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer"
+                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
                       >
-                        ✏️
+                        <EditIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteDepartment(dept.id, dept.name)}
                         title="Delete Department"
-                        className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                        className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
                       >
-                        🗑️
+                        <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -391,7 +397,9 @@ function RemapEmployeeModal({ departments, onClose, onSuccess }) {
             <h3 className="text-base font-bold text-gray-900">Remap Employee Department &amp; Role</h3>
             <p className="text-xs text-gray-500">Reassign employee to another department with historical logging</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded-md hover:bg-gray-100 transition-colors">
+            <XIcon className="w-4 h-4" />
+          </button>
         </div>
 
         {errorMsg && (
@@ -566,20 +574,14 @@ function RemappingHistoryView({ onBack }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <button
-            onClick={onBack}
-            className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer mb-1 block"
-          >
-            ← Back to Departments
-          </button>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Employee Department &amp; Role <span className="text-blue-600 font-semibold">Remapping Logs</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Audit log of all department transfers and role reassignments</p>
-        </div>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        parent="Department & Role"
+        title="Remapping Logs"
+        subtitle="Audit log of all department transfers and role reassignments"
+        onBack={onBack}
+        backLabel="Back to Departments"
+      />
 
       {errorMsg && (
         <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl">

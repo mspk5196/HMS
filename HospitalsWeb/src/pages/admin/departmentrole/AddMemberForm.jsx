@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../util/api';
+import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from '../shiftroster/ConfigureShiftTimingModal';
+import {
+  GearIcon,
+  SunIcon,
+  MoonIcon,
+  LockIcon,
+  CalendarIcon,
+} from '../../../components/Icons';
 
 export default function AddMemberForm({ departments, initialDepartment, onBack, onSubmit }) {
   const [selectedDeptId, setSelectedDeptId] = useState(
@@ -34,6 +42,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
     shiftCategory: 'day',
     customShiftStart: '09:00',
     customShiftEnd: '17:00',
+    bufferMinutes: 10,
     // Salary fields
     basicSalary: initialSalary,
     perDaySalary: '',
@@ -238,6 +247,9 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
         : (formData.shiftCategory === 'night'
           ? shiftConfigs.night.end
           : (formData.shiftCategory === 'general' ? formData.customShiftEnd : null)),
+      customBufferMinutes: formData.shiftCategory === 'general'
+        ? (formData.bufferMinutes !== '' && formData.bufferMinutes !== undefined ? Number(formData.bufferMinutes) : 10)
+        : null,
       salary_type: 'monthly',
       basicSalary: calculatedBasic,
       perDaySalary: calculatedPerDay,
@@ -248,23 +260,13 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
 
   return (
     <div className="min-h-full space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
-          title="Go back"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff & Salary &nbsp;&gt;&nbsp; Department & Role &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Add Member</span>
-          </h1>
-        </div>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        parent="Department & Role"
+        title="Add Member"
+        subtitle={`Create and configure a staff member under ${currentDept?.name || 'Department'}`}
+        onBack={onBack}
+      />
 
       {/* Form Card */}
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-6 max-w-2xl">
@@ -425,7 +427,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 onClick={() => setShowTimingModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shadow-2xs"
               >
-                <span>⚙️</span>
+                <GearIcon className="w-3.5 h-3.5" />
                 <span>Configure Shift Timings</span>
               </button>
             </div>
@@ -452,7 +454,8 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 <div className="md:col-span-2 p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-amber-900">☀️ Fixed Day Shift Timing</span>
+                      <SunIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="text-xs font-bold text-amber-900">Fixed Day Shift Timing</span>
                       <span className="px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-amber-200/80 text-amber-800 rounded-md">Fixed (Non-editable)</span>
                     </div>
                     <p className="text-sm font-extrabold text-amber-900 tracking-wide">
@@ -462,7 +465,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                       Standard hospital day shift hours apply to this employee. To adjust global timings, use "Configure Shift Timings" above.
                     </p>
                   </div>
-                  <div className="text-amber-500 text-2xl font-bold pl-3">🔒</div>
+                  <LockIcon className="w-6 h-6 text-amber-500 shrink-0 pl-1" />
                 </div>
               )}
 
@@ -471,7 +474,8 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 <div className="md:col-span-2 p-3.5 bg-purple-50/70 rounded-xl border border-purple-200/80 flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-purple-900">🌙 Fixed Night Shift Timing</span>
+                      <MoonIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span className="text-xs font-bold text-purple-900">Fixed Night Shift Timing</span>
                       <span className="px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-purple-200/80 text-purple-800 rounded-md">Fixed (Non-editable)</span>
                     </div>
                     <p className="text-sm font-extrabold text-purple-900 tracking-wide">
@@ -481,7 +485,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                       Standard hospital night shift hours apply to this employee. To adjust global timings, use "Configure Shift Timings" above.
                     </p>
                   </div>
-                  <div className="text-purple-500 text-2xl font-bold pl-3">🔒</div>
+                  <LockIcon className="w-6 h-6 text-purple-500 shrink-0 pl-1" />
                 </div>
               )}
 
@@ -490,14 +494,15 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 <div className="md:col-span-2 p-3.5 bg-blue-50/70 rounded-xl border border-blue-200/80 flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-blue-900">🗓️ Weekly Duty Roster Scheduled</span>
+                      <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs font-bold text-blue-900">Weekly Duty Roster Scheduled</span>
                       <span className="px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-blue-200/80 text-blue-800 rounded-md">Roster Assigned</span>
                     </div>
                     <p className="text-[11px] text-blue-700 leading-relaxed">
                       Employees on <strong>Day &amp; Night Shift</strong> do not have a fixed single shift timing. Their day/night shifts and working hours are scheduled weekly via the <strong>Weekly Duty Roster</strong>.
                     </p>
                   </div>
-                  <div className="text-blue-500 text-2xl font-bold pl-3">📅</div>
+                  <CalendarIcon className="w-6 h-6 text-blue-500 shrink-0 pl-1" />
                 </div>
               )}
 
@@ -534,9 +539,32 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                     {errors.customShiftEnd && <p className="text-[11px] text-red-500">{errors.customShiftEnd}</p>}
                   </div>
 
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                      Buffer Mins (Grace Period)
+                    </label>
+                    <div className="relative max-w-xs">
+                      <input
+                        type="number"
+                        min="0"
+                        max="60"
+                        value={formData.bufferMinutes ?? 10}
+                        onChange={(e) => handleChange('bufferMinutes', e.target.value)}
+                        placeholder="10"
+                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 pointer-events-none">
+                        mins
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Allowed arrival grace period in minutes before lateness applies.
+                    </p>
+                  </div>
+
                   <div className="md:col-span-2">
                     <p className="text-[11px] text-gray-400">
-                      General shift hours are unique to each employee. Enter this staff member’s working hours.
+                      General shift hours and grace buffer are unique to each employee.
                     </p>
                   </div>
                 </>

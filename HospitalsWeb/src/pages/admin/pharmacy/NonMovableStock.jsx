@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { formatDate } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 
 const WINDOWS = [60, 90, 180, 365];
 
@@ -28,12 +29,11 @@ export default function NonMovableStock() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Non-Movable Stock</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Dead stock — sitting on the shelf with no sales.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Non-Movable Stock"
+        subtitle="Dead stock — sitting on the shelf with no sales."
+      />
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 
       <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">

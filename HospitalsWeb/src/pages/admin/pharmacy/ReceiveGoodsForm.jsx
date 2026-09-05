@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
+import { InfoIcon, LightbulbIcon } from '../../../components/Icons';
 import { todayISO } from './pharmacyUtils';
 
 const emptyItem = { medicine_id: '', purchase_order_item_id: null, batch_number: '', expiry_date: '', qty_received: '', purchase_price: '', selling_price: '' };
@@ -144,9 +145,9 @@ export default function ReceiveGoodsForm({ onCancel, onSubmit }) {
         </div>
 
         <div className="bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
-          <span className="text-emerald-600 font-bold">ℹ️ Note:</span>
+          <InfoIcon className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <span className="text-[11px] leading-relaxed">
-            Enter <strong>Received Qty</strong> in <strong>Strips / Packs</strong> and enter <strong>Purchase &amp; Selling Prices</strong> per <strong>1 Strip / Pack</strong>.
+            <strong>Note:</strong> Enter <strong>Received Qty</strong> in <strong>Strips / Packs</strong> and enter <strong>Purchase &amp; Selling Prices</strong> per <strong>1 Strip / Pack</strong>.
             The system automatically converts stock into individual tablets for patient dispensing.
           </span>
         </div>
@@ -194,7 +195,8 @@ export default function ReceiveGoodsForm({ onCancel, onSubmit }) {
 
                   {med && ratio > 1 && qtyReceived > 0 && (
                     <div className="text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md flex items-center gap-1.5">
-                      <span>💡 1 Strip = {ratio} Tablets</span>
+                      <LightbulbIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>1 Strip = {ratio} Tablets</span>
                       <span>→ Adds <strong>{totalTablets} Tablets</strong> to inventory</span>
                       {unitSell && <span>(Patient rate: <strong>₹{unitSell} / tablet</strong>)</span>}
                     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../util/api';
+import { GearIcon, XIcon, InfoIcon, SunIcon, MoonIcon } from '../../../components/Icons';
 
 export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }) {
   const [dayShift, setDayShift] = useState({
@@ -108,7 +109,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
         <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shadow-xs">
-              ⚙️
+              <GearIcon className="w-4 h-4 text-blue-700" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-gray-900">Configure Shift Timings</h2>
@@ -120,7 +121,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
             onClick={onClose}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
           >
-            ✕
+            <XIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -140,7 +141,8 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
           <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs text-blue-800 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
-              <span>ℹ️ Fixed Shift Notice</span>
+              <InfoIcon className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Fixed Shift Notice</span>
             </div>
             <p className="text-[11px] text-blue-700 leading-relaxed">
               Timings set here apply hospital-wide to all employees assigned to <strong>Day Shift</strong> and <strong>Night Shift</strong>. These hours cannot be altered on individual employee profiles.
@@ -155,7 +157,8 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
               <div className="p-4 rounded-xl border border-amber-200/70 bg-amber-50/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                    <span>☀️ Day Shift Hours</span>
+                    <SunIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Day Shift Hours</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                     Hospital Fixed
@@ -191,7 +194,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
                   <div className="space-y-1 col-span-2 sm:col-span-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Grace (Min)
+                      Buffer / Grace (Min)
                     </label>
                     <input
                       type="number"
@@ -209,7 +212,8 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
               <div className="p-4 rounded-xl border border-indigo-200/70 bg-indigo-50/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
-                    <span>🌙 Night Shift Hours</span>
+                    <MoonIcon className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Night Shift Hours</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                     Hospital Fixed
@@ -245,7 +249,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
                   <div className="space-y-1 col-span-2 sm:col-span-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Grace (Min)
+                      Buffer / Grace (Min)
                     </label>
                     <input
                       type="number"

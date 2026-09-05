@@ -133,59 +133,97 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
  */
 const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmount = 0, month, year, nightRate }) => {
   const monthly = Number(salary.fixed_salary) || 0;
-  const dayRate = round2(monthly / daysInMonth(month, year));
+  const calDays = daysInMonth(month, year);
+  const dayRate = round2(monthly / calDays);
+
+  // Dynamic Basic + DA (default 70%) and HRA (default 30%) from payroll_config
+  const basicPercent = (cfg.BASIC_PERCENT ?? 70) / 100;
+  const hraPercent = (cfg.HRA_PERCENT ?? 30) / 100;
+
+  const basicDa = Number(salary.basic_da_amount) > 0 && Number(salary.hra_amount) > 0
+    ? Number(salary.basic_da_amount)
+    : Math.round(monthly * basicPercent);
+  const hra = Number(salary.hra_amount) > 0
+    ? Number(salary.hra_amount)
+    : (monthly - basicDa);
+
+  const workedDays = Math.max(0, calDays - Number(agg.days_lop || 0));
+  const earnedBasic = Math.round((basicDa / calDays) * workedDays);
+  const earnedHra = Math.round((hra / calDays) * workedDays);
+  const earnedSalary = earnedBasic + earnedHra;
 
   const nightAllowance = nightRate ?? (Number(salary.night_shift_extra_amount) || 0);
   const nightComponent = round2(nightAllowance * agg.night_shifts_worked);
   const extraDayPay = overtimeAmount > 0 ? round2(overtimeAmount) : round2(dayRate * extraDays);
   const unusedWeekOffPay = round2(dayRate * agg.unused_week_offs);
 
-  // Start from the FULL monthly salary — LOP is subtracted below, not layered
-  // on top of a pro-rated figure.
+  // Start from the FULL monthly salary for record, and earned gross for payable
   const grossPay = round2(monthly + nightComponent + extraDayPay + unusedWeekOffPay);
-
-  const lopAmount = round2(dayRate * agg.days_lop);
+  const lopAmount = round2(dayRate * Number(agg.days_lop || 0));
+  const earnedGross = Math.max(0, round2(earnedSalary + nightComponent + extraDayPay + unusedWeekOffPay));
 
   const shiftMinutes = cfg.STANDARD_SHIFT_MINUTES || 480;
   const bufferLateDeduction = round2((agg.buffer_excess_minutes / shiftMinutes) * dayRate);
 
-  // PF on Basic+DA (or 70% base), capped at the statutory ceiling (15,000).
+  // --- PF CALCULATION (Dynamic from payroll_config) ---
+  // PF on Earned Basic+DA (70%), capped at statutory ceiling (15,000)
   const pfCeiling = cfg.PF_WAGE_CEILING ?? 15000;
-  const basicDa = Number(salary.basic_da_amount) || round2(monthly * 0.7);
-  const pfBase = Math.min(basicDa, pfCeiling);
+  const pfWage = salary.pf_applicable ? Math.min(earnedBasic, pfCeiling) : 0;
   const pfEmployee = salary.pf_applicable
-    ? round2(pfBase * ((cfg.PF_EMPLOYEE_PERCENT ?? 12) / 100))
+    ? Math.round(pfWage * ((cfg.PF_EMPLOYEE_PERCENT ?? 12) / 100))
     : 0;
-  // Employer's share splits into EPF + EPS — not a second 12%.
-  const pfEmployer = salary.pf_applicable
-    ? round2(pfBase * (((cfg.PF_EMPLOYER_EPF_PERCENT ?? 3.67) + (cfg.PF_EMPLOYER_EPS_PERCENT ?? 8.33)) / 100))
+  // Employer's share splits into EPF (3.67%) + EPS (8.33% pension)
+  const pfEmployerEps = salary.pf_applicable
+    ? Math.round(pfWage * ((cfg.PF_EMPLOYER_EPS_PERCENT ?? 8.33) / 100))
     : 0;
+  const pfEmployerEpf = salary.pf_applicable
+    ? Math.max(0, pfEmployee - pfEmployerEps)
+    : 0;
+  const pfEmployer = pfEmployerEps + pfEmployerEpf;
 
-  // ESI applies only below the gross ceiling (21,000) and if enrolled.
+  // --- ESI CALCULATION (Dynamic from payroll_config) ---
+  // ESI applies only if enrolled AND fixed monthly gross salary <= ceiling (21,000)
   const esiCeiling = cfg.ESI_GROSS_CEILING ?? 21000;
-  const esiApplies = Boolean(salary.esi_applicable) && grossPay <= esiCeiling;
-  const esiEmployee = esiApplies ? round2(grossPay * ((cfg.ESI_EMPLOYEE_PERCENT ?? 0.75) / 100)) : 0;
-  const esiEmployer = esiApplies ? round2(grossPay * ((cfg.ESI_EMPLOYER_PERCENT ?? 3.25) / 100)) : 0;
+  const esiApplies = Boolean(salary.esi_applicable) && monthly <= esiCeiling;
+  const esiWage = esiApplies ? earnedGross : 0;
+  // ESI uses statutory ROUNDUP (Math.ceil to next integer rupee)
+  const esiEmployee = esiWage > 0
+    ? Math.ceil(esiWage * ((cfg.ESI_EMPLOYEE_PERCENT ?? 0.75) / 100))
+    : 0;
+  const esiEmployer = esiWage > 0
+    ? Math.ceil(esiWage * ((cfg.ESI_EMPLOYER_PERCENT ?? 3.25) / 100))
+    : 0;
 
-  const netPay = round2(
-    grossPay - lopAmount - bufferLateDeduction - finesAmt - pfEmployee - esiEmployee
+  // Net Pay: Earned Gross minus Deductions
+  const netPay = Math.max(
+    0,
+    round2(earnedGross - bufferLateDeduction - finesAmt - pfEmployee - esiEmployee)
   );
 
   return {
     day_rate: dayRate,
     base_salary_component: monthly,
+    basic_da_amount: basicDa,
+    hra_amount: hra,
+    earned_basic: earnedBasic,
+    earned_hra: earnedHra,
     night_shift_component: nightComponent,
     overtime_amount: extraDayPay,
     unused_week_off_amount: unusedWeekOffPay,
     gross_pay: grossPay,
+    earned_gross: earnedGross,
     lop_amount: lopAmount,
     buffer_late_deduction: bufferLateDeduction,
     fines_amount: finesAmt,
+    pf_wage: pfWage,
     pf_employee_amount: pfEmployee,
     pf_employer_amount: pfEmployer,
+    pf_employer_eps_amount: pfEmployerEps,
+    pf_employer_epf_amount: pfEmployerEpf,
+    esi_wage: esiWage,
     esi_employee_amount: esiEmployee,
     esi_employer_amount: esiEmployer,
-    net_pay: Math.max(0, netPay),
+    net_pay: netPay,
   };
 };
 

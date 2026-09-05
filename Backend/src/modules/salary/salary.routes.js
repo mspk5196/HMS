@@ -59,6 +59,7 @@ router.post('/payroll-runs/generate', ctrl.generatePayroll);
 router.post('/payroll-runs/:id/calculate', ctrl.calculateRun);
 router.post('/payroll-runs/:id/lock', ctrl.lockRun);
 router.get('/payroll-runs/:id/items', ctrl.listItems);
+router.get('/payroll-runs/:id/calculation-summary', ctrl.getCalculationSummary);
 router.get('/payroll-runs/:id/export', ctrl.exportPayrollRun);
 router.get('/payroll-runs/:id/payslip/:employeeId', ctrl.getPayslip);
 

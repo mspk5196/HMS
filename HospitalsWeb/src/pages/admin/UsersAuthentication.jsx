@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
+import { XIcon } from '../../components/Icons';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -53,20 +55,19 @@ export default function UsersAuthentication() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Admin &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Users & Authentication</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Give an employee a username and password so they can log in.</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          + Set Login for Employee
-        </button>
-      </div>
+      <PageHeader
+        category="Admin"
+        title="Users & Authentication"
+        subtitle="Give an employee a username and password so they can log in."
+        actions={
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            + Set Login for Employee
+          </button>
+        }
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -201,7 +202,9 @@ function CreateLoginModal({ onClose, onSuccess, onError }) {
       <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <h3 className="text-base font-bold text-gray-900">Set Login for Employee</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100">
+            <XIcon className="w-4 h-4" />
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -282,7 +285,9 @@ function ResetPasswordModal({ user, onClose, onSuccess, onError }) {
       <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-gray-100">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <h3 className="text-base font-bold text-gray-900">Reset Password — {user.username}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100">
+            <XIcon className="w-4 h-4" />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="space-y-1.5">

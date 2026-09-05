@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -77,12 +78,11 @@ export default function Approvals() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Admin &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Approvals</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Requests waiting on your approval.</p>
-      </div>
+      <PageHeader
+        category="Admin"
+        title="Approvals"
+        subtitle="Requests waiting on your approval."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />

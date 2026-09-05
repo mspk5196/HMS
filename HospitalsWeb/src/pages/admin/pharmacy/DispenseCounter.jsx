@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import HospitalReceipt from '../../../components/HospitalReceipt';
+import PageHeader from '../../../components/PageHeader';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, todayISO } from './pharmacyUtils';
 
@@ -158,12 +159,11 @@ export default function DispenseCounter() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Dispense to Patient</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Dispense medicines to a patient. The bill will be added to Collect Payment page for payment collection.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Dispense to Patient"
+        subtitle="Dispense medicines to a patient. The bill will be added to Collect Payment page for payment collection."
+      />
       {errorMsg && <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl">{errorMsg}</div>}
 
       <form onSubmit={handleGenerate} className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-5">

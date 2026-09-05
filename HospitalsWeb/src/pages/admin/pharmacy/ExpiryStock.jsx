@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 
 const WINDOWS = [30, 60, 90, 180];
 
@@ -37,12 +38,11 @@ export default function ExpiryStock() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Expiry Stock</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Batches approaching or past their expiry date.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Expiry Stock"
+        subtitle="Batches approaching or past their expiry date."
+      />
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

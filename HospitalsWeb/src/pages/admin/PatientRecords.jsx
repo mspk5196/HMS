@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 import AdmissionDetailView from './AdmissionDetailView';
 import ConsultationDetailView from './ConsultationDetailView';
 import PharmacyBillDetailView from './PharmacyBillDetailView';
 import HospitalReceipt from '../../components/HospitalReceipt';
+import { ReceiptIcon, DocumentTextIcon, PrintIcon } from '../../components/Icons';
 
 const genderLabel = { male: 'Male', female: 'Female', other: 'Other' };
 
@@ -124,22 +126,19 @@ export default function PatientRecords() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Patient &amp; Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Patient Records</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            One mobile number can belong to a whole family — search by mobile to see everyone linked to it.
-          </p>
-        </div>
-        <button
-          onClick={startAdd}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          + Register New Patient
-        </button>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Patient Records"
+        subtitle="One mobile number can belong to a whole family — search by mobile to see everyone linked to it."
+        actions={
+          <button
+            onClick={startAdd}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            + Register New Patient
+          </button>
+        }
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -319,17 +318,13 @@ function PatientForm({ initial, onBack, onSaved, onError }) {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient &amp; Hospital &nbsp;&gt;&nbsp; Patient Records &nbsp;&gt;&nbsp;{' '}
-          <span className="text-blue-600 font-semibold">{initial ? 'Edit Patient' : 'Register New Patient'}</span>
-        </h1>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        parent="Patient Records"
+        title={initial ? 'Edit Patient' : 'Register New Patient'}
+        subtitle={initial ? `Update details for ${initial.full_name}` : 'Register a new patient profile and assign medical history'}
+        onBack={onBack}
+      />
 
       <form onSubmit={submit} className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -449,16 +444,13 @@ function PatientHistory({ patient, onBack, onError }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient History — <span className="text-blue-600">{patient.full_name}</span>
-        </h1>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        parent="Patient Records"
+        title={`History: ${patient.full_name}`}
+        subtitle={`UHID / ID: #${patient.id} · Mobile: ${patient.mobile_number || '—'}`}
+        onBack={onBack}
+      />
 
       {isLoading || !data ? (
         <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
@@ -501,7 +493,10 @@ function PatientHistory({ patient, onBack, onError }) {
                           })}
                           className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         >
-                          🧾 View Receipt
+                          <span className="flex items-center gap-1">
+                            <ReceiptIcon className="w-3.5 h-3.5" />
+                            <span>View Receipt</span>
+                          </span>
                         </button>
                       ) : a.status === 'payment_pending' ? (
                         <button
@@ -522,7 +517,10 @@ function PatientHistory({ patient, onBack, onError }) {
                           })}
                           className="text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         >
-                          📄 View Bill
+                          <span className="flex items-center gap-1">
+                            <DocumentTextIcon className="w-3.5 h-3.5" />
+                            <span>View Bill</span>
+                          </span>
                         </button>
                       ) : null}
                     </div>
@@ -630,7 +628,10 @@ function PatientHistory({ patient, onBack, onError }) {
                           }}
                           className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         >
-                          🧾 View Receipt
+                          <span className="flex items-center gap-1">
+                            <ReceiptIcon className="w-3.5 h-3.5" />
+                            <span>View Receipt</span>
+                          </span>
                         </button>
                       ) : (
                         <button
@@ -654,7 +655,10 @@ function PatientHistory({ patient, onBack, onError }) {
                           }}
                           className="text-[11px] font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         >
-                          📄 View Bill
+                          <span className="flex items-center gap-1">
+                            <DocumentTextIcon className="w-3.5 h-3.5" />
+                            <span>View Bill</span>
+                          </span>
                         </button>
                       )}
                     </div>
@@ -701,7 +705,10 @@ function PatientHistory({ patient, onBack, onError }) {
                         })}
                         className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                       >
-                        🖨️ Print Receipt
+                        <span className="flex items-center gap-1.5">
+                          <PrintIcon className="w-3.5 h-3.5" />
+                          <span>Print Receipt</span>
+                        </span>
                       </button>
                     </div>
                   </div>

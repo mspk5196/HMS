@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import PageHeader from '../../../components/PageHeader';
+import { CheckIcon } from '../../../components/Icons';
 
 const WEEK_DAYS = [
   { key: 'Mon', label: 'Monday' },
@@ -174,27 +176,13 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
 
   return (
     <div className="min-h-full space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
-          title="Go back"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff & Salary &nbsp;&gt;&nbsp; Shift & Roster &nbsp;&gt;&nbsp;{' '}
-            <span className="text-blue-600 font-semibold">
-              {initialData ? 'Edit Shift Schedule' : 'Assign Department Shift Schedule'}
-            </span>
-          </h1>
-        </div>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        parent="Shift & Roster"
+        title={initialData ? 'Edit Shift Schedule' : 'Assign Shift Schedule'}
+        subtitle="Configure working hours, weekly off patterns, and buffer minutes for department roles."
+        onBack={onBack}
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Department & Target Roles */}
@@ -268,7 +256,7 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
                         <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold ${
                           isChecked ? 'bg-[#1e40af] text-white border-[#1e40af]' : 'border-gray-300 bg-white'
                         }`}>
-                          {isChecked && '✓'}
+                          {isChecked && <CheckIcon className="w-3 h-3 text-white stroke-2" />}
                         </span>
                         {role}
                       </button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
+import { InfoIcon } from '../../../components/Icons';
 import { todayISO } from './pharmacyUtils';
 
 export default function CreatePurchaseOrderForm({ onCancel, onSubmit }) {
@@ -90,9 +91,9 @@ export default function CreatePurchaseOrderForm({ onCancel, onSubmit }) {
         </div>
 
         <div className="bg-blue-50/80 border border-blue-200 text-blue-900 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
-          <span className="text-blue-600 font-bold">ℹ️ Note:</span>
+          <InfoIcon className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <span className="text-[11px] leading-relaxed">
-            Enter <strong>Ordered Qty</strong> in <strong>Strips / Packs</strong> and <strong>Est. Price</strong> per <strong>1 Strip / Pack</strong>.
+            <strong>Note:</strong> Enter <strong>Ordered Qty</strong> in <strong>Strips / Packs</strong> and <strong>Est. Price</strong> per <strong>1 Strip / Pack</strong>.
             Total line cost = Ordered Qty × Est. Pack Price.
           </span>
         </div>

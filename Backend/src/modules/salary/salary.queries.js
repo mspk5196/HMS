@@ -90,10 +90,13 @@ const getEffectiveSalary = async (employeeId, month, year) => {
   const hra = Number(r.hra ?? 0);
   const da = Number(r.da ?? 0);
 
-  // staff_roles.basic_salary is the full monthly figure in this data set; HRA
-  // and DA are held separately and default to 0.
+  // staff_roles.basic_salary is the full monthly figure in this data set;
+  // If HRA and DA are not separately defined, split dynamically as 70% Basic+DA and 30% HRA.
   const fixed = basic + hra + da;
   if (fixed <= 0) return null;
+
+  const basicDa = (hra > 0 || da > 0) ? (basic + da) : Math.round(fixed * 0.7);
+  const calculatedHra = (hra > 0 || da > 0) ? hra : (fixed - basicDa);
 
   const nightAllowance = r.shift_category === 'day_and_night'
     ? Math.max(0, Number(r.per_night_salary || 0) - Number(r.per_day_salary || 0))
@@ -103,8 +106,8 @@ const getEffectiveSalary = async (employeeId, month, year) => {
     source: employeeBasic > 0 ? 'employee' : 'staff_role',
     salary_structure_id: null,
     fixed_salary: fixed,
-    basic_da_amount: basic + da,
-    hra_amount: hra,
+    basic_da_amount: basicDa,
+    hra_amount: calculatedHra,
     night_shift_extra_amount: nightAllowance,
     pf_applicable: Boolean(r.pf_enrolled),
     esi_applicable: Boolean(r.esi_enrolled),
@@ -325,7 +328,8 @@ const clearPayrollItems = async (runId) => {
 const getPayrollItems = async (runId, page = 1, limit = 100) => {
   const offset = (page - 1) * limit;
   const [rows] = await db.query(
-    `SELECT pi.*, e.full_name, e.employee_code,
+    `SELECT pi.*, e.full_name, e.employee_code, e.uan_number, e.esi_number,
+            e.bank_account_no, e.bank_name, e.bank_ifsc,
             d.name AS department_name, COALESCE(sr.name, '') AS designation_name
      FROM payroll_items pi
      JOIN employees e ON e.id = pi.employee_id
@@ -354,9 +358,11 @@ const upsertPayrollItem = async (data) => {
   const {
     payroll_run_id, employee_id, salary_structure_id,
     days_present, days_paid_leave, days_lop, shifts_worked,
-    base_salary_component, night_shift_component, buffer_late_deduction,
+    base_salary_component, earned_basic, earned_hra, night_shift_component, buffer_late_deduction,
     gross_pay, lop_amount, overtime_amount,
-    pf_employee_amount, pf_employer_amount, esi_employee_amount, esi_employer_amount,
+    pf_wage, esi_wage,
+    pf_employee_amount, pf_employer_amount, pf_employer_eps_amount, pf_employer_epf_amount,
+    esi_employee_amount, esi_employer_amount,
     fines_amount, net_pay,
   } = data;
 
@@ -364,11 +370,13 @@ const upsertPayrollItem = async (data) => {
     `INSERT INTO payroll_items
        (payroll_run_id, employee_id, salary_structure_id,
         days_present, days_paid_leave, days_lop, shifts_worked,
-        base_salary_component, night_shift_component, buffer_late_deduction,
+        base_salary_component, earned_basic, earned_hra, night_shift_component, buffer_late_deduction,
         gross_pay, lop_amount, overtime_amount,
-        pf_employee_amount, pf_employer_amount, esi_employee_amount, esi_employer_amount,
+        pf_wage, esi_wage,
+        pf_employee_amount, pf_employer_amount, pf_employer_eps_amount, pf_employer_epf_amount,
+        esi_employee_amount, esi_employer_amount,
         fines_amount, net_pay)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        salary_structure_id = VALUES(salary_structure_id),
        days_present = VALUES(days_present),
@@ -376,22 +384,29 @@ const upsertPayrollItem = async (data) => {
        days_lop = VALUES(days_lop),
        shifts_worked = VALUES(shifts_worked),
        base_salary_component = VALUES(base_salary_component),
+       earned_basic = VALUES(earned_basic),
+       earned_hra = VALUES(earned_hra),
        night_shift_component = VALUES(night_shift_component),
        buffer_late_deduction = VALUES(buffer_late_deduction),
        gross_pay = VALUES(gross_pay),
        lop_amount = VALUES(lop_amount),
        overtime_amount = VALUES(overtime_amount),
+       pf_wage = VALUES(pf_wage),
+       esi_wage = VALUES(esi_wage),
        pf_employee_amount = VALUES(pf_employee_amount),
        pf_employer_amount = VALUES(pf_employer_amount),
+       pf_employer_eps_amount = VALUES(pf_employer_eps_amount),
+       pf_employer_epf_amount = VALUES(pf_employer_epf_amount),
        esi_employee_amount = VALUES(esi_employee_amount),
        esi_employer_amount = VALUES(esi_employer_amount),
        fines_amount = VALUES(fines_amount),
        net_pay = VALUES(net_pay)`,
     [payroll_run_id, employee_id, salary_structure_id ?? null,
      days_present ?? 0, days_paid_leave ?? 0, days_lop ?? 0, shifts_worked ?? 0,
-     base_salary_component ?? 0, night_shift_component ?? 0, buffer_late_deduction ?? 0,
+     base_salary_component ?? 0, earned_basic ?? 0, earned_hra ?? 0, night_shift_component ?? 0, buffer_late_deduction ?? 0,
      gross_pay ?? 0, lop_amount ?? 0, overtime_amount ?? 0,
-     pf_employee_amount ?? 0, pf_employer_amount ?? 0,
+     pf_wage ?? 0, esi_wage ?? 0,
+     pf_employee_amount ?? 0, pf_employer_amount ?? 0, pf_employer_eps_amount ?? 0, pf_employer_epf_amount ?? 0,
      esi_employee_amount ?? 0, esi_employer_amount ?? 0,
      fines_amount ?? 0, net_pay ?? 0]
   );

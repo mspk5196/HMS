@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 const displayDate = (v) => {
@@ -48,14 +49,11 @@ export default function Discharge() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient &amp; Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Discharge</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          The bill is computed from actual room charges and pharmacy bills — beds stay pending clearance until it's fully paid.
-        </p>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Discharge"
+        subtitle="IP discharge summary, doctor approval, room charges, and clearance workflow."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />

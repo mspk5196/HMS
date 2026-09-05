@@ -16,7 +16,8 @@ ALTER TABLE `employees`
   ADD COLUMN IF NOT EXISTS `pan_doc_path`       VARCHAR(500) NULL AFTER `pan_number`,
   ADD COLUMN IF NOT EXISTS `shift_category`     ENUM('day','night','day_and_night','general') NULL AFTER `pan_doc_path`,
   ADD COLUMN IF NOT EXISTS `custom_shift_start` TIME NULL AFTER `shift_category`,
-  ADD COLUMN IF NOT EXISTS `custom_shift_end`   TIME NULL AFTER `custom_shift_start`;
+  ADD COLUMN IF NOT EXISTS `custom_shift_end`   TIME NULL AFTER `custom_shift_start`,
+  ADD COLUMN IF NOT EXISTS `custom_buffer_minutes` SMALLINT UNSIGNED NULL DEFAULT NULL AFTER `custom_shift_end`;
 
 -- ---------------------------------------------------------------------------
 -- 2. New table — per-employee per-day shift time override
@@ -50,10 +51,11 @@ DELETE FROM `roster_entries`;
 ALTER TABLE `roster_entries`
   DROP FOREIGN KEY IF EXISTS `fk_roster_shift`;
 
--- Add time-range columns if not already present
+-- Add time-range and buffer-minute columns if not already present
 ALTER TABLE `roster_entries`
   ADD COLUMN IF NOT EXISTS `custom_start_time` TIME NULL AFTER `notes`,
-  ADD COLUMN IF NOT EXISTS `custom_end_time`   TIME NULL AFTER `custom_start_time`;
+  ADD COLUMN IF NOT EXISTS `custom_end_time`   TIME NULL AFTER `custom_start_time`,
+  ADD COLUMN IF NOT EXISTS `buffer_minutes`    SMALLINT UNSIGNED NULL DEFAULT NULL AFTER `custom_end_time`;
 
 -- shift_id is now purely informational / legacy; make it nullable with no FK
 -- (the column already exists and is nullable per the original schema — no-op)

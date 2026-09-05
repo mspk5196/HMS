@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 import BulkPunchesImportModal, { downloadPunchesExcelTemplate } from './BulkPunchesImportModal';
+import {
+  DownloadIcon,
+  UploadIcon,
+  BoltIcon,
+  PlusIcon,
+  ClockIcon,
+  MapPinIcon,
+  EditIcon,
+  TrashIcon,
+  CheckIcon,
+  XIcon,
+  SearchIcon,
+  BookOpenIcon,
+} from '../../components/Icons';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -95,35 +110,33 @@ export default function Attendance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Attendance</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Daily punches, corrections, the monthly late-buffer pool, and biometric window overrides.
-          </p>
-        </div>
+      <PageHeader
+        category="Staff & Salary"
+        title="Attendance"
+        subtitle="Daily punches, corrections, the monthly late-buffer pool, and biometric window overrides."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={downloadPunchesExcelTemplate}
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Download blank biometric punches Excel template"
+            >
+              <DownloadIcon className="w-4 h-4 text-gray-500" />
+              <span>Punches Template</span>
+            </button>
 
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={downloadPunchesExcelTemplate}
-            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Download blank biometric punches Excel template"
-          >
-            <span>📥 Punches Template</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowPunchesModal(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <span>📤 Bulk Upload Punches</span>
-          </button>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={() => setShowPunchesModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <UploadIcon className="w-4 h-4 text-white" />
+              <span>Bulk Upload Punches</span>
+            </button>
+          </>
+        }
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -291,7 +304,10 @@ function DailyLog({ departments, onError, onSuccess }) {
                 Syncing…
               </>
             ) : (
-              <>⚡ Sync Biometric</>
+              <span className="flex items-center gap-1.5">
+                <BoltIcon className="w-4 h-4 text-white" />
+                <span>Sync Biometric</span>
+              </span>
             )}
           </button>
           <button
@@ -1092,14 +1108,18 @@ function BiometricDevices({ onError, onSuccess }) {
                 Syncing All Devices…
               </>
             ) : (
-              <>⚡ Sync All Active Devices</>
+              <span className="flex items-center gap-1.5">
+                <BoltIcon className="w-4 h-4 text-white" />
+                <span>Sync All Active Devices</span>
+              </span>
             )}
           </button>
           <button
             onClick={handleOpenAdd}
             className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
           >
-            ➕ Add Biometric Device
+            <PlusIcon className="w-4 h-4 text-white" />
+            <span>Add Biometric Device</span>
           </button>
         </div>
       </div>
@@ -1111,16 +1131,19 @@ function BiometricDevices({ onError, onSuccess }) {
         </div>
       ) : devices.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200/80 p-8 text-center space-y-3">
-          <div className="text-3xl">📟</div>
+          <div className="flex justify-center">
+            <ClockIcon className="w-10 h-10 text-gray-300" />
+          </div>
           <div className="text-xs font-bold text-gray-900">No Biometric Devices Configured</div>
           <p className="text-xs text-gray-500 max-w-md mx-auto">
             Add your local eSSL biometric device's IP address (e.g. 192.168.1.201) to automatically download attendance punches.
           </p>
           <button
             onClick={handleOpenAdd}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
           >
-            ➕ Configure First eSSL Device
+            <PlusIcon className="w-4 h-4 text-white" />
+            <span>Configure First eSSL Device</span>
           </button>
         </div>
       ) : (
@@ -1152,7 +1175,10 @@ function BiometricDevices({ onError, onSuccess }) {
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 font-medium flex items-center gap-1.5">
-                      <span>📍 {dev.location || 'Main Hospital Entrance'}</span>
+                      <span className="flex items-center gap-1">
+                        <MapPinIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <span>{dev.location || 'Main Hospital Entrance'}</span>
+                      </span>
                       <span>·</span>
                       <span className="capitalize">{dev.device_type.replace(/_/g, ' ')}</span>
                     </div>
@@ -1163,14 +1189,14 @@ function BiometricDevices({ onError, onSuccess }) {
                       className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
                       title="Edit Device"
                     >
-                      ✏️
+                      <EditIcon className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(dev.id, dev.name)}
                       className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
                       title="Remove Device"
                     >
-                      🗑️
+                      <TrashIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1216,7 +1242,19 @@ function BiometricDevices({ onError, onSuccess }) {
                       res.online ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
                     }`}
                   >
-                    {res.online ? `✓ Device Online · Connected on port ${dev.port || 4370}` : `✕ ${res.error}`}
+                    <span className="flex items-center gap-1.5">
+                      {res.online ? (
+                        <>
+                          <CheckIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Device Online · Connected on port {dev.port || 4370}</span>
+                        </>
+                      ) : (
+                        <>
+                          <XIcon className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                          <span>{res.error}</span>
+                        </>
+                      )}
+                    </span>
                   </div>
                 )}
 
@@ -1236,15 +1274,23 @@ function BiometricDevices({ onError, onSuccess }) {
                         Downloading Punches…
                       </>
                     ) : (
-                      <>⚡ Sync Punches Now</>
+                      <>
+                        <BoltIcon className="w-4 h-4 text-white" />
+                        <span>Sync Punches Now</span>
+                      </>
                     )}
                   </button>
                   <button
                     onClick={() => handleTestConnection(dev.id)}
                     disabled={isTestingThis || isSyncingThis}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    {isTestingThis ? 'Testing…' : '🔍 Test Connection'}
+                    {isTestingThis ? 'Testing…' : (
+                      <>
+                        <SearchIcon className="w-3.5 h-3.5" />
+                        <span>Test Connection</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1256,7 +1302,8 @@ function BiometricDevices({ onError, onSuccess }) {
       {/* Help & Setup Guide Card */}
       <div className="bg-blue-50/60 rounded-xl border border-blue-100 p-5 space-y-3 text-xs text-blue-900">
         <h3 className="font-bold text-blue-950 flex items-center gap-2 text-sm">
-          <span>📖</span> How to Connect your Local eSSL Device
+          <BookOpenIcon className="w-4 h-4 text-blue-900" />
+          <span>How to Connect your Local eSSL Device</span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
           <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
@@ -1288,8 +1335,8 @@ function BiometricDevices({ onError, onSuccess }) {
               <h3 className="font-bold text-sm">
                 {editingDevice ? `Edit Device: ${editingDevice.name}` : 'Add Local eSSL Biometric Device'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-xs font-bold">
-                ✕
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors">
+                <XIcon className="w-4 h-4" />
               </button>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">

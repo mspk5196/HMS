@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { BoltIcon, CheckIcon } from '../../../components/Icons';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -259,7 +260,11 @@ export default function RolePermissions() {
 
       <div className="flex items-center gap-4 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-600 rounded-sm inline-block" /> Permission — role can perform this action</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-400 rounded-sm inline-block" /> ⚡ Skip Approval — bypasses approval workflow for this action</span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 bg-amber-400 rounded-sm inline-block" />
+          <BoltIcon className="w-3.5 h-3.5 text-amber-500" />
+          <span>Skip Approval — bypasses approval workflow for this action</span>
+        </span>
       </div>
 
       {selectedIds.length > 0 && (
@@ -267,7 +272,13 @@ export default function RolePermissions() {
           onClick={selectAllSkipApproval}
           className="w-full text-left bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors"
         >
-          <span className="font-bold">{allSkipChecked ? '☑' : '☐'} ⚡ Select All — Skip Approval for every action</span>
+          <span className="font-bold flex items-center gap-2">
+            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${allSkipChecked ? 'bg-amber-500 border-amber-500 text-white' : 'border-amber-400 bg-white'}`}>
+              {allSkipChecked && <CheckIcon className="w-3 h-3 text-white" />}
+            </span>
+            <BoltIcon className="w-3.5 h-3.5 text-amber-500" />
+            <span>Select All — Skip Approval for every action</span>
+          </span>
           <div className="text-[11px] mt-0.5">When fully checked, the selected role(s) bypass all approval workflows globally regardless of what is configured.</div>
         </button>
       )}
@@ -305,9 +316,10 @@ export default function RolePermissions() {
                                   {STANDARD_LABELS[a.action_code]}
                                 </label>
                                 {granted && (
-                                  <label className="flex items-center gap-1.5 text-[10px] text-amber-700 cursor-pointer whitespace-nowrap">
+                                  <label className="flex items-center gap-1 text-[10px] text-amber-700 cursor-pointer whitespace-nowrap">
                                     <input type="checkbox" checked={!!matrix[a.code]?.skip_approval} onChange={() => toggleSkip(a.code)} className="w-3 h-3 accent-amber-500" />
-                                    ⚡ Skip
+                                    <BoltIcon className="w-3 h-3 text-amber-500 shrink-0" />
+                                    <span>Skip</span>
                                   </label>
                                 )}
                               </div>
@@ -333,7 +345,8 @@ export default function RolePermissions() {
                                 {granted && (
                                   <label className="text-[9px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer flex items-center gap-1 whitespace-nowrap bg-amber-50 border-amber-200 text-amber-700">
                                     <input type="checkbox" checked={!!matrix[a.code]?.skip_approval} onChange={() => toggleSkip(a.code)} className="w-2.5 h-2.5 accent-amber-500" />
-                                    ⚡ Skip
+                                    <BoltIcon className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                    <span>Skip</span>
                                   </label>
                                 )}
                               </div>

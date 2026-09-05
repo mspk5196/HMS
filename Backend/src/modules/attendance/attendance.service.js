@@ -56,18 +56,70 @@ const withinWindow = (minute, start, end) => {
     : minute >= start || minute <= end; // wraps midnight
 };
 
-const DEFAULT_SHIFT = {
+/** 'HH:MM[:SS]' shifted by deltaMinutes → 'HH:MM:SS' */
+const adjustTimeMinutes = (timeStr, deltaMinutes) => {
+  if (!timeStr) return null;
+  const mins = timeToMinutes(timeStr);
+  if (mins === null) return null;
+  const adjusted = (mins + deltaMinutes + 1440 * 10) % 1440;
+  const h = String(Math.floor(adjusted / 60)).padStart(2, '0');
+  const m = String(adjusted % 60).padStart(2, '0');
+  return `${h}:${m}:00`;
+};
+
+const buildResolvedShift = ({
+  shift_id = null,
+  shift_name = 'Default',
+  start_time = '08:00:00',
+  end_time = '18:00:00',
+  is_night_shift = 0,
+  grace_period_minutes = 10,
+  is_week_off = 0,
+  is_holiday = 0,
+}) => {
+  if (is_week_off || is_holiday) {
+    return {
+      shift_id: null,
+      shift_name,
+      start_time: null,
+      end_time: null,
+      is_night_shift: 0,
+      grace_period_minutes: 0,
+      biometric_in_start: null,
+      biometric_in_end: null,
+      biometric_out_start: null,
+      biometric_out_end: null,
+      is_week_off: is_week_off ? 1 : 0,
+      is_holiday: is_holiday ? 1 : 0,
+    };
+  }
+  const sTime = start_time.length === 5 ? `${start_time}:00` : start_time;
+  const eTime = end_time.length === 5 ? `${end_time}:00` : end_time;
+
+  return {
+    shift_id,
+    shift_name,
+    start_time: sTime,
+    end_time: eTime,
+    is_night_shift: is_night_shift ? 1 : 0,
+    grace_period_minutes: Number(grace_period_minutes) || 0,
+    biometric_in_start: adjustTimeMinutes(sTime, -60),
+    biometric_in_end: sTime,
+    biometric_out_start: eTime,
+    biometric_out_end: adjustTimeMinutes(eTime, 60),
+    is_week_off: 0,
+    is_holiday: 0,
+  };
+};
+
+const DEFAULT_SHIFT = buildResolvedShift({
   shift_id: null,
   shift_name: 'Default (unrostered)',
-  start_time: '09:00:00',
-  end_time: '17:00:00',
+  start_time: '08:00:00',
+  end_time: '18:00:00',
   is_night_shift: 0,
-  grace_period_minutes: 0,
-  biometric_in_start: '07:00:00',
-  biometric_in_end: '09:00:00',
-  biometric_out_start: '17:00:00',
-  biometric_out_end: '19:00:00',
-};
+  grace_period_minutes: 10,
+});
 
 /* ─────────────────────────────────────────────
    SHIFT RESOLUTION
@@ -75,12 +127,13 @@ const DEFAULT_SHIFT = {
 
 /**
  * Which shift does this employee work on this date?
- * Priority order (new shift model v9):
+ * Priority order:
  *   1. employee_shift_overrides — per-day override for any category
- *   2. roster_entries — Day & Night duty roster (custom_start_time/end_time)
- *   3. employees.custom_shift_start/end — General / individually-timed Day or Night
- *   4. Category default: Day = 09:00–17:00, Night = 20:00–08:00
- *   5. Hard fallback 09:00–17:00 (unrostered / no category set)
+ *   2. roster_entries — Day & Night duty roster (custom_start_time/end_time + buffer_minutes)
+ *   3. employees category:
+ *      - day / night: configured hospital-wide in shifts table (with grace_period_minutes)
+ *      - general: individually configured per employee (custom_shift_start/end + custom_buffer_minutes)
+ *   4. Hard fallback 08:00–18:00
  */
 const getShiftForDate = async (employeeId, date) => {
   // Priority 1 — single-day override
@@ -92,19 +145,18 @@ const getShiftForDate = async (employeeId, date) => {
   if (overrideRows.length) {
     const ov = overrideRows[0];
     const isNight = ov.start_time >= '18:00:00' || ov.end_time <= '09:00:00';
-    return {
-      ...DEFAULT_SHIFT,
+    return buildResolvedShift({
       shift_name: 'Override',
       start_time: ov.start_time,
       end_time: ov.end_time,
       is_night_shift: isNight ? 1 : 0,
-      is_week_off: 0, is_holiday: 0,
-    };
+      grace_period_minutes: 10,
+    });
   }
 
   // Priority 2 — Day & Night duty roster (custom time ranges in roster_entries)
   const [rosterRows] = await db.execute(
-    `SELECT re.custom_start_time, re.custom_end_time, re.is_week_off, re.is_holiday
+    `SELECT re.custom_start_time, re.custom_end_time, re.buffer_minutes, re.is_week_off, re.is_holiday
      FROM roster_entries re
      WHERE re.employee_id = ? AND re.roster_date = ? LIMIT 1`,
     [employeeId, date]
@@ -112,24 +164,35 @@ const getShiftForDate = async (employeeId, date) => {
   if (rosterRows.length) {
     const re = rosterRows[0];
     if (re.is_week_off || re.is_holiday) {
-      return { ...DEFAULT_SHIFT, is_week_off: re.is_week_off, is_holiday: re.is_holiday, shift_id: null };
+      return buildResolvedShift({
+        shift_name: re.is_holiday ? 'Holiday' : 'Week Off',
+        is_week_off: re.is_week_off,
+        is_holiday: re.is_holiday,
+      });
     }
     if (re.custom_start_time && re.custom_end_time) {
       const isNight = re.custom_start_time >= '18:00:00';
-      return {
-        ...DEFAULT_SHIFT,
+      let grace = re.buffer_minutes;
+      if (grace === null || grace === undefined) {
+        const [sRows] = await db.execute(
+          `SELECT grace_period_minutes FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
+          [isNight ? 1 : 0]
+        );
+        grace = sRows[0]?.grace_period_minutes ?? 10;
+      }
+      return buildResolvedShift({
         shift_name: 'Roster',
         start_time: re.custom_start_time,
         end_time: re.custom_end_time,
         is_night_shift: isNight ? 1 : 0,
-        is_week_off: 0, is_holiday: 0,
-      };
+        grace_period_minutes: grace,
+      });
     }
   }
 
   // Priority 3 — category resolution
   const [empRows] = await db.execute(
-    `SELECT shift_category, custom_shift_start, custom_shift_end FROM employees WHERE id = ? LIMIT 1`,
+    `SELECT shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes FROM employees WHERE id = ? LIMIT 1`,
     [employeeId]
   );
   if (empRows.length) {
@@ -139,40 +202,60 @@ const getShiftForDate = async (employeeId, date) => {
     if (emp.shift_category === 'day' || emp.shift_category === 'night') {
       const isNight = emp.shift_category === 'night';
       const [shiftRows] = await db.execute(
-        `SELECT start_time, end_time FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
+        `SELECT id, name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
         [isNight ? 1 : 0]
       );
       const configured = shiftRows[0];
-      const start = configured?.start_time || (isNight ? '20:00:00' : '09:00:00');
-      const end = configured?.end_time || (isNight ? '08:00:00' : '17:00:00');
-      return {
-        ...DEFAULT_SHIFT,
-        shift_name: isNight ? 'Night' : 'Day',
+      const start = configured?.start_time || (isNight ? '18:00:00' : '08:00:00');
+      const end = configured?.end_time || (isNight ? '08:00:00' : '18:00:00');
+      const grace = configured?.grace_period_minutes ?? 10;
+      return buildResolvedShift({
+        shift_id: configured?.id ?? null,
+        shift_name: configured?.name || (isNight ? 'Night Shift' : 'Day Shift'),
         start_time: start,
         end_time: end,
         is_night_shift: isNight ? 1 : 0,
-        is_week_off: 0,
-        is_holiday: 0,
-      };
+        grace_period_minutes: grace,
+      });
     }
 
-    // Day & Night and General shifts use custom timing
+    // General shift: configured for each employee (individual timing and buffer)
+    if (emp.shift_category === 'general') {
+      const start = emp.custom_shift_start || '09:00:00';
+      const end = emp.custom_shift_end || '17:00:00';
+      const isNight = start >= '18:00:00';
+      const grace = emp.custom_buffer_minutes ?? 10;
+      return buildResolvedShift({
+        shift_name: 'General Shift',
+        start_time: start,
+        end_time: end,
+        is_night_shift: isNight ? 1 : 0,
+        grace_period_minutes: grace,
+      });
+    }
+
+    // Fallback custom timing
     if (emp.custom_shift_start && emp.custom_shift_end) {
       const isNight = emp.custom_shift_start >= '18:00:00';
-      return {
-        ...DEFAULT_SHIFT,
+      const grace = emp.custom_buffer_minutes ?? 10;
+      return buildResolvedShift({
         shift_name: emp.shift_category ?? 'Custom',
         start_time: emp.custom_shift_start,
         end_time: emp.custom_shift_end,
         is_night_shift: isNight ? 1 : 0,
-        is_week_off: 0,
-        is_holiday: 0,
-      };
+        grace_period_minutes: grace,
+      });
     }
   }
 
-  // Priority 5 — hard fallback
-  return { ...DEFAULT_SHIFT, is_week_off: 0, is_holiday: 0 };
+  // Priority 4 — hard fallback
+  return buildResolvedShift({
+    shift_name: 'Default (unrostered)',
+    start_time: '08:00:00',
+    end_time: '18:00:00',
+    is_night_shift: 0,
+    grace_period_minutes: 10,
+  });
 };
 
 
@@ -297,7 +380,10 @@ const processDailyAttendance = async (date) => {
     // Lateness is measured against the shift start, after the daily grace.
     let lateMinutes = 0;
     if (firstIn && shift.start_time) {
-      const rawLate = dateToMinutes(firstIn) - timeToMinutes(shift.start_time);
+      let rawLate = dateToMinutes(firstIn) - timeToMinutes(shift.start_time);
+      if (shift.is_night_shift && rawLate < -360) {
+        rawLate += 1440;
+      }
       lateMinutes = Math.max(0, rawLate - (shift.grace_period_minutes ?? 0));
     }
 
@@ -308,7 +394,11 @@ const processDailyAttendance = async (date) => {
 
     let earlyLeaveMinutes = 0;
     if (lastOut && shift.end_time) {
-      earlyLeaveMinutes = Math.max(0, timeToMinutes(shift.end_time) - dateToMinutes(lastOut));
+      let rawEarly = timeToMinutes(shift.end_time) - dateToMinutes(lastOut);
+      if (shift.is_night_shift && rawEarly < -360) {
+        rawEarly += 1440;
+      }
+      earlyLeaveMinutes = Math.max(0, rawEarly);
     }
 
     const status = lateMinutes > 0 ? 'late_present' : 'present';
@@ -580,6 +670,7 @@ module.exports = {
   addManualPunch,
   getEmployeeBuffer,
   getShiftForDate,
+  classifyPunches,
   listDailySummaries: q.listDailySummaries,
   getDailySummary: q.getDailySummary,
   listBiometricWindows: q.listBiometricWindows,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const currentYear = () => new Date().getFullYear();
@@ -81,14 +82,11 @@ export default function Leave() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Leave</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Applications, the two-step approval chain, balances, and holidays.
-        </p>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        title="Leave"
+        subtitle="Applications, the two-step approval chain, balances, and holidays."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />

@@ -3,6 +3,7 @@ import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import { apiFetch } from '../../../util/api';
 import { formatDate, todayISO } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 
 const SUB_TABS = [
   { id: 'daily', label: 'Daily Movements' },
@@ -23,12 +24,11 @@ export default function StockMovements() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Movements</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Daily, drug-wise and patient-wise stock movement history.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Movements"
+        subtitle="Daily, drug-wise and patient-wise stock movement history."
+      />
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
       <div className="bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm flex gap-1 w-fit">
         {SUB_TABS.map((t) => (

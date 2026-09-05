@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import HospitalReceipt from '../../components/HospitalReceipt';
+import PageHeader from '../../components/PageHeader';
+import { CheckCircleIcon, CheckIcon } from '../../components/Icons';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -96,14 +98,11 @@ export default function CollectPayment() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient & Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Collect Payment</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          All OPD visits, IPD discharges, and Pharmacy bills pending payment are listed here.
-        </p>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Collect Payment"
+        subtitle="All OPD visits, IPD discharges, and Pharmacy bills pending payment are listed here."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -178,7 +177,9 @@ function OPDList({ rows, isLoading, onPay }) {
         <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="p-10 text-center text-xs text-gray-500">
-          <div className="text-2xl mb-2">✅</div>
+          <div className="flex justify-center mb-2">
+            <CheckCircleIcon className="w-8 h-8 text-emerald-500" />
+          </div>
           No OPD payments pending.
         </div>
       ) : (
@@ -229,7 +230,9 @@ function IPDList({ rows, isLoading, onPay }) {
         <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="p-10 text-center text-xs text-gray-500">
-          <div className="text-2xl mb-2">✅</div>
+          <div className="flex justify-center mb-2">
+            <CheckCircleIcon className="w-8 h-8 text-emerald-500" />
+          </div>
           No IPD payments pending.
         </div>
       ) : (
@@ -292,7 +295,9 @@ function PharmacyList({ rows, isLoading, onPay }) {
         <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="p-10 text-center text-xs text-gray-500">
-          <div className="text-2xl mb-2">✅</div>
+          <div className="flex justify-center mb-2">
+            <CheckCircleIcon className="w-8 h-8 text-emerald-500" />
+          </div>
           No pharmacy payments pending.
         </div>
       ) : (
@@ -499,9 +504,14 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
           <button
             type="submit"
             disabled={isBusy}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
+            className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
           >
-            {isBusy ? 'Recording…' : '✓ Confirm Payment'}
+            {isBusy ? 'Recording…' : (
+              <>
+                <CheckIcon className="w-4 h-4 text-white" />
+                <span>Confirm Payment</span>
+              </>
+            )}
           </button>
           <button
             type="button"

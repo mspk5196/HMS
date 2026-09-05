@@ -96,6 +96,11 @@ const validateRows = async (rows, { weekStart } = {}) => {
     const isWeekOff = !!r.is_week_off;
     const customStart = isWeekOff ? null : (r.custom_start_time ?? null);
     const customEnd   = isWeekOff ? null : (r.custom_end_time ?? null);
+    const bufferMinutes = isWeekOff ? null : (
+      r.buffer_minutes !== undefined && r.buffer_minutes !== null && r.buffer_minutes !== ''
+        ? Math.max(0, Math.min(120, Number(r.buffer_minutes) || 0))
+        : 10
+    );
 
     // A worked cell requires both time fields
     if (!isWeekOff && !r.is_holiday) {
@@ -109,6 +114,7 @@ const validateRows = async (rows, { weekStart } = {}) => {
       roster_date: rosterDate,
       custom_start_time: customStart,
       custom_end_time: customEnd,
+      buffer_minutes: bufferMinutes,
       is_week_off: isWeekOff,
       is_holiday: !!r.is_holiday,
       notes: r.notes ?? null,

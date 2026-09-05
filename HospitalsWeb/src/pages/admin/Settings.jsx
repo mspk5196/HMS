@@ -3,6 +3,7 @@ import RolePermissions from './settings/RolePermissions';
 import ApprovalWorkflows from './settings/ApprovalWorkflows';
 import SettingsAccess from './settings/SettingsAccess';
 import HospitalProfile from './settings/HospitalProfile';
+import PageHeader from '../../components/PageHeader';
 
 const TABS = [
   { id: 'role-permissions', label: 'Role Permissions' },
@@ -16,10 +17,11 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">Settings</h1>
-        <p className="text-xs text-gray-500 mt-0.5">School configuration and administration</p>
-      </div>
+      <PageHeader
+        category="Admin"
+        title="Settings"
+        subtitle="Hospital configuration, role permissions, approval workflows, and hospital profile."
+      />
 
       <div className="border-b border-gray-200 flex gap-6">
         {TABS.map((t) => (

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import DoctorPicker from '../../components/DoctorPicker';
 import MedicineSearchSelect from '../../components/MedicineSearchSelect';
+import PageHeader from '../../components/PageHeader';
+import { XIcon } from '../../components/Icons';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -82,14 +84,11 @@ export default function AdmissionBeds() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Patient &amp; Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Admission &amp; Beds</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Building → Floor → Ward → Room → Bed, fully admin-editable.</p>
-        </div>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Admission & Beds"
+        subtitle="Building → Floor → Ward → Room → Bed, fully admin-editable."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -297,7 +296,9 @@ function InpatientPrescribeModal({ admission, onClose, onSuccess, onError }) {
               Admission for <span className="font-semibold text-blue-600">{admission.patient_name}</span> (Logged &amp; billed at discharge)
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100">
+            <XIcon className="w-4 h-4" />
+          </button>
         </div>
 
         {modalErr && (
@@ -334,9 +335,9 @@ function InpatientPrescribeModal({ admission, onClose, onSuccess, onError }) {
                   <button
                     type="button"
                     onClick={() => removeLine(idx)}
-                    className="text-rose-500 hover:text-rose-700 font-bold px-1 cursor-pointer"
+                    className="text-rose-500 hover:text-rose-700 font-bold p-1 cursor-pointer hover:bg-rose-50 rounded"
                   >
-                    ✕
+                    <XIcon className="w-4 h-4" />
                   </button>
                 )}
               </div>

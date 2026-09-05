@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../util/api';
+import { CheckIcon, DocumentTextIcon, XIcon } from './Icons';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -111,12 +112,18 @@ export default function HospitalReceipt({ type, data, onClose }) {
           <div className="flex items-center gap-2">
             {isPaid ? (
               <>
-                <span className="text-emerald-400 font-bold text-sm">✓ Payment Completed</span>
+                <span className="text-emerald-400 font-bold text-sm flex items-center gap-1.5">
+                  <CheckIcon className="w-4 h-4" />
+                  <span>Payment Completed</span>
+                </span>
                 <span className="text-gray-400 text-xs">| {receiptNo}</span>
               </>
             ) : (
               <>
-                <span className="text-amber-400 font-bold text-sm">📄 Payment Pending / Bill</span>
+                <span className="text-amber-400 font-bold text-sm flex items-center gap-1.5">
+                  <DocumentTextIcon className="w-4 h-4" />
+                  <span>Payment Pending / Bill</span>
+                </span>
                 <span className="text-gray-400 text-xs">| {billNo}</span>
               </>
             )}
@@ -134,9 +141,10 @@ export default function HospitalReceipt({ type, data, onClose }) {
             {onClose && (
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer"
+                className="text-gray-400 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer flex items-center gap-1"
               >
-                Close ✕
+                <span>Close</span>
+                <XIcon className="w-3.5 h-3.5" />
               </button>
             )}
           </div>

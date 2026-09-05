@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
+import { XIcon, AlertTriangleIcon } from '../../../components/Icons';
 
 export default function MedicineCategories() {
   const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'form-factors'
@@ -147,17 +149,12 @@ export default function MedicineCategories() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Categories &amp; Form Factors</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage medicine categories and physical form factors (Tablet, Syrup, Injection, etc.) for medicine stock.
-          </p>
-        </div>
-        <div>
-          {activeTab === 'categories' ? (
+      <PageHeader
+        category="Pharmacy"
+        title="Categories & Form Factors"
+        subtitle="Manage medicine categories and physical form factors (Tablet, Syrup, Injection, etc.) for medicine stock."
+        actions={
+          activeTab === 'categories' ? (
             <button
               onClick={() => { setEditingCat(null); setCatName(''); setShowCatModal(true); }}
               className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
@@ -171,9 +168,9 @@ export default function MedicineCategories() {
             >
               + Add Form Factor
             </button>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
@@ -308,7 +305,9 @@ export default function MedicineCategories() {
               <h3 className="text-base font-bold text-gray-900">
                 {editingCat ? 'Edit Category' : 'Add New Category'}
               </h3>
-              <button onClick={() => { setShowCatModal(false); setEditingCat(null); setCatName(''); }} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+              <button onClick={() => { setShowCatModal(false); setEditingCat(null); setCatName(''); }} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100">
+                <XIcon className="w-4 h-4" />
+              </button>
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
@@ -343,8 +342,11 @@ export default function MedicineCategories() {
               Are you sure you want to delete the category <span className="font-bold text-gray-900">"{deletingCat.name}"</span>?
             </p>
             {deletingCat.medicine_count > 0 && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] p-2.5 rounded-lg">
-                ⚠️ This category currently has <span className="font-bold">{deletingCat.medicine_count}</span> active medicine(s) assigned. You must reassign or remove those medicines before deleting this category.
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] p-2.5 rounded-lg flex items-start gap-1.5">
+                <AlertTriangleIcon className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  This category currently has <span className="font-bold">{deletingCat.medicine_count}</span> active medicine(s) assigned. You must reassign or remove those medicines before deleting this category.
+                </span>
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
@@ -365,7 +367,9 @@ export default function MedicineCategories() {
               <h3 className="text-base font-bold text-gray-900">
                 {editingFf ? 'Edit Form Factor' : 'Add New Form Factor'}
               </h3>
-              <button onClick={() => { setShowFfModal(false); setEditingFf(null); setFfName(''); }} className="text-gray-400 hover:text-gray-600 cursor-pointer">✕</button>
+              <button onClick={() => { setShowFfModal(false); setEditingFf(null); setFfName(''); }} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100">
+                <XIcon className="w-4 h-4" />
+              </button>
             </div>
             <form onSubmit={handleSaveFormFactor} className="space-y-4">
               <div>

@@ -21,8 +21,9 @@ const listEmployeesWithoutLogin = async (search) => {
   const params = [];
   let where = 'WHERE u.id IS NULL';
   if (search) {
-    where += ' AND (e.full_name LIKE ? OR e.employee_code LIKE ?)';
-    params.push(`%${search}%`, `%${search}%`);
+    const term = `%${search.toLowerCase().trim()}%`;
+    where += ' AND (LOWER(e.full_name) LIKE ? OR LOWER(e.employee_code) LIKE ?)';
+    params.push(term, term);
   }
   const [rows] = await db.query(
     `SELECT e.id, e.full_name, e.employee_code, d.name AS department_name, sr.name AS designation_name

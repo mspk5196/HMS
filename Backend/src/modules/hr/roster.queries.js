@@ -12,7 +12,7 @@ const db = require('../../config/db');
 const ROSTER_SELECT = `
   SELECT re.id, re.employee_id, re.roster_date,
          re.is_week_off, re.is_holiday, re.is_manual_override, re.notes,
-         re.custom_start_time, re.custom_end_time,
+         re.custom_start_time, re.custom_end_time, re.buffer_minutes,
          e.full_name, e.employee_code,
          d.name AS department_name, sr.name AS role_name
   FROM roster_entries re
@@ -124,21 +124,22 @@ const getRosterEntry = async (employeeId, rosterDate) => {
 const UPSERT_SQL = `
   INSERT INTO roster_entries
     (employee_id, roster_date, is_week_off, is_holiday, is_manual_override, notes,
-     custom_start_time, custom_end_time, created_by)
-  VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+     custom_start_time, custom_end_time, buffer_minutes, created_by)
+  VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
   ON DUPLICATE KEY UPDATE
     is_week_off        = VALUES(is_week_off),
     is_holiday         = VALUES(is_holiday),
     is_manual_override = 1,
     notes              = VALUES(notes),
     custom_start_time  = VALUES(custom_start_time),
-    custom_end_time    = VALUES(custom_end_time)
+    custom_end_time    = VALUES(custom_end_time),
+    buffer_minutes     = VALUES(buffer_minutes)
 `;
 
 /** Upsert one cell. A week-off has no time range; a worked day requires start+end. */
 const upsertEmployeeShift = async ({
   employee_id, roster_date, is_week_off, is_holiday, notes,
-  custom_start_time, custom_end_time, created_by,
+  custom_start_time, custom_end_time, buffer_minutes, created_by,
 }) => {
   const weekOff = is_week_off ? 1 : 0;
   await db.execute(UPSERT_SQL, [
@@ -149,13 +150,14 @@ const upsertEmployeeShift = async ({
     notes ?? null,
     weekOff ? null : (custom_start_time ?? null),
     weekOff ? null : (custom_end_time ?? null),
+    weekOff ? null : (buffer_minutes !== undefined && buffer_minutes !== null ? Number(buffer_minutes) : 10),
     created_by ?? null,
   ]);
 };
 
 /**
  * Upsert many cells in one transaction.
- * rows: [{ employee_id, roster_date, is_week_off, is_holiday, notes, custom_start_time, custom_end_time }]
+ * rows: [{ employee_id, roster_date, is_week_off, is_holiday, notes, custom_start_time, custom_end_time, buffer_minutes }]
  */
 const bulkUpsertShifts = async (rows, createdBy = null) => {
   if (!rows.length) return 0;
@@ -172,6 +174,7 @@ const bulkUpsertShifts = async (rows, createdBy = null) => {
         r.notes ?? null,
         weekOff ? null : (r.custom_start_time ?? null),
         weekOff ? null : (r.custom_end_time ?? null),
+        weekOff ? null : (r.buffer_minutes !== undefined && r.buffer_minutes !== null ? Number(r.buffer_minutes) : 10),
         createdBy,
       ]);
     }
@@ -193,11 +196,11 @@ const swapRosterEntries = async (employeeA, employeeB, rosterDate, createdBy = n
 
     const readCell = async (employeeId) => {
       const [rows] = await conn.execute(
-        `SELECT is_week_off, is_holiday, custom_start_time, custom_end_time FROM roster_entries
+        `SELECT is_week_off, is_holiday, custom_start_time, custom_end_time, buffer_minutes FROM roster_entries
          WHERE employee_id = ? AND roster_date = ?`,
         [employeeId, rosterDate]
       );
-      return rows[0] ?? { is_week_off: 0, is_holiday: 0, custom_start_time: null, custom_end_time: null };
+      return rows[0] ?? { is_week_off: 0, is_holiday: 0, custom_start_time: null, custom_end_time: null, buffer_minutes: null };
     };
 
     const rowA = await readCell(employeeA);
@@ -205,11 +208,11 @@ const swapRosterEntries = async (employeeA, employeeB, rosterDate, createdBy = n
 
     await conn.execute(UPSERT_SQL, [
       employeeA, rosterDate, rowB.is_week_off, rowB.is_holiday, null,
-      rowB.custom_start_time, rowB.custom_end_time, createdBy,
+      rowB.custom_start_time, rowB.custom_end_time, rowB.buffer_minutes, createdBy,
     ]);
     await conn.execute(UPSERT_SQL, [
       employeeB, rosterDate, rowA.is_week_off, rowA.is_holiday, null,
-      rowA.custom_start_time, rowA.custom_end_time, createdBy,
+      rowA.custom_start_time, rowA.custom_end_time, rowA.buffer_minutes, createdBy,
     ]);
 
     await conn.commit();

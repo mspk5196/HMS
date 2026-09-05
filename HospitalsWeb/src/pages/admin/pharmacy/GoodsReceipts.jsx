@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 import ReceiveGoodsForm from './ReceiveGoodsForm';
 
 export default function GoodsReceipts() {
@@ -75,20 +76,18 @@ export default function GoodsReceipts() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Goods Receipt (GRN)</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Stock received against a supplier's bill — this is what updates the stock on hand.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Goods Receipt (GRN)"
+        subtitle="Stock received against a supplier's bill — this is what updates the stock on hand."
+        actions={
+          <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer">
+            + Receive Stock
+          </button>
+        }
+      />
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
-
-      <div className="flex justify-end">
-        <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer">
-          + Receive Stock
-        </button>
-      </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-left text-xs text-gray-700 min-w-[950px]">

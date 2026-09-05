@@ -1,9 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import { isoDate } from '../../util/mappers';
+import PageHeader from '../../components/PageHeader';
 import AddMemberForm from './departmentrole/AddMemberForm';
 import BulkEmployeeImportModal, { downloadEmployeeExcelTemplate } from './BulkEmployeeImportModal';
 import ConfigureShiftTimingModal from './shiftroster/ConfigureShiftTimingModal';
+import {
+  GearIcon,
+  DownloadIcon,
+  UploadIcon,
+  PlusIcon,
+  UserIcon,
+  ClockIcon,
+  CurrencyRupeeIcon,
+  ClipboardListIcon,
+  SyncIcon,
+  SunIcon,
+  MoonIcon,
+  CalendarIcon,
+  LockIcon,
+  EditIcon,
+  DocumentTextIcon,
+} from '../../components/Icons';
 
 const PAGE_SIZE = 25;
 
@@ -117,15 +135,17 @@ export default function HREmployees() {
       setEmployees(rows);
       setMeta(res.meta || { total: rows.length, page, limit: PAGE_SIZE, pages: 1 });
 
-      if (rows.length && !selectedId) {
-        setSelectedId(rows[0].id);
+      if (rows.length) {
+        setSelectedId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0].id));
+      } else {
+        setSelectedId(null);
       }
     } catch (err) {
       setErrorMsg(err.message || 'Failed to load employees.');
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, deptFilter, statusFilter, selectedId]);
+  }, [page, search, deptFilter, statusFilter]);
 
   useEffect(() => {
     (async () => {
@@ -218,6 +238,7 @@ export default function HREmployees() {
         : (detail.shift_category === 'night'
           ? shiftConfigs.night.end
           : (detail.custom_shift_end ? String(detail.custom_shift_end).slice(0, 5) : '17:00')),
+      custom_buffer_minutes: detail.custom_buffer_minutes ?? 10,
       aadhar_doc: null,
       pan_doc: null,
     });
@@ -233,12 +254,18 @@ export default function HREmployees() {
       if (dataToSend.shift_category === 'day') {
         dataToSend.custom_shift_start = shiftConfigs.day.start;
         dataToSend.custom_shift_end = shiftConfigs.day.end;
+        dataToSend.custom_buffer_minutes = null;
       } else if (dataToSend.shift_category === 'night') {
         dataToSend.custom_shift_start = shiftConfigs.night.start;
         dataToSend.custom_shift_end = shiftConfigs.night.end;
+        dataToSend.custom_buffer_minutes = null;
       } else if (dataToSend.shift_category === 'day_and_night') {
         dataToSend.custom_shift_start = null;
         dataToSend.custom_shift_end = null;
+        dataToSend.custom_buffer_minutes = null;
+      } else if (dataToSend.shift_category === 'general') {
+        dataToSend.custom_buffer_minutes = dataToSend.custom_buffer_minutes !== '' && dataToSend.custom_buffer_minutes !== undefined
+          ? Number(dataToSend.custom_buffer_minutes) : 10;
       }
 
       const fd = new FormData();
@@ -249,6 +276,8 @@ export default function HREmployees() {
           if (v instanceof File) fd.append('pan_doc', v);
         } else if (v !== undefined && v !== null) {
           fd.append(k, v);
+        } else if (v === null) {
+          fd.append(k, '');
         }
       });
 
@@ -313,6 +342,9 @@ export default function HREmployees() {
       } else if (memberData.shiftCategory === 'general') {
         if (memberData.customShiftStart) fd.append('custom_shift_start', memberData.customShiftStart);
         if (memberData.customShiftEnd) fd.append('custom_shift_end', memberData.customShiftEnd);
+        if (memberData.customBufferMinutes !== undefined && memberData.customBufferMinutes !== null) {
+          fd.append('custom_buffer_minutes', memberData.customBufferMinutes);
+        }
       }
 
       const created = await apiFetch('/hr/employees', {
@@ -369,53 +401,52 @@ export default function HREmployees() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-            Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">HR &amp; Employees</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {meta.total} employee{meta.total === 1 ? '' : 's'} on record. Select an employee to view details or modify salary.
-          </p>
-        </div>
+      <PageHeader
+        category="Staff & Salary"
+        title="HR & Employees"
+        subtitle={`${meta.total} employee${meta.total === 1 ? '' : 's'} on record. Select an employee to view details or modify salary.`}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowShiftTimingModal(true)}
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Configure hospital-wide Day and Night shift timings"
+            >
+              <GearIcon className="w-4 h-4 text-gray-500" />
+              <span>Shift Timings</span>
+            </button>
 
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setShowShiftTimingModal(true)}
-            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Configure hospital-wide Day and Night shift timings"
-          >
-            <span>⚙️ Shift Timings</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => downloadEmployeeExcelTemplate(departments)}
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Download blank Excel spreadsheet template"
+            >
+              <DownloadIcon className="w-4 h-4 text-gray-500" />
+              <span>Excel Template</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => downloadEmployeeExcelTemplate(departments)}
-            className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Download blank Excel spreadsheet template"
-          >
-            <span>📥 Excel Template</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowBulkModal(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <UploadIcon className="w-4 h-4 text-white" />
+              <span>Bulk Upload Staff</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowBulkModal(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <span>📤 Bulk Upload Staff</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode('add')}
-            disabled={departments.length === 0}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <span>+</span> Add Employee
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={() => setViewMode('add')}
+              disabled={departments.length === 0}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <PlusIcon className="w-4 h-4 text-white" />
+              <span>Add Employee</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Split View Layout: Left Employee List, Right Employee Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -429,12 +460,24 @@ export default function HREmployees() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search name or code..."
-                className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                placeholder="Search name, code, phone, role, dept..."
+                className="w-full pl-8 pr-7 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
               />
-              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-0.5 rounded cursor-pointer"
+                  title="Clear search"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -539,8 +582,9 @@ export default function HREmployees() {
         {/* RIGHT PANE: Selected Employee Workspace */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-5 min-h-[550px]">
           {!detail ? (
-            <div className="text-center text-xs text-gray-400 py-20">
-              👈 Select an employee from the left panel to view profile, modify salary, or inspect history logs.
+            <div className="flex flex-col items-center justify-center text-center text-xs text-gray-400 py-20 gap-2">
+              <UserIcon className="w-8 h-8 text-gray-300" />
+              <span>Select an employee from the left panel to view profile, modify salary, or inspect history logs.</span>
             </div>
           ) : (
             <>
@@ -567,43 +611,48 @@ export default function HREmployees() {
                 <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-lg self-start sm:self-auto">
                   <button
                     onClick={() => setRightTab('profile')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       rightTab === 'profile' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    👤 Profile
+                    <UserIcon className="w-3.5 h-3.5" />
+                    <span>Profile</span>
                   </button>
                   <button
                     onClick={() => setRightTab('shift-overrides')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       rightTab === 'shift-overrides' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    🕐 Shift Overrides
+                    <ClockIcon className="w-3.5 h-3.5" />
+                    <span>Shift Overrides</span>
                   </button>
                   <button
                     onClick={() => setRightTab('modify-salary')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       rightTab === 'modify-salary' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    💰 Modify Salary
+                    <CurrencyRupeeIcon className="w-3.5 h-3.5" />
+                    <span>Modify Salary</span>
                   </button>
                   <button
                     onClick={() => setRightTab('salary-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       rightTab === 'salary-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    📜 Salary Logs
+                    <ClipboardListIcon className="w-3.5 h-3.5" />
+                    <span>Salary Logs</span>
                   </button>
                   <button
                     onClick={() => setRightTab('remap-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       rightTab === 'remap-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
-                    🔄 Role Logs
+                    <SyncIcon className="w-3.5 h-3.5" />
+                    <span>Role Logs</span>
                   </button>
                 </div>
               </div>
@@ -637,7 +686,7 @@ export default function HREmployees() {
                             onClick={() => setShowShiftTimingModal(true)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:text-blue-800 bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
                           >
-                            <span>⚙️</span>
+                            <GearIcon className="w-3.5 h-3.5 text-blue-600" />
                             <span>Configure Shift Timings</span>
                           </button>
                         </div>
@@ -670,7 +719,8 @@ export default function HREmployees() {
                             <div className="sm:col-span-2 p-3 bg-amber-50/70 rounded-lg border border-amber-200 flex items-center justify-between">
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-amber-900">☀️ Fixed Day Shift Timing:</span>
+                                  <SunIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                                  <span className="text-xs font-bold text-amber-900">Fixed Day Shift Timing:</span>
                                   <span className="text-xs font-extrabold text-amber-900">{shiftConfigs.day.start} – {shiftConfigs.day.end}</span>
                                   <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-amber-200/80 text-amber-800 rounded">Fixed (Non-editable)</span>
                                 </div>
@@ -678,7 +728,7 @@ export default function HREmployees() {
                                   Day shift hours are fixed for this employee. Use "Configure Shift Timings" above to modify global hours.
                                 </p>
                               </div>
-                              <span className="text-amber-500 text-lg">🔒</span>
+                              <LockIcon className="w-5 h-5 text-amber-500 shrink-0" />
                             </div>
                           )}
 
@@ -687,7 +737,8 @@ export default function HREmployees() {
                             <div className="sm:col-span-2 p-3 bg-purple-50/70 rounded-lg border border-purple-200 flex items-center justify-between">
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-purple-900">🌙 Fixed Night Shift Timing:</span>
+                                  <MoonIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                                  <span className="text-xs font-bold text-purple-900">Fixed Night Shift Timing:</span>
                                   <span className="text-xs font-extrabold text-purple-900">{shiftConfigs.night.start} – {shiftConfigs.night.end}</span>
                                   <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-purple-200/80 text-purple-800 rounded">Fixed (Non-editable)</span>
                                 </div>
@@ -695,7 +746,7 @@ export default function HREmployees() {
                                   Night shift hours are fixed for this employee. Use "Configure Shift Timings" above to modify global hours.
                                 </p>
                               </div>
-                              <span className="text-purple-500 text-lg">🔒</span>
+                              <LockIcon className="w-5 h-5 text-purple-500 shrink-0" />
                             </div>
                           )}
 
@@ -704,14 +755,15 @@ export default function HREmployees() {
                             <div className="sm:col-span-2 p-3 bg-blue-50/70 rounded-lg border border-blue-200 flex items-center justify-between">
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-blue-900">🗓️ Weekly Duty Roster Scheduled</span>
+                                  <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                                  <span className="text-xs font-bold text-blue-900">Weekly Duty Roster Scheduled</span>
                                   <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase bg-blue-200/80 text-blue-800 rounded">Roster Assigned</span>
                                 </div>
                                 <p className="text-[11px] text-blue-700 mt-0.5">
                                   Day &amp; Night staff working hours and shift duties are scheduled each week on the <strong>Weekly Duty Roster</strong>.
                                 </p>
                               </div>
-                              <span className="text-blue-500 text-lg">📅</span>
+                              <CalendarIcon className="w-5 h-5 text-blue-500 shrink-0" />
                             </div>
                           )}
 
@@ -730,6 +782,17 @@ export default function HREmployees() {
                                 value={form.custom_shift_end}
                                 onChange={(v) => setForm((f) => ({ ...f, custom_shift_end: v }))}
                               />
+                              <div className="sm:col-span-2">
+                                <Input
+                                  type="number"
+                                  label="Buffer Mins (Grace Period)"
+                                  value={form.custom_buffer_minutes ?? 10}
+                                  onChange={(v) => setForm((f) => ({ ...f, custom_buffer_minutes: v }))}
+                                  min="0"
+                                  max="60"
+                                  hint="Allowed arrival grace period in minutes before lateness applies"
+                                />
+                              </div>
                             </>
                           )}
                         </div>
@@ -844,9 +907,10 @@ export default function HREmployees() {
                     <div className="flex items-center justify-end">
                       <button
                         onClick={startEditing}
-                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center gap-1.5"
                       >
-                        ✏️ Edit Profile
+                        <EditIcon className="w-3.5 h-3.5" />
+                        <span>Edit Profile</span>
                       </button>
                     </div>
 
@@ -884,10 +948,10 @@ export default function HREmployees() {
                         <Field
                           label="Shift Category"
                           value={
-                            detail.shift_category === 'day' ? '☀️ Day Shift' :
-                            detail.shift_category === 'night' ? '🌙 Night Shift' :
-                            detail.shift_category === 'day_and_night' ? '🔄 Day & Night Shift' :
-                            detail.shift_category === 'general' ? '⏱️ General Shift' : '—'
+                            detail.shift_category === 'day' ? 'Day Shift (Fixed)' :
+                            detail.shift_category === 'night' ? 'Night Shift (Fixed)' :
+                            detail.shift_category === 'day_and_night' ? 'Day & Night Shift (Roster)' :
+                            detail.shift_category === 'general' ? 'General Shift (Custom)' : '—'
                           }
                         />
                         <Field
@@ -904,6 +968,12 @@ export default function HREmployees() {
                                     : '—')))
                           }
                         />
+                        {detail.shift_category === 'general' && (
+                          <Field
+                            label="Grace Buffer"
+                            value={`${detail.custom_buffer_minutes ?? 10} minutes`}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -919,7 +989,8 @@ export default function HREmployees() {
                               rel="noreferrer"
                               className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 flex items-center gap-1 cursor-pointer"
                             >
-                              📄 View Document
+                              <DocumentTextIcon className="w-3.5 h-3.5 text-blue-600" />
+                              <span>View Document</span>
                             </a>
                           ) : (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">
@@ -942,7 +1013,8 @@ export default function HREmployees() {
                               rel="noreferrer"
                               className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 flex items-center gap-1 cursor-pointer"
                             >
-                              📄 View Document
+                              <DocumentTextIcon className="w-3.5 h-3.5 text-blue-600" />
+                              <span>View Document</span>
                             </a>
                           ) : (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">
@@ -1452,7 +1524,8 @@ function ShiftOverridesSection({ employeeId, employeeName, onSuccess, onError })
     <div className="space-y-5">
       <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs text-blue-800 space-y-1">
         <div className="font-bold flex items-center gap-1.5">
-          <span>🕐 Single-Day Shift Overrides</span>
+          <ClockIcon className="w-4 h-4 text-blue-600 shrink-0" />
+          <span>Single-Day Shift Overrides</span>
         </div>
         <p className="text-[11px] text-blue-700 leading-relaxed">
           Use shift overrides to change working hours for <strong>{employeeName}</strong> on specific calendar dates (for Day, Night, or General shift staff).

@@ -159,24 +159,67 @@ const listRawPunches = async ({ employeeId, employeeCode, departmentId, fromDate
 const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
   // 1. Employee Info & Assigned Shift
   const [empRows] = await db.query(
-    `SELECT e.*, d.name AS department_name, sr.name AS designation_name,
-            COALESCE(s.name, sr.shift_name, 'Day Shift') AS shift_name,
-            COALESCE(s.start_time, sr.shift_start_time, '09:00:00') AS shift_start,
-            COALESCE(s.end_time, sr.shift_end_time, '17:00:00') AS shift_end,
-            COALESCE(s.biometric_in_start, sr.biometric_in_start) AS biometric_in_start,
-            COALESCE(s.biometric_in_end, sr.biometric_in_end) AS biometric_in_end,
-            COALESCE(s.biometric_out_start, sr.biometric_out_start) AS biometric_out_start,
-            COALESCE(s.biometric_out_end, sr.biometric_out_end) AS biometric_out_end,
-            COALESCE(s.grace_period_minutes, sr.grace_period_minutes, 10) AS grace_period_minutes
+    `SELECT e.*, d.name AS department_name, sr.name AS designation_name
      FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-     LEFT JOIN shifts s ON s.id = sr.default_shift_id
      WHERE e.id = ?`,
     [employeeId]
   );
-  const employee = empRows[0] ?? null;
+  let employee = empRows[0] ?? null;
   if (!employee) return null;
+
+  let shiftName = 'Day Shift';
+  let shiftStart = '08:00:00';
+  let shiftEnd = '18:00:00';
+  let graceMins = 10;
+
+  if (employee.shift_category === 'night') {
+    const [sRows] = await db.query(`SELECT name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
+    if (sRows.length) {
+      shiftName = sRows[0].name || 'Night Shift';
+      shiftStart = sRows[0].start_time || '18:00:00';
+      shiftEnd = sRows[0].end_time || '08:00:00';
+      graceMins = sRows[0].grace_period_minutes ?? 10;
+    }
+  } else if (employee.shift_category === 'day') {
+    const [sRows] = await db.query(`SELECT name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
+    if (sRows.length) {
+      shiftName = sRows[0].name || 'Day Shift';
+      shiftStart = sRows[0].start_time || '08:00:00';
+      shiftEnd = sRows[0].end_time || '18:00:00';
+      graceMins = sRows[0].grace_period_minutes ?? 10;
+    }
+  } else if (employee.shift_category === 'general') {
+    shiftName = 'General Shift';
+    shiftStart = employee.custom_shift_start || '09:00:00';
+    shiftEnd = employee.custom_shift_end || '17:00:00';
+    graceMins = employee.custom_buffer_minutes ?? 10;
+  } else if (employee.shift_category === 'day_and_night') {
+    shiftName = 'Day & Night Shift';
+    shiftStart = employee.custom_shift_start || '08:00:00';
+    shiftEnd = employee.custom_shift_end || '18:00:00';
+    graceMins = 10;
+  }
+
+  const adjustMins = (t, delta) => {
+    if (!t) return null;
+    const [h, m] = String(t).split(':').map(Number);
+    const adj = (h * 60 + m + delta + 14400) % 1440;
+    return `${String(Math.floor(adj / 60)).padStart(2, '0')}:${String(adj % 60).padStart(2, '0')}:00`;
+  };
+
+  employee = {
+    ...employee,
+    shift_name: shiftName,
+    shift_start: shiftStart,
+    shift_end: shiftEnd,
+    biometric_in_start: adjustMins(shiftStart, -60),
+    biometric_in_end: shiftStart,
+    biometric_out_start: shiftEnd,
+    biometric_out_end: adjustMins(shiftEnd, 60),
+    grace_period_minutes: graceMins,
+  };
 
   // 2. Raw Punches in Date Range
   const [punches] = await db.query(

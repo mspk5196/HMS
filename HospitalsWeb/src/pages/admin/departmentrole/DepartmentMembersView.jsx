@@ -1,4 +1,5 @@
 import React from 'react';
+import PageHeader from '../../../components/PageHeader';
 
 export default function DepartmentMembersView({ department, onBack, members = [] }) {
   // Sort department roles by basic salary descending (highest salary first)
@@ -43,29 +44,14 @@ export default function DepartmentMembersView({ department, onBack, members = []
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
-            title="Back to departments"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-              Staff & Salary &nbsp;&gt;&nbsp; Department & Role &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">{department.name} Members</span>
-            </h1>
-          </div>
-        </div>
-
-        <div className="text-xs text-gray-500 bg-white px-3.5 py-1.5 rounded-lg border border-gray-200 shadow-2xs self-start sm:self-auto font-medium">
-          Total Members: <span className="font-bold text-blue-600">{members.length}</span>
-        </div>
-      </div>
+      <PageHeader
+        category="Staff & Salary"
+        parent="Department & Role"
+        title={`${department.name} Members`}
+        subtitle={`Active employees and designations assigned to ${department.name}`}
+        onBack={onBack}
+        badge={`${members.length} members`}
+      />
 
       {/* Empty State when no members exist in the entire department */}
       {members.length === 0 ? (

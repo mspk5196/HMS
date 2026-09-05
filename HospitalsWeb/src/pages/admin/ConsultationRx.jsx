@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import PageHeader from '../../components/PageHeader';
+import { CheckIcon } from '../../components/Icons';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -42,12 +44,11 @@ export default function ConsultationRx() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Patient &amp; Hospital &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Consultation &amp; Rx</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Structured prescriptions let pharmacy auto-suggest the exact medicines prescribed.</p>
-      </div>
+      <PageHeader
+        category="Patient & Hospital"
+        title="Consultation & Rx"
+        subtitle="Doctor consultations, vitals, prescriptions, and diagnosis notes."
+      />
 
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
@@ -298,7 +299,12 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
                 placeholder="Search in-stock medicine by name or generic name…"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
               />
-              {it.medicine_id && <span className="absolute right-2 top-2.5 text-emerald-500 text-[10px] font-bold">✓ linked</span>}
+              {it.medicine_id && (
+                <span className="absolute right-2 top-2.5 text-emerald-600 text-[10px] font-bold flex items-center gap-0.5">
+                  <CheckIcon className="w-3 h-3" />
+                  <span>linked</span>
+                </span>
+              )}
               {it.candidates?.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto divide-y divide-gray-100">
                   {it.candidates.map((med) => (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
 import { Banner } from './PharmacyUI';
+import PageHeader from '../../../components/PageHeader';
 
 const emptyForm = { name: '', contact_person: '', phone: '', email: '', address: '', gstin: '' };
 
@@ -73,12 +74,16 @@ export default function Suppliers() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-          Pharmacy &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Suppliers</span>
-        </h1>
-        <p className="text-xs text-gray-500 mt-0.5">Vendors the pharmacy orders stock from.</p>
-      </div>
+      <PageHeader
+        category="Pharmacy"
+        title="Suppliers"
+        subtitle="Vendors the pharmacy orders stock from."
+        actions={
+          <button onClick={openCreate} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
+            + Add Supplier
+          </button>
+        }
+      />
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 
@@ -90,9 +95,6 @@ export default function Suppliers() {
           placeholder="Search supplier name, phone or GSTIN..."
           className="w-full sm:w-72 px-3.5 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 placeholder-gray-300"
         />
-        <button onClick={openCreate} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
-          + Add Supplier
-        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden overflow-x-auto">
