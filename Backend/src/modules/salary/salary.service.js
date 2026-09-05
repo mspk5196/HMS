@@ -123,13 +123,13 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
  * @param {number} finesAmt  active fines for the period
  * @param {number} extraDays paid extra days worked (entry_type='extra_day')
  */
-const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays, month, year, nightRate }) => {
+const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmount = 0, month, year, nightRate }) => {
   const monthly = Number(salary.fixed_salary) || 0;
   const dayRate = round2(monthly / daysInMonth(month, year));
 
   const nightAllowance = nightRate ?? (Number(salary.night_shift_extra_amount) || 0);
   const nightComponent = round2(nightAllowance * agg.night_shifts_worked);
-  const extraDayPay = round2(dayRate * extraDays);
+  const extraDayPay = overtimeAmount > 0 ? round2(overtimeAmount) : round2(dayRate * extraDays);
   const unusedWeekOffPay = round2(dayRate * agg.unused_week_offs);
 
   // Start from the FULL monthly salary — LOP is subtracted below, not layered
@@ -141,9 +141,10 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays, month, year, nig
   const shiftMinutes = cfg.STANDARD_SHIFT_MINUTES || 480;
   const bufferLateDeduction = round2((agg.buffer_excess_minutes / shiftMinutes) * dayRate);
 
-  // PF on Basic+DA, capped at the statutory ceiling.
+  // PF on Basic+DA (or 70% base), capped at the statutory ceiling (15,000).
   const pfCeiling = cfg.PF_WAGE_CEILING ?? 15000;
-  const pfBase = Math.min(Number(salary.basic_da_amount) || 0, pfCeiling);
+  const basicDa = Number(salary.basic_da_amount) || round2(monthly * 0.7);
+  const pfBase = Math.min(basicDa, pfCeiling);
   const pfEmployee = salary.pf_applicable
     ? round2(pfBase * ((cfg.PF_EMPLOYEE_PERCENT ?? 12) / 100))
     : 0;
@@ -152,9 +153,9 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays, month, year, nig
     ? round2(pfBase * (((cfg.PF_EMPLOYER_EPF_PERCENT ?? 3.67) + (cfg.PF_EMPLOYER_EPS_PERCENT ?? 8.33)) / 100))
     : 0;
 
-  // ESI applies only below the gross ceiling.
+  // ESI applies only below the gross ceiling (21,000) and if enrolled.
   const esiCeiling = cfg.ESI_GROSS_CEILING ?? 21000;
-  const esiApplies = salary.esi_applicable && grossPay <= esiCeiling;
+  const esiApplies = Boolean(salary.esi_applicable) && grossPay <= esiCeiling;
   const esiEmployee = esiApplies ? round2(grossPay * ((cfg.ESI_EMPLOYEE_PERCENT ?? 0.75) / 100)) : 0;
   const esiEmployer = esiApplies ? round2(grossPay * ((cfg.ESI_EMPLOYER_PERCENT ?? 3.25) / 100)) : 0;
 
@@ -233,10 +234,12 @@ const calculatePayrollForRun = async (runId) => {
 
     const agg = await getAttendanceAggregates(emp.id, month, year);
     const finesAmt = await q.getActiveFinesAmount(emp.id, month, year);
-    const extraDays = await q.countPaidExtraDays(emp.id, month, year);
+    const extraInfo = await q.countPaidExtraDays(emp.id, month, year);
+    const extraDays = typeof extraInfo === 'object' ? extraInfo.extra_days : Number(extraInfo || 0);
+    const overtimeAmount = typeof extraInfo === 'object' ? extraInfo.total_amount : 0;
 
     const breakdown = computeSalary({
-      salary, agg, cfg, finesAmt, extraDays, month, year,
+      salary, agg, cfg, finesAmt, extraDays, overtimeAmount, month, year,
     });
 
     await q.upsertPayrollItem({

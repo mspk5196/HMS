@@ -62,14 +62,77 @@ const ALL_TABS = [
   'settings',
 ];
 
+// Helper to resolve active tab from URL hash, search query, localStorage or default fallback
+const resolveInitialTab = (user, permittedTabs) => {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (hash && ALL_TABS.includes(hash) && canViewTab(user, hash)) {
+      return hash;
+    }
+  }
+
+  if (typeof window !== 'undefined' && window.location.search) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam && ALL_TABS.includes(tabParam) && canViewTab(user, tabParam)) {
+      return tabParam;
+    }
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('neha_active_tab');
+    if (saved && ALL_TABS.includes(saved) && canViewTab(user, saved)) {
+      return saved;
+    }
+  }
+
+  return permittedTabs[0] || 'hr-employees';
+};
+
 export default function AdminDashboard({ user, onLogout }) {
   const permittedTabs = ALL_TABS.filter((id) => canViewTab(user, id));
-  const [activeTab, setActiveTab] = useState(() => permittedTabs[0] || 'hr-employees');
+  const [activeTab, setActiveTab] = useState(() => resolveInitialTab(user, permittedTabs));
 
-  // Auto-switch to the first accessible tab if the current activeTab is not permitted
+  // Switch tab and sync with URL hash & localStorage
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    if (typeof window !== 'undefined') {
+      window.location.hash = tabId;
+      localStorage.setItem('neha_active_tab', tabId);
+    }
+  };
+
+  // Sync state with URL hash and localStorage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeTab) {
+      if (window.location.hash.replace(/^#\/?/, '') !== activeTab) {
+        window.location.hash = activeTab;
+      }
+      localStorage.setItem('neha_active_tab', activeTab);
+    }
+  }, [activeTab]);
+
+  // Support browser Back/Forward buttons and direct URL hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (hash && ALL_TABS.includes(hash) && canViewTab(user, hash)) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [user]);
+
+  // Auto-switch to first accessible tab if current tab is not permitted
   useEffect(() => {
     if (permittedTabs.length > 0 && !canViewTab(user, activeTab)) {
-      setActiveTab(permittedTabs[0]);
+      const fallback = resolveInitialTab(user, permittedTabs);
+      setActiveTab(fallback);
+      if (typeof window !== 'undefined') {
+        window.location.hash = fallback;
+        localStorage.setItem('neha_active_tab', fallback);
+      }
     }
   }, [user, activeTab, permittedTabs]);
 
@@ -97,7 +160,7 @@ export default function AdminDashboard({ user, onLogout }) {
           </p>
           {permittedTabs.length > 0 ? (
             <button
-              onClick={() => setActiveTab(permittedTabs[0])}
+              onClick={() => handleTabChange(permittedTabs[0])}
               className="px-5 py-2 bg-[#1b3b82] text-white text-xs font-semibold rounded-lg hover:bg-blue-800 transition-colors shadow-sm cursor-pointer"
             >
               Go to Allowed Page
@@ -181,7 +244,7 @@ export default function AdminDashboard({ user, onLogout }) {
       {/* Sidebar / Navbar Component */}
       <Navbar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleTabChange} 
         onLogout={handleLogoutClick} 
         user={user}
       />

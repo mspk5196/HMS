@@ -1,10 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
+const bcrypt = require('bcrypt');
 
 async function main() {
   const nehaDir = path.resolve(__dirname, '..', '..', 'neha');
   const salaryFile = path.join(nehaDir, 'NAME LIST  SALARY.xlsx');
+  const epfFile = path.join(nehaDir, 'EPF & ESI CALCULATION.xlsx');
 
   // 1. Read Salary File
   const wbSal = XLSX.readFile(salaryFile);
@@ -27,6 +29,10 @@ async function main() {
       name: String(row[2]).trim(),
       fixedSalary: row[16] != null ? Number(row[16]) : (row[18] != null ? Number(row[18]) : 0),
       perDaySalary: row[19] != null ? Number(row[19]) : 0,
+      otDays: row[15] != null ? Number(row[15]) : 0,
+      otSalary: row[20] != null ? Number(row[20]) : 0,
+      fine: row[21] != null ? Number(row[21]) : 0,
+      foodRoom: row[22] != null ? Number(row[22]) : 0,
       uan: row[3] ? String(row[3]).trim() : null,
       esic: row[4] ? String(row[4]).trim() : null,
       bankAcc: row[5] ? String(row[5]).trim() : null,
@@ -37,7 +43,26 @@ async function main() {
     });
   }
 
-  // 2. Read Punch Monitor Files
+  // 2. Read EPF & ESI List
+  const wbEpf = XLSX.readFile(epfFile);
+  const epfData = XLSX.utils.sheet_to_json(wbEpf.Sheets[wbEpf.SheetNames[0]], { header: 1 });
+  const epfEnrolledNames = new Set();
+  const esiEnrolledNames = new Set();
+
+  for (let r = 6; r <= 30; r++) {
+    const row = epfData[r];
+    if (!row) continue;
+    // EPF enrolled (col 7 has name, col 10 has 12% share > 0)
+    if (row[7] && String(row[7]).trim()) {
+      epfEnrolledNames.add(String(row[7]).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+    }
+    // ESI enrolled (col 1 has name, col 2 has Gross > 0)
+    if (row[1] && String(row[1]).trim() && Number(row[2]) > 0) {
+      esiEnrolledNames.add(String(row[1]).trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+    }
+  }
+
+  // 3. Read Punch Monitor Files
   const punchFiles = fs.readdirSync(nehaDir).filter(f => f.startsWith('Employee Punch Monitor') && f.endsWith('.xls'));
   const getDayFromFilename = (fn) => {
     const m = fn.match(/(\d{2})\s+08/);
@@ -270,6 +295,28 @@ async function main() {
   sqlStatements.push("  (2, 'Night Shift', '20:00:00', '08:00:00', 0, 10, 1, 1, 10, '18:00:00', '20:00:00', '08:00:00', '10:00:00')");
   sqlStatements.push('ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `start_time` = VALUES(`start_time`), `end_time` = VALUES(`end_time`);\n');
 
+  // 1.2 DEFAULT LEAVE TYPES
+  sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+  sqlStatements.push('-- 1.2 SYSTEM DEFAULT LEAVE TYPES (Un-deletable)');
+  sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+  sqlStatements.push('INSERT INTO `leave_types` (`id`, `name`, `quota_days`, `quota_period`, `is_half_day_allowed`, `is_active`, `is_lop_applicable`, `can_carry_forward`, `max_carry_forward_days`) VALUES');
+  sqlStatements.push("  (1, 'Casual Leave', 1.50, 'monthly', 0, 1, 0, 0, 0.00),");
+  sqlStatements.push("  (2, 'Privilege Leave', 2.00, 'monthly', 0, 1, 0, 0, 0.00),");
+  sqlStatements.push("  (3, 'Loss of Pay', 0.00, 'monthly', 0, 1, 1, 0, 0.00),");
+  sqlStatements.push("  (4, 'Sick Leave', 1.00, 'monthly', 0, 1, 0, 0, 0.00),");
+  sqlStatements.push("  (5, 'Weekly Off', 4.00, 'monthly', 0, 1, 0, 0, 0.00)");
+  sqlStatements.push('ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `quota_days` = VALUES(`quota_days`), `is_lop_applicable` = VALUES(`is_lop_applicable`);\n');
+
+  // 1.3 FINE TYPES
+  sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+  sqlStatements.push('-- 1.3 FINE TYPES');
+  sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+  sqlStatements.push('INSERT INTO `fine_types` (`id`, `name`, `default_amount`, `trigger_rule`, `calculation_basis`, `description`, `is_active`) VALUES');
+  sqlStatements.push("  (1, 'Unapproved Absence', 500.00, 'unapproved_absence_no_leave', 'flat', 'Fine for unapproved absence', 1),");
+  sqlStatements.push("  (2, 'Disciplinary Fine', 100.00, 'manual', 'flat', 'Disciplinary or late penalty deduction', 1),");
+  sqlStatements.push("  (3, 'Room & Food Deduction', 500.00, 'manual', 'flat', 'Hostel room and food charge deduction', 1)");
+  sqlStatements.push('ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `default_amount` = VALUES(`default_amount`);\n');
+
   // 2. DESIGNATIONS / STAFF ROLES
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
   sqlStatements.push('-- 2. STAFF ROLES / DESIGNATIONS');
@@ -288,9 +335,12 @@ async function main() {
 
   const empSqls = [];
   const usersSqls = [];
-  const passwordHash = '$2b$10$6W9/BqnSNqfu0U/XloygBeO1aMUAki1/e3YFMW2zS/erBDbf50jMS'; // password: admin123
+  const fineSqls = [];
+  const overtimeSqls = [];
+  let fineCounter = 1;
+  let otCounter = 1;
 
-  punchEmployees.forEach(pe => {
+  for (const pe of punchEmployees) {
     const deptId = departmentIdMap[pe.dept] || 2;
     const desig = designationMeta.find(dm => dm.deptId === deptId) || designationMeta[1];
     
@@ -306,8 +356,14 @@ async function main() {
     const esi = sal ? sal.esic : null;
     const bankAcc = sal ? sal.bankAcc : null;
     const ifsc = sal ? sal.ifsc : null;
-    const pfEnrolled = (uan && uan.length > 5) ? 1 : 0;
-    const esiEnrolled = (esi && esi !== 'OUT OF COVER' && esi.length > 5) ? 1 : 0;
+
+    // Check specific EPF / ESI enrollment rules
+    const normName = pe.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const isEpfApplicable = epfEnrolledNames.has(normName) || (aliasKey && epfEnrolledNames.has(aliasKey)) || (uan && uan.length > 5);
+    const isEsiApplicable = esiEnrolledNames.has(normName) || (aliasKey && esiEnrolledNames.has(aliasKey));
+
+    const pfEnrolled = isEpfApplicable ? 1 : 0;
+    const esiEnrolled = isEsiApplicable ? 1 : 0;
 
     const empId = pe.code;
     const empCode = pe.codeStr;
@@ -321,20 +377,62 @@ async function main() {
     if (username.length < 3) username = 'emp.' + empCode;
     username = username + '.' + empCode;
 
+    // Set password = username (bcrypt hashed)
+    const userPasswordHash = await bcrypt.hash(username, 10);
     const roleId = desig.roleId;
-    usersSqls.push(
-      `  (${empId + 100}, ${empId}, ${escapeSql(username)}, ${escapeSql(username + '@nehahospital.com')}, ${escapeSql(passwordHash)}, ${roleId}, 1)`
-    );
-  });
 
-  sqlStatements.push(empSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `basic_salary` = VALUES(`basic_salary`), `department_id` = VALUES(`department_id`), `designation_id` = VALUES(`designation_id`);\n');
+    usersSqls.push(
+      `  (${empId + 100}, ${empId}, ${escapeSql(username)}, ${escapeSql(username + '@nehahospital.com')}, ${escapeSql(userPasswordHash)}, ${roleId}, 1)`
+    );
+
+    // Parse Fines from salary sheet
+    if (sal) {
+      if (sal.fine > 0) {
+        fineSqls.push(
+          `  (${fineCounter++}, ${empId}, 2, '2026-08-31', ${sal.fine}, 'August Disciplinary / Late Fine', 0, 8, 2026, 'active', 1)`
+        );
+      }
+      if (sal.foodRoom > 0) {
+        fineSqls.push(
+          `  (${fineCounter++}, ${empId}, 3, '2026-08-31', ${sal.foodRoom}, 'August Room and Food Deduction', 0, 8, 2026, 'active', 1)`
+        );
+      }
+      // Parse Overtime from salary sheet
+      if (sal.otDays > 0 || sal.otSalary > 0) {
+        const hours = sal.otDays > 0 ? (sal.otDays * 8).toFixed(2) : '8.00';
+        overtimeSqls.push(
+          `  (${otCounter++}, ${empId}, '2026-08-31', 'extra_day', ${hours}, ${sal.otSalary}, 'August 2026 Extra Duty (${sal.otDays} Day(s))', 1)`
+        );
+      }
+    }
+  }
+
+  sqlStatements.push(empSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `basic_salary` = VALUES(`basic_salary`), `department_id` = VALUES(`department_id`), `designation_id` = VALUES(`designation_id`), `pf_enrolled` = VALUES(`pf_enrolled`), `esi_enrolled` = VALUES(`esi_enrolled`);\n');
 
   // 4. USERS (STAFF LOGINS)
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
-  sqlStatements.push('-- 4. USER LOGINS FOR STAFF (Default Password: admin123)');
+  sqlStatements.push('-- 4. USER LOGINS FOR STAFF (Default Password: username)');
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
   sqlStatements.push('INSERT INTO `users` (`id`, `employee_id`, `username`, `email`, `password_hash`, `role_id`, `is_active`) VALUES');
   sqlStatements.push(usersSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `is_active` = VALUES(`is_active`);\n');
+
+  // 4.1 FINES (AUGUST 2026)
+  if (fineSqls.length > 0) {
+    sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+    sqlStatements.push('-- 4.1 FINES & DEDUCTIONS (' + fineSqls.length + ' records from August 2026)');
+    sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+    sqlStatements.push('INSERT INTO `fines` (`id`, `employee_id`, `fine_type_id`, `fine_date`, `amount`, `reason`, `is_auto_generated`, `assigned_month`, `assigned_year`, `status`, `created_by`) VALUES');
+    sqlStatements.push(fineSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `amount` = VALUES(`amount`), `status` = VALUES(`status`);\n');
+  }
+
+  // 4.2 OVERTIME ENTRIES (AUGUST 2026)
+  if (overtimeSqls.length > 0) {
+    sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+    sqlStatements.push('-- 4.2 OVERTIME & EXTRA DAYS (' + overtimeSqls.length + ' records from August 2026)');
+    sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
+    sqlStatements.push('INSERT INTO `overtime_entries` (`id`, `employee_id`, `entry_date`, `entry_type`, `hours`, `computed_amount`, `notes`, `created_by`) VALUES');
+    sqlStatements.push(overtimeSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `computed_amount` = VALUES(`computed_amount`), `hours` = VALUES(`hours`);\n');
+  }
 
   // 5. RAW BIOMETRIC PUNCHES (id, employee_code, device_id, punch_time, employee_id, punch_type, is_processed)
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
@@ -358,7 +456,7 @@ async function main() {
   }
   sqlStatements.push(punchChunks.join('\n\n') + '\n');
 
-  // 6. DAILY ATTENDANCE SUMMARIES (id, employee_id, attendance_date, shift_id, first_in_time, last_out_time, worked_minutes, break_minutes, late_minutes, early_leave_minutes, status, overtime_minutes)
+  // 6. DAILY ATTENDANCE SUMMARIES
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
   sqlStatements.push('-- 6. DAILY ATTENDANCE SUMMARIES (August 01–31, 2026)');
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
@@ -395,7 +493,7 @@ async function main() {
           workedMinutes = (h2 * 60 + m2) - (h1 * 60 + m1);
           if (workedMinutes < 0) workedMinutes = 0;
         } else {
-          workedMinutes = 480; // single punch standard day
+          workedMinutes = 480;
         }
         status = 'present';
       } else if (salStatus === 'WH') {
@@ -434,7 +532,16 @@ async function main() {
   const targetFile = path.resolve(__dirname, '..', '..', 'Sql', 'import_employees_attendance_august_2026.sql');
   fs.writeFileSync(targetFile, outputSql, 'utf8');
 
-  console.log('Successfully re-generated SQL file:', targetFile);
+  console.log('Successfully generated SQL file:', targetFile);
+  console.log('Fines count:', fineSqls.length);
+  console.log('Overtime entries count:', overtimeSqls.length);
+  console.log('EPF enrolled count:', punchEmployees.filter(pe => {
+    const aliasKey = aliasSalaryMatch[pe.codeStr];
+    let sal = aliasKey ? salaryMap.get(aliasKey) : null;
+    const uan = sal ? sal.uan : null;
+    const normName = pe.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return epfEnrolledNames.has(normName) || (aliasKey && epfEnrolledNames.has(aliasKey)) || (uan && uan.length > 5);
+  }).length);
 }
 
 main().catch(console.error);

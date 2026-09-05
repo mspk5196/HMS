@@ -808,40 +808,60 @@ function LeaveTypes({ onError, onSuccess }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map((t) => (
-                <tr key={t.id} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-bold text-gray-900">{t.name}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-700">{t.quota_days}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-500 capitalize">{t.quota_period}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-500">
-                    {t.can_carry_forward ? `up to ${t.max_carry_forward_days}` : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <button
-                      onClick={() => toggleActive(t)}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer ${
-                        t.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'
-                      }`}
-                    >
-                      {t.is_active ? 'Active' : 'Inactive'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2.5 text-right space-x-3 font-semibold whitespace-nowrap">
-                    <button
-                      onClick={() => openEditForm(t)}
-                      className="text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeletingType(t)}
-                      className="text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((t) => {
+                const norm = (t.name || '').toLowerCase().trim();
+                const isSystem = ['casual leave', 'cl', 'privilege leave', 'pl', 'loss of pay', 'lop', 'sick leave', 'sl', 'weekly off', 'week off', 'wh'].includes(norm) || Number(t.id) <= 5;
+
+                return (
+                  <tr key={t.id} className="hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5 font-bold text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <span>{t.name}</span>
+                        {isSystem && (
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-gray-700">{t.quota_days}</td>
+                    <td className="px-3 py-2.5 text-center text-gray-500 capitalize">{t.quota_period}</td>
+                    <td className="px-3 py-2.5 text-center text-gray-500">
+                      {t.can_carry_forward ? `up to ${t.max_carry_forward_days}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={() => toggleActive(t)}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer ${
+                          t.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}
+                      >
+                        {t.is_active ? 'Active' : 'Inactive'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-2.5 text-right space-x-3 font-semibold whitespace-nowrap">
+                      <button
+                        onClick={() => openEditForm(t)}
+                        className="text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                      {isSystem ? (
+                        <span className="text-gray-400 text-[11px] cursor-not-allowed" title="System default leave types cannot be deleted">
+                          Locked
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingType(t)}
+                          className="text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

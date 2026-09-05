@@ -382,6 +382,18 @@ export default function HREmployees() {
                       <div className="text-[11px] text-gray-400 mt-0.5">
                         {emp.department_name || 'No Dept'} · {emp.designation_name || 'No Role'}
                       </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {Boolean(emp.pf_enrolled) && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200" title="Enrolled in Employee Provident Fund (12%)">
+                            EPF
+                          </span>
+                        )}
+                        {Boolean(emp.esi_enrolled) && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200" title="Enrolled in Employee State Insurance (0.75% / 3.25%)">
+                            ESI
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
                       emp.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
@@ -449,32 +461,32 @@ export default function HREmployees() {
                 <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-lg self-start sm:self-auto">
                   <button
                     onClick={() => setRightTab('profile')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                      rightTab === 'profile' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      rightTab === 'profile' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     👤 Profile
                   </button>
                   <button
                     onClick={() => setRightTab('modify-salary')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                      rightTab === 'modify-salary' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      rightTab === 'modify-salary' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     💰 Modify Salary
                   </button>
                   <button
                     onClick={() => setRightTab('salary-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                      rightTab === 'salary-logs' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      rightTab === 'salary-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     📜 Salary Logs
                   </button>
                   <button
                     onClick={() => setRightTab('remap-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                      rightTab === 'remap-logs' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      rightTab === 'remap-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     🔄 Role Logs
@@ -491,15 +503,59 @@ export default function HREmployees() {
                       <button onClick={() => setIsEditing(false)} className="text-xs font-semibold text-gray-500 cursor-pointer">Cancel</button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[420px] overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[440px] overflow-y-auto pr-1">
                       <Input label="Employee Code" value={form.employee_code} onChange={(v) => setForm((f) => ({ ...f, employee_code: v }))} />
                       <Input label="Full Name" value={form.full_name} onChange={(v) => setForm((f) => ({ ...f, full_name: v }))} />
                       <Input label="Phone" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
                       <Input label="Qualification" value={form.qualification} onChange={(v) => setForm((f) => ({ ...f, qualification: v }))} />
                       <Input label="Bank Account" value={form.bank_account_no} onChange={(v) => setForm((f) => ({ ...f, bank_account_no: v }))} />
                       <Input label="IFSC Code" value={form.bank_ifsc} onChange={(v) => setForm((f) => ({ ...f, bank_ifsc: v }))} />
-                      <Input label="UAN (PF)" value={form.uan_number} onChange={(v) => setForm((f) => ({ ...f, uan_number: v }))} />
-                      <Input label="ESI Number" value={form.esi_number} onChange={(v) => setForm((f) => ({ ...f, esi_number: v }))} />
+                      
+                      {/* Statutory EPF & ESI Configuration Card */}
+                      <div className="sm:col-span-2 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200/80 space-y-3 mt-1">
+                        <div className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">
+                          EPF &amp; ESI Statutory Compliance
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2 p-3 bg-white rounded-lg border border-gray-100 shadow-xs">
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(form.pf_enrolled)}
+                                onChange={(e) => setForm((f) => ({ ...f, pf_enrolled: e.target.checked }))}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                              />
+                              <span>Enable EPF Deduction (12%)</span>
+                            </label>
+                            <Input
+                              label="UAN (Universal Account Number)"
+                              value={form.uan_number}
+                              onChange={(v) => setForm((f) => ({ ...f, uan_number: v }))}
+                              disabled={!form.pf_enrolled}
+                              hint="12-digit UAN"
+                            />
+                          </div>
+
+                          <div className="space-y-2 p-3 bg-white rounded-lg border border-gray-100 shadow-xs">
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(form.esi_enrolled)}
+                                onChange={(e) => setForm((f) => ({ ...f, esi_enrolled: e.target.checked }))}
+                                className="w-4 h-4 text-teal-600 rounded border-gray-300 focus:ring-teal-500"
+                              />
+                              <span>Enable ESI Deduction (0.75% / 3.25%)</span>
+                            </label>
+                            <Input
+                              label="ESI IP Number"
+                              value={form.esi_number}
+                              onChange={(v) => setForm((f) => ({ ...f, esi_number: v }))}
+                              disabled={!form.esi_enrolled}
+                              hint="10 or 17-digit Insurance Number"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
@@ -542,8 +598,45 @@ export default function HREmployees() {
                         <Field label="Qualification" value={detail.qualification} />
                         <Field label="Bank Account" value={detail.bank_account_no} />
                         <Field label="IFSC Code" value={detail.bank_ifsc} />
-                        <Field label="UAN (PF)" value={detail.uan_number || 'Pending'} />
-                        <Field label="ESI Number" value={detail.esi_number || 'Pending'} />
+                      </div>
+                    </div>
+
+                    {/* Statutory Compliance Summary Cards */}
+                    <div className="pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-3.5 rounded-xl border border-gray-200/80 bg-gray-50/50 flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Employee Provident Fund (EPF)</span>
+                          {detail.pf_enrolled ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Enrolled (12%)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                              Not Applicable / Excluded
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 text-xs font-bold text-gray-800">
+                          UAN: <span className="text-gray-600 font-medium">{detail.uan_number || '—'}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl border border-gray-200/80 bg-gray-50/50 flex flex-col justify-between">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Employee State Insurance (ESI)</span>
+                          {detail.esi_enrolled ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                              Enrolled (0.75% / 3.25%)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                              Out of Cover / Excluded
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 text-xs font-bold text-gray-800">
+                          ESI IP: <span className="text-gray-600 font-medium">{detail.esi_number || '—'}</span>
+                        </div>
                       </div>
                     </div>
 

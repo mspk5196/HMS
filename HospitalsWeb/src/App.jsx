@@ -15,6 +15,10 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('neha_active_tab');
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.location.hash = '';
+    }
     setUser(null);
   };
 

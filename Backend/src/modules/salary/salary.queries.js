@@ -72,7 +72,8 @@ const getEffectiveSalary = async (employeeId, month, year) => {
 
   // Fall back to the role default the Department-Role screen actually writes.
   const [roleRows] = await db.execute(
-    `SELECT sr.basic_salary, sr.hra, sr.da, e.basic_salary AS employee_basic
+    `SELECT sr.basic_salary, sr.hra, sr.da, e.basic_salary AS employee_basic,
+            e.pf_enrolled, e.esi_enrolled, e.uan_number, e.esi_number
      FROM employees e
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      WHERE e.id = ?`,
@@ -100,8 +101,8 @@ const getEffectiveSalary = async (employeeId, month, year) => {
     basic_da_amount: basic + da,
     hra_amount: hra,
     night_shift_extra_amount: 0,
-    pf_applicable: true,
-    esi_applicable: true,
+    pf_applicable: Boolean(r.pf_enrolled),
+    esi_applicable: Boolean(r.esi_enrolled),
   };
 };
 
@@ -553,14 +554,17 @@ const createOvertimeEntry = async ({ employee_id, entry_date, entry_type, hours,
  */
 const countPaidExtraDays = async (employeeId, month, year) => {
   const [rows] = await db.execute(
-    `SELECT COUNT(*) AS extra_days
+    `SELECT COUNT(*) AS extra_days,
+            COALESCE(SUM(computed_amount), 0) AS total_amount
      FROM overtime_entries
      WHERE employee_id = ?
-       AND entry_type = 'extra_day'
        AND MONTH(entry_date) = ? AND YEAR(entry_date) = ?`,
     [employeeId, month, year]
   );
-  return Number(rows[0]?.extra_days ?? 0);
+  return {
+    extra_days: Number(rows[0]?.extra_days ?? 0),
+    total_amount: Number(rows[0]?.total_amount ?? 0),
+  };
 };
 
 module.exports = {

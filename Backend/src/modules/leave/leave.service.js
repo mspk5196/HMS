@@ -58,6 +58,11 @@ const updateLeaveType = async (id, data) => {
 const deleteLeaveType = async (id) => {
   const type = await q.getLeaveType(id);
   if (!type) throw new AppError('Leave type not found', 404);
+  const normalized = (type.name || '').toLowerCase().trim();
+  const SYSTEM_TYPES = ['casual leave', 'cl', 'privilege leave', 'pl', 'loss of pay', 'lop', 'sick leave', 'sl', 'weekly off', 'week off', 'wh'];
+  if (SYSTEM_TYPES.includes(normalized) || Number(id) <= 5) {
+    throw new AppError(`Cannot delete system default leave type "${type.name}". It is required by attendance and payroll processing.`, 400);
+  }
   await q.deleteLeaveType(id);
 };
 
