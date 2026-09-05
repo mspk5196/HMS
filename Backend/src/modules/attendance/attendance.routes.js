@@ -54,6 +54,10 @@ router.delete('/devices/:id', ctrl.deleteDevice);
 router.post('/devices/:id/test', ctrl.testDevice);
 router.post('/devices/:id/sync', ctrl.syncDevice);
 
+// Buffer pool
+router.get('/buffer', ctrl.getBufferSummary);
+router.get('/buffer/employee/:id', ctrl.getEmployeeBuffer);
+
 // Registered last so it cannot shadow any static route above.
 router.get('/:employeeId/:date', ctrl.getSummary);
 

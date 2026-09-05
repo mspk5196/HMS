@@ -330,6 +330,8 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
   const [rows] = await db.query(
     `SELECT pi.*, e.full_name, e.employee_code, e.uan_number, e.esi_number,
             e.bank_account_no, e.bank_name, e.bank_ifsc,
+            COALESCE(pi.payment_mode, e.payment_mode, 'account') AS payment_mode,
+            e.pf_enrolled, e.esi_enrolled,
             d.name AS department_name, COALESCE(sr.name, '') AS designation_name
      FROM payroll_items pi
      JOIN employees e ON e.id = pi.employee_id
@@ -356,7 +358,7 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
  */
 const upsertPayrollItem = async (data) => {
   const {
-    payroll_run_id, employee_id, salary_structure_id,
+    payroll_run_id, employee_id, salary_structure_id, payment_mode,
     days_present, days_paid_leave, days_lop, shifts_worked,
     base_salary_component, earned_basic, earned_hra, night_shift_component, buffer_late_deduction,
     gross_pay, lop_amount, overtime_amount,
@@ -368,7 +370,7 @@ const upsertPayrollItem = async (data) => {
 
   await db.execute(
     `INSERT INTO payroll_items
-       (payroll_run_id, employee_id, salary_structure_id,
+       (payroll_run_id, employee_id, salary_structure_id, payment_mode,
         days_present, days_paid_leave, days_lop, shifts_worked,
         base_salary_component, earned_basic, earned_hra, night_shift_component, buffer_late_deduction,
         gross_pay, lop_amount, overtime_amount,
@@ -376,9 +378,10 @@ const upsertPayrollItem = async (data) => {
         pf_employee_amount, pf_employer_amount, pf_employer_eps_amount, pf_employer_epf_amount,
         esi_employee_amount, esi_employer_amount,
         fines_amount, net_pay)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        salary_structure_id = VALUES(salary_structure_id),
+       payment_mode = VALUES(payment_mode),
        days_present = VALUES(days_present),
        days_paid_leave = VALUES(days_paid_leave),
        days_lop = VALUES(days_lop),
@@ -401,7 +404,7 @@ const upsertPayrollItem = async (data) => {
        esi_employer_amount = VALUES(esi_employer_amount),
        fines_amount = VALUES(fines_amount),
        net_pay = VALUES(net_pay)`,
-    [payroll_run_id, employee_id, salary_structure_id ?? null,
+    [payroll_run_id, employee_id, salary_structure_id ?? null, payment_mode || 'account',
      days_present ?? 0, days_paid_leave ?? 0, days_lop ?? 0, shifts_worked ?? 0,
      base_salary_component ?? 0, earned_basic ?? 0, earned_hra ?? 0, night_shift_component ?? 0, buffer_late_deduction ?? 0,
      gross_pay ?? 0, lop_amount ?? 0, overtime_amount ?? 0,

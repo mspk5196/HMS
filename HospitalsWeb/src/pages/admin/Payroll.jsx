@@ -13,6 +13,8 @@ import {
   DocumentTextIcon,
   LandmarkIcon,
   HospitalIcon,
+  XIcon,
+  CurrencyRupeeIcon,
 } from '../../components/Icons';
 
 const MONTH_NAMES = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }));
@@ -317,6 +319,7 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
   const [itemSearch, setItemSearch] = useState('');
   const [payslipFor, setPayslipFor] = useState(null);
   const [payslip, setPayslip] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const loadRun = useCallback(async () => {
     try {
@@ -476,10 +479,10 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={exportExcel}
+            onClick={() => setShowExportModal(true)}
             disabled={busy || items.length === 0}
             className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
-            title="Download payroll spreadsheet (.xlsx) without overtime compensations"
+            title="Download payroll spreadsheet (.xlsx) with custom filters"
           >
             <DownloadIcon className="w-4 h-4 text-white" />
             <span>Export Excel</span>
@@ -576,7 +579,14 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
                 {filteredItems.map((it) => (
                   <tr key={it.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-4 py-2.5">
-                      <div className="font-bold text-gray-900">{it.full_name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-900">{it.full_name}</span>
+                        {(it.payment_mode || 'account') === 'cash' ? (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Cash</span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Bank</span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-gray-400 font-mono">{it.employee_code} · {it.department_name || '—'}</div>
                     </td>
                     <td className="px-3 py-2.5 text-center font-bold text-gray-800">{it.days_present}</td>
@@ -614,6 +624,18 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
           </div>
         )}
       </div>
+
+      {showExportModal && run && (
+        <PayrollExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          runId={run.id}
+          periodLabel={`${MONTH_NAMES[run.period_month - 1]} ${run.period_year}`}
+          items={items}
+          onSuccess={onSuccess}
+          onError={onError}
+        />
+      )}
     </div>
   );
 }
@@ -841,6 +863,7 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [data, setData] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -996,17 +1019,13 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
                   )}
                 </button>
                 <button
-                  onClick={handleExport}
+                  onClick={() => setShowExportModal(true)}
                   disabled={isExporting}
                   className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                  title="Export multi-sheet Excel matching hospital statements"
+                  title="Export multi-sheet Excel matching hospital statements with custom filters"
                 >
-                  {isExporting ? 'Exporting…' : (
-                    <>
-                      <DownloadIcon className="w-4 h-4 text-white" />
-                      <span>Export Multi-Sheet Excel</span>
-                    </>
-                  )}
+                  <DownloadIcon className="w-4 h-4 text-white" />
+                  <span>Export Multi-Sheet Excel</span>
                 </button>
               </>
             )}
@@ -1155,7 +1174,14 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
                         <tr key={it.id} className="hover:bg-gray-50/70 transition-colors">
                           <td className="px-2 py-2 text-center text-gray-400 font-mono text-[11px]">{idx + 1}</td>
                           <td className="px-3 py-2">
-                            <div className="font-bold text-gray-900">{it.full_name}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-900">{it.full_name}</span>
+                              {(it.payment_mode || 'account') === 'cash' ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Cash</span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Bank</span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-gray-400 font-mono">
                               {it.employee_code} · {it.department_name || 'General'}
                               {it.bank_account_no && ` · A/c: ${it.bank_account_no}`}
@@ -1377,6 +1403,18 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
             </div>
           )}
         </>
+      )}
+
+      {showExportModal && data?.run && (
+        <PayrollExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          runId={data.run.id}
+          periodLabel={`${MONTH_NAMES[month - 1]} ${year}`}
+          items={data.items || []}
+          onSuccess={onSuccess}
+          onError={onError}
+        />
       )}
     </div>
   );
@@ -1644,3 +1682,214 @@ function Config({ onError, onSuccess }) {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PAYROLL EXPORT MODAL (With Overtime, PF & Payment Mode Options)
+═══════════════════════════════════════════════════════════════════════ */
+
+function PayrollExportModal({ isOpen, onClose, runId, periodLabel, items = [], onSuccess, onError }) {
+  const [includeOvertime, setIncludeOvertime] = useState(true);
+  const [pfFilter, setPfFilter] = useState('all'); // 'all' | 'pf_only' | 'non_pf'
+  const [paymentMode, setPaymentMode] = useState('all'); // 'all' | 'account' | 'cash'
+  const [isExporting, setIsExporting] = useState(false);
+
+  if (!isOpen) return null;
+
+  const totalStaff = items.length;
+  const matchCount = items.filter((r) => {
+    const isPf = Boolean(Number(r.pf_enrolled) === 1 || Number(r.pf_wage) > 0 || Number(r.pf_employee_amount) > 0);
+    if (pfFilter === 'pf_only' && !isPf) return false;
+    if (pfFilter === 'non_pf' && isPf) return false;
+    const mode = (r.payment_mode || 'account').toLowerCase();
+    if (paymentMode === 'account' && mode !== 'account') return false;
+    if (paymentMode === 'cash' && mode !== 'cash') return false;
+    return true;
+  }).length;
+
+  const handleDownload = async () => {
+    try {
+      setIsExporting(true);
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || '/api';
+      const params = new URLSearchParams();
+      params.set('include_overtime', String(includeOvertime));
+      params.set('pf_filter', pfFilter);
+      params.set('payment_mode', paymentMode);
+
+      const res = await fetch(`${API_URL}/salary/payroll-runs/${runId}/export?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Failed to export Excel workbook');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      let suffix = '';
+      if (pfFilter === 'pf_only') suffix += '_PFOnly';
+      else if (pfFilter === 'non_pf') suffix += '_NonPF';
+      if (paymentMode === 'account') suffix += '_BankTransfer';
+      else if (paymentMode === 'cash') suffix += '_Cash';
+      if (!includeOvertime) suffix += '_NoOT';
+      a.download = `Payroll_${String(periodLabel || 'Export').replace(/\s+/g, '_')}_Run${runId}${suffix}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      onSuccess?.(`Payroll exported successfully (${matchCount} employees).`);
+      onClose();
+    } catch (err) {
+      onError?.(err, 'Failed to export payroll Excel file.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/70">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <DownloadIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Export Payroll Statement (Excel)</h3>
+              <p className="text-[11px] text-gray-500">{periodLabel || 'Selected Run'}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition-colors"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content Options */}
+        <div className="p-6 space-y-5 text-xs text-gray-700">
+          {/* Option 1: Overtime Charges */}
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+              Overtime Charges
+            </label>
+            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+              includeOvertime ? 'border-blue-500 bg-blue-50/40 ring-1 ring-blue-500' : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}>
+              <input
+                type="checkbox"
+                checked={includeOvertime}
+                onChange={(e) => setIncludeOvertime(e.target.checked)}
+                className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <span className="font-bold text-gray-900 block">Include Overtime Charges</span>
+                <span className="text-[11px] text-gray-500 block mt-0.5">
+                  When checked, extra day overtime payments are included in earned gross and net payable. When unchecked, overtime amounts are zeroed out.
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* Option 2: PF Status Filter */}
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+              Provident Fund (PF) Staff
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'all', label: 'All Staff', desc: 'PF & Non-PF' },
+                { id: 'pf_only', label: 'PF Only', desc: 'Enrolled in EPF' },
+                { id: 'non_pf', label: 'Non-PF Only', desc: 'Exempt / Non-PF' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setPfFilter(opt.id)}
+                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    pfFilter === opt.id
+                      ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`font-bold text-xs ${pfFilter === opt.id ? 'text-blue-900' : 'text-gray-900'}`}>
+                    {opt.label}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Option 3: Payment Method Filter */}
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+              Disbursement Method
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'all', label: 'All Modes', icon: LandmarkIcon, desc: 'Account & Cash' },
+                { id: 'account', label: 'Bank Transfer', icon: LandmarkIcon, desc: 'Account credit' },
+                { id: 'cash', label: 'Cash Only', icon: CurrencyRupeeIcon, desc: 'Cash payout' },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPaymentMode(opt.id)}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      paymentMode === opt.id
+                        ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Icon className={`w-3.5 h-3.5 ${paymentMode === opt.id ? 'text-blue-600' : 'text-gray-500'}`} />
+                      <span className={`font-bold text-xs ${paymentMode === opt.id ? 'text-blue-900' : 'text-gray-900'}`}>
+                        {opt.label}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">{opt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Live Matches Count Banner */}
+          {totalStaff > 0 && (
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between text-xs">
+              <span className="text-gray-600 font-medium">Selected Criteria Matches:</span>
+              <span className="font-bold text-gray-900 bg-white px-2.5 py-0.5 rounded-lg border border-gray-200">
+                {matchCount} of {totalStaff} Staff Members
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/70">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isExporting}
+            className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isExporting || (totalStaff > 0 && matchCount === 0)}
+            className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-[#1e40af] hover:bg-[#1c399b] rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <DownloadIcon className="w-4 h-4 text-white" />
+            <span>{isExporting ? 'Generating Excel…' : `Download Spreadsheet (${matchCount})`}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

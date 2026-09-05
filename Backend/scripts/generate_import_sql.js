@@ -331,7 +331,7 @@ async function main() {
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
   sqlStatements.push('-- 3. EMPLOYEES (' + punchEmployees.length + ' Staff Members)');
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');
-  sqlStatements.push('INSERT INTO `employees` (`id`, `employee_code`, `full_name`, `department_id`, `designation_id`, `date_of_joining`, `status`, `salary_type`, `basic_salary`, `per_day_salary`, `uan_number`, `esi_number`, `bank_account_no`, `bank_ifsc`, `pf_enrolled`, `esi_enrolled`) VALUES');
+  sqlStatements.push('INSERT INTO `employees` (`id`, `employee_code`, `full_name`, `department_id`, `designation_id`, `date_of_joining`, `status`, `salary_type`, `basic_salary`, `per_day_salary`, `uan_number`, `esi_number`, `bank_account_no`, `bank_ifsc`, `payment_mode`, `pf_enrolled`, `esi_enrolled`) VALUES');
 
   const empSqls = [];
   const usersSqls = [];
@@ -370,7 +370,7 @@ async function main() {
     const fullName = pe.name;
 
     empSqls.push(
-      `  (${empId}, ${escapeSql(empCode)}, ${escapeSql(fullName)}, ${deptId}, ${desig.id}, '2024-01-01', 'active', 'monthly', ${basicSalary}, ${perDaySalary}, ${escapeSql(uan)}, ${escapeSql(esi)}, ${escapeSql(bankAcc)}, ${escapeSql(ifsc)}, ${pfEnrolled}, ${esiEnrolled})`
+      `  (${empId}, ${escapeSql(empCode)}, ${escapeSql(fullName)}, ${deptId}, ${desig.id}, '2024-01-01', 'active', 'monthly', ${basicSalary}, ${perDaySalary}, ${escapeSql(uan)}, ${escapeSql(esi)}, ${escapeSql(bankAcc)}, ${escapeSql(ifsc)}, 'account', ${pfEnrolled}, ${esiEnrolled})`
     );
 
     let username = fullName.toLowerCase().replace(/[^a-z0-9]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
@@ -407,7 +407,7 @@ async function main() {
     }
   }
 
-  sqlStatements.push(empSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `basic_salary` = VALUES(`basic_salary`), `department_id` = VALUES(`department_id`), `designation_id` = VALUES(`designation_id`), `pf_enrolled` = VALUES(`pf_enrolled`), `esi_enrolled` = VALUES(`esi_enrolled`);\n');
+  sqlStatements.push(empSqls.join(',\n') + '\nON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`), `basic_salary` = VALUES(`basic_salary`), `department_id` = VALUES(`department_id`), `designation_id` = VALUES(`designation_id`), `payment_mode` = VALUES(`payment_mode`), `pf_enrolled` = VALUES(`pf_enrolled`), `esi_enrolled` = VALUES(`esi_enrolled`);\n');
 
   // 4. USERS (STAFF LOGINS)
   sqlStatements.push('-- ─────────────────────────────────────────────────────────────────────────────');

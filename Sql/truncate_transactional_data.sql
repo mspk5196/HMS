@@ -65,6 +65,8 @@ TRUNCATE TABLE `payroll_runs`;
 TRUNCATE TABLE `employee_documents`;
 TRUNCATE TABLE `employee_salary_logs`;
 TRUNCATE TABLE `employee_role_remapping_logs`;
+TRUNCATE TABLE `employee_audit_logs`;
+TRUNCATE TABLE `employee_shift_overrides`;
 TRUNCATE TABLE `employees`;
 
 -- Truncate Departments, Roles/Designations, Shifts & Policies

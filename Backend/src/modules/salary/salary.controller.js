@@ -410,7 +410,26 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
   const run = await svc.getPayrollRun(runId);
   if (!run) return res.status(404).json(fail('Payroll run not found'));
 
+  const includeOvertime = req.query.include_overtime !== 'false' && req.query.includeOvertime !== 'false';
+  const pfFilter = req.query.pf_filter || req.query.pfFilter || 'all'; // 'all' | 'pf_only' | 'non_pf'
+  const paymentMode = req.query.payment_mode || req.query.paymentMode || 'all'; // 'all' | 'account' | 'cash'
+
   const { rows } = await q.getPayrollItems(runId, 1, 10000);
+
+  // Filter employees according to user selections
+  const filteredRows = rows.filter((r) => {
+    // 1. PF Filter
+    const isPf = Boolean(Number(r.pf_enrolled) === 1 || Number(r.pf_wage) > 0 || Number(r.pf_employee_amount) > 0);
+    if (pfFilter === 'pf_only' && !isPf) return false;
+    if (pfFilter === 'non_pf' && isPf) return false;
+
+    // 2. Payment Mode Filter
+    const mode = (r.payment_mode || 'account').toLowerCase();
+    if (paymentMode === 'account' && mode !== 'account') return false;
+    if (paymentMode === 'cash' && mode !== 'cash') return false;
+
+    return true;
+  });
 
   const MONTH_NAMES = ['January','February','March','April','May','June',
                        'July','August','September','October','November','December'];
@@ -423,9 +442,11 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
   // ───────────────────────────────────────────────
   const salaryRows = [
     [`SALARY STATEMENT FOR THE MONTH OF ${periodLabel.toUpperCase()}`],
-    [],
     [
-      'S.No', 'E.ID', 'PF UAN No.', 'E.S.I. No.', 'NAME OF THE STAFF', 'DEPT',
+      `Filters Applied: ${includeOvertime ? 'With Overtime' : 'Overtime Excluded'} | PF: ${pfFilter.toUpperCase()} | Payment Mode: ${paymentMode.toUpperCase()} | Total Staff: ${filteredRows.length}`
+    ],
+    [
+      'S.No', 'E.ID', 'PF UAN No.', 'E.S.I. No.', 'NAME OF THE STAFF', 'DEPT', 'PAY MODE',
       'BANK A/c No.', 'IFSC Code', 'BASIC+DA (70%)', 'HRA (30%)', 'TOTAL FIXED SALARY',
       'MONTH DAYS', 'WKD DAYS', 'LOP DAYS', 'LOP AMT',
       'EARNED BASIC', 'EARNED HRA', 'EARNED SALARY', 'OT DAYS', 'OT AMT',
@@ -434,7 +455,7 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
     ]
   ];
 
-  rows.forEach((r, idx) => {
+  filteredRows.forEach((r, idx) => {
     const fixed = Number(r.base_salary_component || 0);
     const fixedBasic = Math.round(fixed * 0.7);
     const fixedHra = fixed - fixedBasic;
@@ -444,15 +465,25 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
     const wkdDays = Number(r.days_present || 0);
     const lopDays = Number(r.days_lop || 0);
     const lopAmt = Number(r.lop_amount || 0);
-    const otAmt = Number(r.overtime_amount || 0);
-    const earnedGross = Math.max(0, Number(r.gross_pay || 0) - lopAmt);
+    const otAmt = includeOvertime ? Number(r.overtime_amount || 0) : 0;
+    const nightAmt = Number(r.night_shift_component || 0);
+    const weekOffAmt = Number(r.unused_week_off_amount || 0);
+
+    const earnedGross = includeOvertime
+      ? Math.max(0, Number(r.gross_pay || 0) - lopAmt)
+      : Math.max(0, earnedSalary + nightAmt + weekOffAmt);
+
     const fines = Number(r.fines_amount || 0);
     const pfWage = Number(r.pf_wage || 0);
     const esiWage = Number(r.esi_wage || 0);
     const pfDed = Number(r.pf_employee_amount || 0);
     const esiDed = Number(r.esi_employee_amount || 0);
     const ttlDed = pfDed + esiDed + fines;
-    const netSalary = Number(r.net_pay || 0);
+    const netSalary = Math.max(0, earnedGross - ttlDed);
+
+    const mode = (r.payment_mode || 'account').toLowerCase();
+    const modeLabel = mode === 'cash' ? 'Cash' : 'Bank Account';
+    const bankAc = mode === 'cash' ? (r.bank_account_no || 'CASH') : (r.bank_account_no || '');
 
     salaryRows.push([
       idx + 1,
@@ -461,7 +492,8 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
       r.esi_number || (fixed > 21000 ? 'OUT OF COVER' : ''),
       r.full_name || '',
       r.department_name || '',
-      r.bank_account_no || '',
+      modeLabel,
+      bankAc,
       r.bank_ifsc || '',
       fixedBasic,
       fixedHra,
@@ -505,7 +537,7 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
   let totalPfEps = 0;
   let totalPfEpf = 0;
 
-  rows.forEach((r, idx) => {
+  filteredRows.forEach((r, idx) => {
     const esiWage = Number(r.esi_wage || 0);
     const esiEmp = Number(r.esi_employee_amount || 0);
     const esiEmplr = Number(r.esi_employer_amount || 0);
@@ -568,13 +600,20 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
 
   const wsCalc = XLSX.utils.aoa_to_sheet(calcRows);
   const colWidthsCalc = calcRows[1].map((_, ci) =>
-    Math.max(12, Math.max(...calcRows.slice(1, rows.length + 2).map((row) => String(row[ci] ?? '').length)) + 2)
+    Math.max(12, Math.max(...calcRows.slice(1, filteredRows.length + 2).map((row) => String(row[ci] ?? '').length)) + 2)
   );
   wsCalc['!cols'] = colWidthsCalc.map((w) => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, wsCalc, 'EPF & ESI CALCULATION');
 
+  let suffix = '';
+  if (pfFilter === 'pf_only') suffix += '_PFOnly';
+  else if (pfFilter === 'non_pf') suffix += '_NonPF';
+  if (paymentMode === 'account') suffix += '_BankTransfer';
+  else if (paymentMode === 'cash') suffix += '_Cash';
+  if (!includeOvertime) suffix += '_NoOT';
+
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  const filename = `Payroll_${periodLabel.replace(' ', '_')}_Run${runId}.xlsx`;
+  const filename = `Payroll_${periodLabel.replace(' ', '_')}_Run${runId}${suffix}.xlsx`;
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);

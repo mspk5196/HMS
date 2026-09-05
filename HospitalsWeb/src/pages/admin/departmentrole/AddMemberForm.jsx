@@ -8,6 +8,8 @@ import {
   MoonIcon,
   LockIcon,
   CalendarIcon,
+  LandmarkIcon,
+  CurrencyRupeeIcon,
 } from '../../../components/Icons';
 
 export default function AddMemberForm({ departments, initialDepartment, onBack, onSubmit }) {
@@ -47,7 +49,8 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
     basicSalary: initialSalary,
     perDaySalary: '',
     perNightSalary: '',
-    // Bank details
+    // Bank details & Payment mode
+    paymentMode: 'account',
     bankAccountNo: '',
     bankIfsc: '',
     bankName: '',
@@ -254,6 +257,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
       basicSalary: calculatedBasic,
       perDaySalary: calculatedPerDay,
       perNightSalary: calculatedPerNight,
+      payment_mode: formData.paymentMode || 'account',
     };
     onSubmit(submissionData, currentDept);
   };
@@ -734,11 +738,77 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
             </div>
           </div>
 
+          {/* ─── Salary Payment Mode ─── */}
+          <div className="md:col-span-2 pt-4 border-t border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-gray-900">Salary Payment Mode</span>
+                <span className="text-[11px] text-gray-400">— how this employee receives their monthly salary</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label
+                className={`relative flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  formData.paymentMode === 'account'
+                    ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-1 ring-blue-600'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="paymentMode"
+                  value="account"
+                  checked={formData.paymentMode === 'account'}
+                  onChange={() => handleChange('paymentMode', 'account')}
+                  className="mt-1 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <LandmarkIcon className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-bold text-gray-900">Bank Account Transfer</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Direct credit to bank account. Requires account number and IFSC code.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`relative flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  formData.paymentMode === 'cash'
+                    ? 'border-amber-600 bg-amber-50/50 shadow-xs ring-1 ring-amber-600'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="paymentMode"
+                  value="cash"
+                  checked={formData.paymentMode === 'cash'}
+                  onChange={() => handleChange('paymentMode', 'cash')}
+                  className="mt-1 text-amber-600 focus:ring-amber-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <CurrencyRupeeIcon className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-bold text-gray-900">Cash Payment</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Direct cash disbursement. Bank account details are optional.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
           {/* ─── Bank Account Details ─── */}
           <div className="md:col-span-2 pt-4 border-t border-gray-100 space-y-4">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-gray-900">Bank Account Details</span>
-              <span className="text-[11px] text-gray-400">— for salary credit</span>
+              <span className="text-[11px] text-gray-400">
+                {formData.paymentMode === 'cash' ? '— optional for cash payment' : '— for salary credit'}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

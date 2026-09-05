@@ -151,16 +151,17 @@ const createEmployee = async (data) => {
   const finalCustomBuffer = isGeneral
     ? (custom_buffer_minutes !== undefined && custom_buffer_minutes !== null && custom_buffer_minutes !== '' ? Number(custom_buffer_minutes) : 10)
     : null;
+  const finalPaymentMode = (data.payment_mode === 'cash') ? 'cash' : 'account';
 
   const [result] = await db.execute(
     `INSERT INTO employees (employee_code, full_name, gender, date_of_birth, date_of_joining,
        department_id, designation_id, phone, address, status,
-       bank_account_no, bank_ifsc, bank_name, uan_number,
+       bank_account_no, bank_ifsc, bank_name, payment_mode, uan_number,
        salary_type, basic_salary, per_day_salary, per_night_salary,
        qualification, experience_description,
        aadhar_number, aadhar_doc_path, pan_number, pan_doc_path,
        shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       employee_code,
       full_name,
@@ -175,6 +176,7 @@ const createEmployee = async (data) => {
       bank_account_no || null,
       bank_ifsc || null,
       bank_name || null,
+      finalPaymentMode,
       uan_number || null,
       finalSalaryType,
       finalBasicSalary,
@@ -199,7 +201,7 @@ const updateEmployee = async (id, data) => {
   const allowed = [
     'employee_code', 'full_name', 'gender', 'date_of_birth', 'date_of_joining', 'department_id', 'designation_id',
     'reporting_person_id', 'phone', 'address', 'status', 'date_of_leaving',
-    'bank_account_no', 'bank_ifsc', 'bank_name',
+    'bank_account_no', 'bank_ifsc', 'bank_name', 'payment_mode',
     'uan_number', 'esi_number',
     'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary',
     'qualification', 'experience_description',
@@ -1020,6 +1022,110 @@ const bulkImportEmployees = async (rows = []) => {
   return { total: rows.length, inserted, updated, errors };
 };
 
+/* ─── AUDIT LOGS & MONTHLY PAYOUT LOGS ─── */
+
+const createEmployeeAuditLog = async ({ employeeId, changeType, fieldName, oldValue, newValue, notes, changedBy }) => {
+  const [result] = await db.execute(
+    `INSERT INTO employee_audit_logs
+       (employee_id, change_type, field_name, old_value, new_value, notes, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employeeId,
+      changeType || 'profile_update',
+      fieldName,
+      oldValue !== undefined && oldValue !== null ? String(oldValue) : null,
+      newValue !== undefined && newValue !== null ? String(newValue) : null,
+      notes || null,
+      changedBy || null,
+    ]
+  );
+  return result.insertId;
+};
+
+const createEmployeeAuditLogsBatch = async (entries = []) => {
+  if (!entries.length) return;
+  const values = [];
+  const placeholders = entries.map((e) => {
+    values.push(
+      e.employeeId,
+      e.changeType || 'profile_update',
+      e.fieldName,
+      e.oldValue !== undefined && e.oldValue !== null ? String(e.oldValue) : null,
+      e.newValue !== undefined && e.newValue !== null ? String(e.newValue) : null,
+      e.notes || null,
+      e.changedBy || null
+    );
+    return '(?, ?, ?, ?, ?, ?, ?)';
+  }).join(', ');
+
+  await db.query(
+    `INSERT INTO employee_audit_logs
+       (employee_id, change_type, field_name, old_value, new_value, notes, changed_by)
+     VALUES ${placeholders}`,
+    values
+  );
+};
+
+const listEmployeeAuditLogs = async ({ employeeId, changeType, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+
+  if (employeeId) {
+    filters.push('al.employee_id = ?');
+    params.push(employeeId);
+  }
+  if (changeType) {
+    filters.push('al.change_type = ?');
+    params.push(changeType);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT al.*, e.full_name AS employee_name, e.employee_code, u.username AS changed_by_name
+     FROM employee_audit_logs al
+     JOIN employees e ON e.id = al.employee_id
+     LEFT JOIN users u ON u.id = al.changed_by
+     ${where}
+     ORDER BY al.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM employee_audit_logs al ${where}`,
+    params
+  );
+
+  return { rows, total };
+};
+
+const listEmployeePayoutLogs = async ({ employeeId, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const [rows] = await db.query(
+    `SELECT pi.id, pi.payroll_run_id, pr.period_month, pr.period_year, pr.status AS run_status,
+            pr.salary_date, pi.payment_mode, pi.net_pay, pi.gross_pay, pi.lop_amount,
+            pi.base_salary_component, pi.earned_basic, pi.earned_hra,
+            pi.pf_employee_amount, pi.esi_employee_amount, pi.fines_amount, pi.overtime_amount,
+            e.bank_account_no, e.bank_name, e.bank_ifsc
+     FROM payroll_items pi
+     JOIN payroll_runs pr ON pr.id = pi.payroll_run_id
+     JOIN employees e ON e.id = pi.employee_id
+     WHERE pi.employee_id = ?
+     ORDER BY pr.period_year DESC, pr.period_month DESC
+     LIMIT ? OFFSET ?`,
+    [employeeId, limit, offset]
+  );
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total FROM payroll_items WHERE employee_id = ?`,
+    [employeeId]
+  );
+
+  return { rows, total };
+};
+
 module.exports = {
   listEmployees, listDoctors, getEmployee, getEmployeeByCode, createEmployee, updateEmployee, bulkImportEmployees,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
@@ -1030,4 +1136,5 @@ module.exports = {
   countEmployeesInDepartment, countStaffRolesInDepartment, countEmployeesWithStaffRole,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
   listShiftOverrides, upsertShiftOverride, deleteShiftOverride,
+  createEmployeeAuditLog, createEmployeeAuditLogsBatch, listEmployeeAuditLogs, listEmployeePayoutLogs,
 };

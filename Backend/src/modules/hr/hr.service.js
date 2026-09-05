@@ -29,7 +29,7 @@ const createEmployee = async (data) => {
   return q.createEmployee({ ...data, employee_code: code });
 };
 
-const updateEmployee = async (id, data) => {
+const updateEmployee = async (id, data, userId = null) => {
   const emp = await q.getEmployee(id);
   if (!emp) throw new AppError('Employee not found', 404);
 
@@ -51,7 +51,76 @@ const updateEmployee = async (id, data) => {
     }
   }
 
+  const auditEntries = [];
+
+  // 1. Track payment mode change
+  if (data.payment_mode !== undefined && data.payment_mode !== null) {
+    const oldMode = emp.payment_mode || 'account';
+    const newMode = data.payment_mode;
+    if (oldMode !== newMode) {
+      auditEntries.push({
+        employeeId: id,
+        changeType: 'payment_mode',
+        fieldName: 'payment_mode',
+        oldValue: oldMode,
+        newValue: newMode,
+        notes: `Payment mode changed from ${oldMode === 'cash' ? 'Cash' : 'Bank Account'} to ${newMode === 'cash' ? 'Cash' : 'Bank Account'}`,
+        changedBy: userId,
+      });
+    }
+  }
+
+  // 2. Track Profile & Bank updates
+  const trackedFields = [
+    { field: 'full_name', label: 'Full Name', type: 'profile_update' },
+    { field: 'phone', label: 'Phone', type: 'profile_update' },
+    { field: 'address', label: 'Address', type: 'profile_update' },
+    { field: 'gender', label: 'Gender', type: 'profile_update' },
+    { field: 'qualification', label: 'Qualification', type: 'profile_update' },
+    { field: 'experience_description', label: 'Experience Description', type: 'profile_update' },
+    { field: 'status', label: 'Status', type: 'status_change' },
+    { field: 'bank_account_no', label: 'Bank Account No', type: 'bank_details' },
+    { field: 'bank_name', label: 'Bank Name', type: 'bank_details' },
+    { field: 'bank_ifsc', label: 'Bank IFSC', type: 'bank_details' },
+    { field: 'uan_number', label: 'UAN Number', type: 'profile_update' },
+    { field: 'esi_number', label: 'ESI Number', type: 'profile_update' },
+    { field: 'pf_enrolled', label: 'PF Enrolled', type: 'profile_update', isBool: true },
+    { field: 'esi_enrolled', label: 'ESI Enrolled', type: 'profile_update', isBool: true },
+    { field: 'shift_category', label: 'Shift Category', type: 'profile_update' },
+    { field: 'custom_shift_start', label: 'Shift Start Time', type: 'profile_update' },
+    { field: 'custom_shift_end', label: 'Shift End Time', type: 'profile_update' },
+    { field: 'custom_buffer_minutes', label: 'Grace Buffer Mins', type: 'profile_update' },
+    { field: 'aadhar_number', label: 'Aadhar Card No', type: 'profile_update' },
+    { field: 'pan_number', label: 'PAN Card No', type: 'profile_update' },
+  ];
+
+  for (const { field, label, type, isBool } of trackedFields) {
+    if (data[field] !== undefined) {
+      const oldVal = isBool ? (emp[field] ? 'Yes' : 'No') : String(emp[field] ?? '').trim();
+      const newVal = isBool ? (Boolean(data[field] === '1' || data[field] === 1 || data[field] === true || data[field] === 'true') ? 'Yes' : 'No') : String(data[field] ?? '').trim();
+      if (oldVal !== newVal) {
+        auditEntries.push({
+          employeeId: id,
+          changeType: type,
+          fieldName: field,
+          oldValue: oldVal || null,
+          newValue: newVal || null,
+          notes: `${label} updated`,
+          changedBy: userId,
+        });
+      }
+    }
+  }
+
   await q.updateEmployee(id, data);
+
+  if (auditEntries.length > 0) {
+    try {
+      await q.createEmployeeAuditLogsBatch(auditEntries);
+    } catch (e) {
+      console.error('Failed to write employee audit logs:', e.message);
+    }
+  }
 };
 
 const createShift = async (data) => {
@@ -189,4 +258,6 @@ module.exports = {
   getStaffRole: q.getStaffRole,
   listRemappingLogs: q.listRemappingLogs,
   listSalaryLogs: q.listSalaryLogs,
+  listEmployeeAuditLogs: q.listEmployeeAuditLogs,
+  listEmployeePayoutLogs: q.listEmployeePayoutLogs,
 };

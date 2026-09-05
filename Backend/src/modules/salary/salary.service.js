@@ -265,7 +265,7 @@ const calculatePayrollForRun = async (runId) => {
 
   // employees.status is an enum — there is no is_active column.
   const [employees] = await db.execute(
-    `SELECT id, full_name, employee_code FROM employees WHERE status = 'active'`
+    `SELECT id, full_name, employee_code, payment_mode FROM employees WHERE status = 'active'`
   );
 
   let calculated = 0;
@@ -291,6 +291,7 @@ const calculatePayrollForRun = async (runId) => {
     await q.upsertPayrollItem({
       payroll_run_id: runId,
       employee_id: emp.id,
+      payment_mode: emp.payment_mode || 'account',
       salary_structure_id: salary.salary_structure_id,
       days_present: agg.days_present,
       days_paid_leave: agg.days_paid_leave,

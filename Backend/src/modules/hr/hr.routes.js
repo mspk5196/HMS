@@ -29,6 +29,10 @@ router.get('/employees/:id/shift-overrides', canViewEmployees, ctrl.getShiftOver
 router.post('/employees/:id/shift-overrides', requirePermissions(['hr_employee.edit']), ctrl.upsertShiftOverride);
 router.delete('/employees/:id/shift-overrides/:date', requirePermissions(['hr_employee.edit']), ctrl.deleteShiftOverride);
 
+// Employee Activity & Payout Logs
+router.get('/employees/:id/audit-logs', canViewEmployees, ctrl.listEmployeeAuditLogs);
+router.get('/employees/:id/payout-logs', canViewEmployees, ctrl.listEmployeePayoutLogs);
+
 
 // Departments
 router.get('/departments', canViewDepartments, ctrl.listDepartments);

@@ -21,6 +21,8 @@ import {
   LockIcon,
   EditIcon,
   DocumentTextIcon,
+  LandmarkIcon,
+  ReceiptIcon,
 } from '../../components/Icons';
 
 const PAGE_SIZE = 25;
@@ -217,6 +219,7 @@ export default function HREmployees() {
       bank_account_no: detail.bank_account_no || '',
       bank_ifsc: detail.bank_ifsc || '',
       bank_name: detail.bank_name || '',
+      payment_mode: detail.payment_mode || 'account',
       uan_number: detail.uan_number || '',
       pf_enrolled: !!detail.pf_enrolled,
       esi_number: detail.esi_number || '',
@@ -326,6 +329,7 @@ export default function HREmployees() {
       if (memberData.bankAccountNo) fd.append('bank_account_no', memberData.bankAccountNo);
       if (memberData.bankIfsc) fd.append('bank_ifsc', memberData.bankIfsc);
       if (memberData.bankName) fd.append('bank_name', memberData.bankName);
+      fd.append('payment_mode', memberData.payment_mode || memberData.paymentMode || 'account');
 
       if (memberData.aadharNumber) fd.append('aadhar_number', memberData.aadharNumber);
       if (memberData.panNumber) fd.append('pan_number', memberData.panNumber);
@@ -542,6 +546,15 @@ export default function HREmployees() {
                             ESI
                           </span>
                         )}
+                        {(emp.payment_mode || 'account') === 'cash' ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200" title="Cash Disbursement">
+                            Cash
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200" title="Bank Account Transfer">
+                            Bank
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
@@ -588,72 +601,93 @@ export default function HREmployees() {
             </div>
           ) : (
             <>
-              {/* Selected Employee Header & Right Pane Tab Selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-gray-900">{detail.full_name}</h2>
-                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                      {detail.employee_code}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      detail.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                    }`}>
-                      {detail.status === 'active' ? 'Active' : 'Inactive'}
-                    </span>
+              {/* Selected Employee Identity & Action Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0">
+                    {(detail.full_name || '?').charAt(0).toUpperCase()}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {detail.department_name || 'No Dept'} &nbsp;·&nbsp; {detail.designation_name || 'No Role'}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-bold text-gray-900 tracking-tight">{detail.full_name}</h2>
+                      <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-mono">
+                        #{detail.employee_code}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                        detail.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {detail.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        (detail.payment_mode || 'account') === 'cash'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      }`}>
+                        {(detail.payment_mode || 'account') === 'cash' ? (
+                          <CurrencyRupeeIcon className="w-3.5 h-3.5 text-amber-600" />
+                        ) : (
+                          <LandmarkIcon className="w-3.5 h-3.5 text-blue-600" />
+                        )}
+                        {(detail.payment_mode || 'account') === 'cash' ? 'Cash Payment' : 'Bank Transfer'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-700">{detail.department_name || 'No Dept'}</span>
+                      <span className="text-gray-300">•</span>
+                      <span>{detail.designation_name || 'No Role'}</span>
+                      {detail.date_of_joining && (
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-gray-400">Joined {displayDate(detail.date_of_joining)}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Right Pane Tab Buttons */}
-                <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-lg self-start sm:self-auto">
-                  <button
-                    onClick={() => setRightTab('profile')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                      rightTab === 'profile' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <UserIcon className="w-3.5 h-3.5" />
-                    <span>Profile</span>
-                  </button>
-                  <button
-                    onClick={() => setRightTab('shift-overrides')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                      rightTab === 'shift-overrides' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <ClockIcon className="w-3.5 h-3.5" />
-                    <span>Shift Overrides</span>
-                  </button>
-                  <button
-                    onClick={() => setRightTab('modify-salary')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                      rightTab === 'modify-salary' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <CurrencyRupeeIcon className="w-3.5 h-3.5" />
-                    <span>Modify Salary</span>
-                  </button>
-                  <button
-                    onClick={() => setRightTab('salary-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                      rightTab === 'salary-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <ClipboardListIcon className="w-3.5 h-3.5" />
-                    <span>Salary Logs</span>
-                  </button>
-                  <button
-                    onClick={() => setRightTab('remap-logs')}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                      rightTab === 'remap-logs' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <SyncIcon className="w-3.5 h-3.5" />
-                    <span>Role Logs</span>
-                  </button>
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {rightTab === 'profile' && !isEditing && (
+                    <button
+                      onClick={startEditing}
+                      className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <EditIcon className="w-3.5 h-3.5" />
+                      <span>Edit Profile</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Dedicated Full-Width Tab Strip */}
+              <div className="bg-gray-100/70 p-1 rounded-xl border border-gray-200/80">
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth">
+                  {[
+                    { id: 'profile', label: 'Profile', icon: UserIcon },
+                    { id: 'monthly-payouts', label: 'Monthly Payouts', icon: ReceiptIcon },
+                    { id: 'shift-overrides', label: 'Shift Overrides', icon: ClockIcon },
+                    { id: 'modify-salary', label: 'Modify Salary', icon: CurrencyRupeeIcon },
+                    { id: 'salary-logs', label: 'Salary Logs', icon: ClipboardListIcon },
+                    { id: 'remap-logs', label: 'Role Logs', icon: SyncIcon },
+                    { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardListIcon },
+                  ].map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = rightTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setRightTab(tab.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                          isActive
+                            ? 'bg-[#1e40af] text-white shadow-xs'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                        }`}
+                      >
+                        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -671,6 +705,42 @@ export default function HREmployees() {
                       <Input label="Full Name" value={form.full_name} onChange={(v) => setForm((f) => ({ ...f, full_name: v }))} />
                       <Input label="Phone" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
                       <Input label="Qualification" value={form.qualification} onChange={(v) => setForm((f) => ({ ...f, qualification: v }))} />
+
+                      {/* Payment Mode */}
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Salary Payment Mode</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-xs font-semibold ${
+                            (form.payment_mode || 'account') === 'account' ? 'border-blue-600 bg-blue-50/50 text-blue-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="edit_payment_mode"
+                              value="account"
+                              checked={(form.payment_mode || 'account') === 'account'}
+                              onChange={() => setForm((f) => ({ ...f, payment_mode: 'account' }))}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            <LandmarkIcon className="w-4 h-4 text-blue-600" />
+                            <span>Bank Transfer</span>
+                          </label>
+                          <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-xs font-semibold ${
+                            form.payment_mode === 'cash' ? 'border-amber-600 bg-amber-50/50 text-amber-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="edit_payment_mode"
+                              value="cash"
+                              checked={form.payment_mode === 'cash'}
+                              onChange={() => setForm((f) => ({ ...f, payment_mode: 'cash' }))}
+                              className="text-amber-600 focus:ring-amber-500"
+                            />
+                            <CurrencyRupeeIcon className="w-4 h-4 text-amber-600" />
+                            <span>Cash Payment</span>
+                          </label>
+                        </div>
+                      </div>
+
                       <Input label="Bank Account No" value={form.bank_account_no} onChange={(v) => setForm((f) => ({ ...f, bank_account_no: v }))} />
                       <Input label="IFSC Code" value={form.bank_ifsc} onChange={(v) => setForm((f) => ({ ...f, bank_ifsc: v }))} />
                       <Input label="Bank Branch Name" value={form.bank_name} onChange={(v) => setForm((f) => ({ ...f, bank_name: v }))} />
@@ -903,48 +973,73 @@ export default function HREmployees() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-end">
-                      <button
-                        onClick={startEditing}
-                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <EditIcon className="w-3.5 h-3.5" />
-                        <span>Edit Profile</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="flex flex-col items-center justify-center p-6 bg-gray-50/50 rounded-xl border border-gray-100 text-center">
-                        <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-3 text-xl font-extrabold">
-                          {(detail.full_name || '?').charAt(0).toUpperCase()}
+                  <div className="space-y-4">
+                    {/* Section 1: Employment & Compensation Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Personal & Work Info */}
+                      <div className="p-4 rounded-xl border border-gray-200/80 bg-white shadow-2xs space-y-3">
+                        <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">
+                          Employment &amp; Contact Details
                         </div>
-                        <div className="text-xs font-bold text-gray-900">{detail.full_name}</div>
-                        <div className="text-[11px] font-bold text-blue-600 mt-0.5">{detail.employee_code}</div>
-                        <div className="text-[11px] text-gray-500 mt-2">Joining Date: {displayDate(detail.date_of_joining)}</div>
+                        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                          <Field label="Department" value={detail.department_name} />
+                          <Field label="Role / Position" value={detail.designation_name} />
+                          <Field label="Phone" value={detail.phone} />
+                          <Field label="Gender" value={detail.gender} />
+                          <Field label="Qualification" value={detail.qualification} />
+                          <Field label="Joining Date" value={displayDate(detail.date_of_joining)} />
+                        </div>
                       </div>
 
-                      <div className="md:col-span-2 grid grid-cols-2 gap-y-4 gap-x-6">
-                        <Field label="Department" value={detail.department_name} />
-                        <Field label="Role / Position" value={detail.designation_name} />
-                        <Field label="Phone" value={detail.phone} />
-                        <Field label="Gender" value={detail.gender} />
-                        {detail.shift_category === 'day_and_night' ? (
-                          <>
-                            <Field label="Per Day Shift Rate" value={money(detail.per_day_salary)} />
-                            <Field label="Per Night Shift Rate" value={money(detail.per_night_salary)} />
-                            <Field label="Monthly Base (30 days)" value={money(detail.basic_salary)} />
-                          </>
-                        ) : (
-                          <>
-                            <Field label="Monthly Salary" value={money(detail.basic_salary)} />
-                            <Field label="Per Day Rate (÷ 30)" value={money(detail.per_day_salary || Math.round(((Number(detail.basic_salary) || 0) / 30) * 100) / 100)} />
-                          </>
-                        )}
-                        <Field label="Qualification" value={detail.qualification} />
-                        <Field label="Bank Account" value={detail.bank_account_no} />
-                        <Field label="IFSC Code" value={detail.bank_ifsc} />
-                        <Field label="Branch Name" value={detail.bank_name} />
+                      {/* Salary & Payment Mode */}
+                      <div className="p-4 rounded-xl border border-gray-200/80 bg-white shadow-2xs space-y-3">
+                        <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center justify-between">
+                          <span>Salary &amp; Disbursement</span>
+                          <span className="text-[10px] text-gray-400 font-normal">Monthly Base</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                          {detail.shift_category === 'day_and_night' ? (
+                            <>
+                              <Field label="Per Day Shift Rate" value={money(detail.per_day_salary)} />
+                              <Field label="Per Night Shift Rate" value={money(detail.per_night_salary)} />
+                              <Field label="Monthly Base (30 days)" value={money(detail.basic_salary)} />
+                            </>
+                          ) : (
+                            <>
+                              <Field label="Monthly Salary" value={money(detail.basic_salary)} />
+                              <Field label="Per Day Rate (÷ 30)" value={money(detail.per_day_salary || Math.round(((Number(detail.basic_salary) || 0) / 30) * 100) / 100)} />
+                            </>
+                          )}
+                          <Field
+                            label="Salary Payment Mode"
+                            value={
+                              (detail.payment_mode || 'account') === 'cash' ? (
+                                <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                  <CurrencyRupeeIcon className="w-3.5 h-3.5 text-amber-600" /> Cash Payment
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                  <LandmarkIcon className="w-3.5 h-3.5 text-blue-600" /> Bank Transfer
+                                </span>
+                              )
+                            }
+                          />
+                          <Field
+                            label="Bank Account"
+                            value={detail.bank_account_no || ((detail.payment_mode || 'account') === 'cash' ? 'Cash Payment (No Bank A/c)' : '—')}
+                          />
+                          <Field label="IFSC Code" value={detail.bank_ifsc} />
+                          <Field label="Branch Name" value={detail.bank_name} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Shift Schedule & Working Hours */}
+                    <div className="p-4 rounded-xl border border-gray-200/80 bg-white shadow-2xs space-y-3">
+                      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">
+                        Shift Schedule &amp; Working Hours
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <Field
                           label="Shift Category"
                           value={
@@ -968,12 +1063,10 @@ export default function HREmployees() {
                                     : '—')))
                           }
                         />
-                        {detail.shift_category === 'general' && (
-                          <Field
-                            label="Grace Buffer"
-                            value={`${detail.custom_buffer_minutes ?? 10} minutes`}
-                          />
-                        )}
+                        <Field
+                          label="Grace Buffer"
+                          value={`${detail.custom_buffer_minutes ?? 10} minutes`}
+                        />
                       </div>
                     </div>
 
@@ -1094,6 +1187,10 @@ export default function HREmployees() {
                 />
               ) : rightTab === 'salary-logs' ? (
                 <EmployeeSalaryLogsSection employeeId={detail.id} />
+              ) : rightTab === 'monthly-payouts' ? (
+                <EmployeePayoutLogsSection employeeId={detail.id} />
+              ) : rightTab === 'audit-logs' ? (
+                <EmployeeAuditLogsSection employeeId={detail.id} />
               ) : (
                 <EmployeeRemappingLogsSection employeeId={detail.id} />
               )}
@@ -1664,3 +1761,280 @@ function ShiftOverridesSection({ employeeId, employeeName, onSuccess, onError })
     </div>
   );
 }
+
+function EmployeePayoutLogsSection({ employeeId }) {
+  const [logs, setLogs] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  useEffect(() => {
+    if (!employeeId) return;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const res = await apiFetch(`/hr/employees/${employeeId}/payout-logs?limit=50`);
+        setLogs(Array.isArray(res) ? res : (res?.data || []));
+      } catch {
+        setLogs([]);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [employeeId]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Monthly Salary Payout History</h3>
+          <p className="text-[11px] text-gray-400">Record of monthly salary payments, amounts, and payment method used</p>
+        </div>
+        <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+          {logs.length} Month{logs.length === 1 ? '' : 's'} Logged
+        </span>
+      </div>
+
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full text-left text-xs text-gray-700">
+          <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase font-bold border-b border-gray-100">
+            <tr>
+              <th className="p-3">Period / Month</th>
+              <th className="p-3">Payment Method</th>
+              <th className="p-3">Net Payout</th>
+              <th className="p-3">Earned Gross</th>
+              <th className="p-3">Deductions</th>
+              <th className="p-3">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {isLoading ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">Loading payout records...</td></tr>
+            ) : logs.length === 0 ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">No monthly payroll records for this employee yet.</td></tr>
+            ) : (
+              logs.map((log) => {
+                const monthLabel = `${MONTH_NAMES[(log.period_month || 1) - 1]} ${log.period_year}`;
+                const isCash = (log.payment_mode || 'account').toLowerCase() === 'cash';
+                const ttlDed = Number(log.pf_employee_amount || 0) + Number(log.esi_employee_amount || 0) + Number(log.fines_amount || 0);
+
+                return (
+                  <tr key={log.id} className="hover:bg-gray-50/80">
+                    <td className="p-3">
+                      <div className="font-bold text-gray-900">{monthLabel}</div>
+                      <div className="text-[10px] text-gray-400">Run #{log.payroll_run_id}</div>
+                    </td>
+                    <td className="p-3">
+                      {isCash ? (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                          <CurrencyRupeeIcon className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Cash Payment</span>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                            <LandmarkIcon className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Bank Transfer</span>
+                          </div>
+                          {log.bank_account_no && (
+                            <div className="text-[10px] text-gray-400 mt-0.5">
+                              A/c: {log.bank_account_no} {log.bank_name ? `(${log.bank_name})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3 font-bold text-emerald-700 text-sm">
+                      ₹{Number(log.net_pay || 0).toLocaleString('en-IN')}
+                    </td>
+                    <td className="p-3 font-medium text-gray-800">
+                      ₹{Number(log.gross_pay || 0).toLocaleString('en-IN')}
+                      {Number(log.lop_amount || 0) > 0 && (
+                        <div className="text-[10px] text-rose-500">LOP: -₹{Number(log.lop_amount).toLocaleString('en-IN')}</div>
+                      )}
+                    </td>
+                    <td className="p-3 text-gray-600">
+                      ₹{ttlDed.toLocaleString('en-IN')}
+                      <div className="text-[10px] text-gray-400">
+                        PF: ₹{Number(log.pf_employee_amount || 0)} | ESI: ₹{Number(log.esi_employee_amount || 0)}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                        log.run_status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                        log.run_status === 'locked' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {log.run_status || 'draft'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeAuditLogsSection({ employeeId }) {
+  const [logs, setLogs] = useState([]);
+  const [filterType, setFilterType] = useState('all');
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!employeeId) return;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const query = filterType !== 'all' ? `&changeType=${filterType}` : '';
+        const res = await apiFetch(`/hr/employees/${employeeId}/audit-logs?limit=100${query}`);
+        setLogs(Array.isArray(res) ? res : (res?.data || []));
+      } catch {
+        setLogs([]);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [employeeId, filterType]);
+
+  const getBadge = (type) => {
+    switch (type) {
+      case 'payment_mode':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Payment Mode</span>;
+      case 'bank_details':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Bank Details</span>;
+      case 'status_change':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">Status Change</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">Profile Update</span>;
+    }
+  };
+
+  const formatFieldName = (name) => {
+    const map = {
+      payment_mode: 'Payment Mode',
+      bank_account_no: 'Bank Account No',
+      bank_name: 'Bank Branch Name',
+      bank_ifsc: 'Bank IFSC',
+      full_name: 'Full Name',
+      phone: 'Phone Number',
+      address: 'Address',
+      status: 'Employment Status',
+      shift_category: 'Shift Category',
+      custom_shift_start: 'Shift Start Time',
+      custom_shift_end: 'Shift End Time',
+      custom_buffer_minutes: 'Grace Buffer Mins',
+      uan_number: 'PF UAN Number',
+      esi_number: 'ESI Number',
+      pf_enrolled: 'PF Enrolled',
+      esi_enrolled: 'ESI Enrolled',
+      qualification: 'Qualification',
+      experience_description: 'Experience',
+    };
+    return map[name] || name;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Employee Profile &amp; Payment Audit Logs</h3>
+          <p className="text-[11px] text-gray-400">Complete audit trail of profile modifications, payment modes, and banking changes</p>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg text-[11px] self-start sm:self-auto font-semibold">
+          <button
+            type="button"
+            onClick={() => setFilterType('all')}
+            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${filterType === 'all' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterType('payment_mode')}
+            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${filterType === 'payment_mode' ? 'bg-white text-amber-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Payment Mode
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterType('bank_details')}
+            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${filterType === 'bank_details' ? 'bg-white text-blue-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Bank
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterType('profile_update')}
+            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${filterType === 'profile_update' ? 'bg-white text-indigo-900 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Profile
+          </button>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full text-left text-xs text-gray-700">
+          <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase font-bold border-b border-gray-100">
+            <tr>
+              <th className="p-3">Date &amp; Time</th>
+              <th className="p-3">Category</th>
+              <th className="p-3">Field Modified</th>
+              <th className="p-3">Previous Value</th>
+              <th className="p-3">New Value</th>
+              <th className="p-3">Changed By</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {isLoading ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">Loading audit history...</td></tr>
+            ) : logs.length === 0 ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">No activity logged for this filter.</td></tr>
+            ) : (
+              logs.map((log) => {
+                const dateStr = log.created_at
+                  ? new Date(log.created_at).toLocaleString('en-IN', {
+                      day: '2-digit', month: 'short', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit', hour12: true
+                    })
+                  : '—';
+
+                return (
+                  <tr key={log.id} className="hover:bg-gray-50/80">
+                    <td className="p-3 font-semibold text-gray-900 whitespace-nowrap">
+                      {dateStr}
+                    </td>
+                    <td className="p-3 whitespace-nowrap">
+                      {getBadge(log.change_type)}
+                    </td>
+                    <td className="p-3 font-semibold text-gray-800">
+                      {formatFieldName(log.field_name)}
+                    </td>
+                    <td className="p-3 text-rose-700 font-medium">
+                      <span className="bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                        {log.old_value || <span className="italic text-gray-400">Empty</span>}
+                      </span>
+                    </td>
+                    <td className="p-3 text-emerald-700 font-bold">
+                      <span className="bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        {log.new_value || <span className="italic text-gray-400">Empty</span>}
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-600 whitespace-nowrap">
+                      {log.changed_by_name || 'System Admin'}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+

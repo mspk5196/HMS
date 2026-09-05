@@ -38,7 +38,7 @@ const updateEmployee = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (req.files?.aadhar_doc?.[0]) body.aadhar_doc_path = `/uploads/${req.files.aadhar_doc[0].filename}`;
   if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
-  await svc.updateEmployee(Number(req.params.id), body);
+  await svc.updateEmployee(Number(req.params.id), body, req.user?.id ?? null);
   return res.json(success(null, 'Employee updated'));
 });
 
@@ -243,6 +243,29 @@ const deleteShiftOverride = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Shift override removed'));
 });
 
+const listEmployeeAuditLogs = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { changeType, page = 1, limit = 50 } = req.query;
+  const result = await svc.listEmployeeAuditLogs({
+    employeeId: Number(id),
+    changeType: changeType || null,
+    page: Number(page),
+    limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+const listEmployeePayoutLogs = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { page = 1, limit = 50 } = req.query;
+  const result = await svc.listEmployeePayoutLogs({
+    employeeId: Number(id),
+    page: Number(page),
+    limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
 module.exports = {
   listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee, bulkImportEmployees,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
@@ -253,4 +276,5 @@ module.exports = {
   getRoster, getRosterWeek, getEmployeesForRoster, saveRosterDay, bulkSaveRoster, swapRosterShifts,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
   getShiftOverrides, upsertShiftOverride, deleteShiftOverride,
+  listEmployeeAuditLogs, listEmployeePayoutLogs,
 };
