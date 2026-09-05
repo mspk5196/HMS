@@ -40,9 +40,9 @@
 
 ```mermaid
 graph TD
-    ClientWeb["HospitalsWeb (React 19 + Vite)"] -->|REST API + JWT| BackendAPI["Node.js / Express 5 API"]
-    ClientMobile["HospitalsApp (React Native)"] -->|REST API + JWT| BackendAPI
-    BiometricDevice["eSSL / ZKTeco Biometric Device"] -->|TCP/IP (Port 4370)| BackendAPI
+    ClientWeb["HospitalsWeb (React 19 + Vite)"] -->|"REST API + JWT"| BackendAPI["Node.js / Express 5 API"]
+    ClientMobile["HospitalsApp (React Native)"] -->|"REST API + JWT"| BackendAPI
+    BiometricDevice["eSSL / ZKTeco Biometric Device"] -->|"TCP/IP Port 4370"| BackendAPI
     
     BackendAPI --> MySQL[("MySQL 8.0 Database")]
     BackendAPI --> Uploads["Local Storage (KYC Documents / Uploads)"]
