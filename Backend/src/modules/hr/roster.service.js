@@ -64,6 +64,14 @@ const loadEmployeeIds = async (ids) => {
   return new Set(rows.map((r) => Number(r.id)));
 };
 
+const getTodayISO = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
 /**
  * Validate a batch of roster cells, rejecting the whole batch on the first
  * problem — a partially-applied roster is worse than a rejected one.
@@ -72,6 +80,8 @@ const validateRows = async (rows, { weekStart } = {}) => {
   if (!Array.isArray(rows) || !rows.length) {
     throw new AppError('rows must be a non-empty array', 400);
   }
+
+  const today = getTodayISO();
 
   const normalised = rows.map((r, i) => {
     const employeeId = Number(r.employee_id);
@@ -82,6 +92,12 @@ const validateRows = async (rows, { weekStart } = {}) => {
     }
     if (!isValidDate(rosterDate)) {
       throw new AppError(`Row ${i + 1}: roster_date must be YYYY-MM-DD`, 400);
+    }
+    if (rosterDate < today) {
+      throw new AppError(
+        `Row ${i + 1}: Cannot create or modify duty for previous date (${rosterDate}). Duties for past days are locked.`,
+        400
+      );
     }
     if (weekStart) {
       const weekEnd = addDays(weekStart, 6);
@@ -101,6 +117,11 @@ const validateRows = async (rows, { weekStart } = {}) => {
         ? Math.max(0, Math.min(120, Number(r.buffer_minutes) || 0))
         : 10
     );
+    const isNightShift = isWeekOff
+      ? false
+      : (r.is_night_shift !== undefined && r.is_night_shift !== null
+          ? Boolean(r.is_night_shift)
+          : (customStart >= '18:00' || (customEnd && customEnd < customStart)));
 
     // A worked cell requires both time fields
     if (!isWeekOff && !r.is_holiday) {
@@ -115,6 +136,7 @@ const validateRows = async (rows, { weekStart } = {}) => {
       custom_start_time: customStart,
       custom_end_time: customEnd,
       buffer_minutes: bufferMinutes,
+      is_night_shift: isNightShift,
       is_week_off: isWeekOff,
       is_holiday: !!r.is_holiday,
       notes: r.notes ?? null,
@@ -197,27 +219,20 @@ const swapShifts = async ({ employeeA, employeeB, rosterDate }, userId) => {
   if (a === b) throw new AppError('Cannot swap an employee with themselves', 400);
   if (!isValidDate(rosterDate)) throw new AppError('rosterDate must be YYYY-MM-DD', 400);
 
+  const today = getTodayISO();
+  if (rosterDate < today) {
+    throw new AppError(
+      `Cannot swap duty for past date (${rosterDate}). Duties for previous days are locked.`,
+      400
+    );
+  }
+
   const known = await loadEmployeeIds([a, b]);
   if (!known.has(a) || !known.has(b)) {
     throw new AppError('Both employees must exist', 400);
   }
 
   const result = await q.swapRosterEntries(a, b, rosterDate, userId);
-
-  // A swap can create an over-long run for either side. Report it rather than
-  // letting it pass silently; the swap itself has already been applied.
-  for (const employeeId of [a, b]) {
-    const from = addDays(rosterDate, -(MAX_CONSECUTIVE_WORKED_DAYS + 1));
-    const to = addDays(rosterDate, MAX_CONSECUTIVE_WORKED_DAYS + 1);
-    const run = longestConsecutiveRun(await q.getWorkedDatesInRange(employeeId, from, to));
-    if (run > MAX_CONSECUTIVE_WORKED_DAYS) {
-      throw new AppError(
-        `Swap applied, but employee ${employeeId} now has ${run} consecutive worked days (limit ${MAX_CONSECUTIVE_WORKED_DAYS}). Adjust the roster.`,
-        400
-      );
-    }
-  }
-
   return result;
 };
 

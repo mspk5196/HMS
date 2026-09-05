@@ -52,6 +52,7 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
        COALESCE(COUNT(*), 0) AS shifts_worked,
        COALESCE(SUM(
          CASE
+           WHEN re.is_night_shift = 1 THEN 1
            WHEN e.shift_category = 'night' THEN 1
            WHEN re.custom_start_time >= '18:00:00' OR re.custom_start_time < '06:00:00' THEN 1
            ELSE 0

@@ -2,15 +2,120 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../../util/api';
 import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from './ConfigureShiftTimingModal';
-import { GearIcon, InfoIcon, AlertTriangleIcon } from '../../../components/Icons';
+
+/* ─── Professional SVG Icons ─── */
+const SunIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+  </svg>
+);
+
+const MoonIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+  </svg>
+);
+
+const ClockIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const CalendarIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+  </svg>
+);
+
+const LockClosedIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+  </svg>
+);
+
+const ArrowsRightLeftIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 7.5m0 0L16.5 3M21 7.5H7.5" />
+  </svg>
+);
+
+const ChevronLeftIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+  </svg>
+);
+
+const ChevronRightIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+  </svg>
+);
+
+const SparklesIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+  </svg>
+);
+
+const CheckIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+  </svg>
+);
+
+const PencilSquareIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+  </svg>
+);
+
+const BuildingOffice2Icon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5h.75m-.75 3h.75m-.75 3h.75" />
+  </svg>
+);
+
+const UserGroupIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+  </svg>
+);
+
+const InformationCircleIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+  </svg>
+);
+
+const GearIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const XMarkIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
 
 const DAY_LABELS = ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'];
-const MAX_CONSECUTIVE = 6;
+
+/** Timezone-safe local date string (YYYY-MM-DD) for India (IST). */
+const getTodayISO = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
 
 /** Wednesday-based start of the week containing an ISO date. */
 const startOfWeek = (iso) => {
   const d = new Date(`${iso}T00:00:00Z`);
-  const dow = d.getUTCDay(); // Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+  const dow = d.getUTCDay();
   const daysSinceWed = (dow - 3 + 7) % 7;
   d.setUTCDate(d.getUTCDate() - daysSinceWed);
   return d.toISOString().slice(0, 10);
@@ -22,40 +127,39 @@ const addDays = (iso, n) => {
   return d.toISOString().slice(0, 10);
 };
 
-const dayNum = (iso) => iso.slice(8, 10);
-
 const monthLabel = (iso) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
   });
 
-/** Longest run of consecutive worked days. */
-const longestRun = (workedDates) => {
-  const sorted = [...new Set(workedDates)].sort();
-  let best = 0, run = 0, prev = null;
-  for (const d of sorted) {
-    run = prev && addDays(prev, 1) === d ? run + 1 : 1;
-    if (run > best) best = run;
-    prev = d;
-  }
-  return best;
-};
-
 export default function WeeklyRoster({ departments = [], onBack }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => getTodayISO(), []);
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
   const [deptFilter, setDeptFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
 
   const [grid, setGrid] = useState(null);
-  // `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM' }
+  // Key: `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM', buffer_minutes: 10, is_night_shift: bool }
   const [draft, setDraft] = useState({});
-  const [swapPick, setSwapPick] = useState(null); // { employeeId, date }
+  const [swapPick, setSwapPick] = useState(null); // { employeeId, date, employeeName }
+  const [editingCellKey, setEditingCellKey] = useState(null);
+  const [showTimingModal, setShowTimingModal] = useState(false);
+
+  // Batch Apply Modal / Drawer state
+  const [batchEmp, setBatchEmp] = useState(null);
+  const [batchForm, setBatchForm] = useState({
+    start_time: '09:00',
+    end_time: '17:00',
+    is_night_shift: false,
+    buffer_minutes: 10,
+  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showTimingModal, setShowTimingModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -79,16 +183,25 @@ export default function WeeklyRoster({ departments = [], onBack }) {
       // Seed the draft from stored roster entries
       const seeded = {};
       for (const e of data.entries) {
+        const isNight =
+          e.is_night_shift !== undefined && e.is_night_shift !== null
+            ? Boolean(e.is_night_shift)
+            : e.custom_start_time
+            ? String(e.custom_start_time).slice(0, 2) >= '18'
+            : false;
+
         seeded[`${e.employee_id}|${e.roster_date}`] = {
           is_week_off: Boolean(e.is_week_off),
           start_time: e.custom_start_time ? String(e.custom_start_time).slice(0, 5) : '',
           end_time: e.custom_end_time ? String(e.custom_end_time).slice(0, 5) : '',
           buffer_minutes: e.buffer_minutes ?? 10,
+          is_night_shift: isNight,
         };
       }
       setGrid(data);
       setDraft(seeded);
       setSwapPick(null);
+      setEditingCellKey(null);
     } catch (err) {
       setErrorMsg(err.message || 'Failed to load the weekly roster.');
       setGrid(null);
@@ -97,14 +210,33 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     }
   }, [weekStart, deptFilter, roleFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const getCell = (employeeId, date) =>
-    draft[`${employeeId}|${date}`] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10 };
+    draft[`${employeeId}|${date}`] || {
+      is_week_off: false,
+      start_time: '',
+      end_time: '',
+      buffer_minutes: 10,
+      is_night_shift: false,
+    };
 
   const updateCell = (employeeId, date, updates) => {
+    // Prevent updating previous days
+    if (date < today) {
+      setErrorMsg('Cannot modify duty roster for previous days. Past assignments are locked.');
+      return;
+    }
     setDraft((prev) => {
-      const current = prev[`${employeeId}|${date}`] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10 };
+      const current = prev[`${employeeId}|${date}`] || {
+        is_week_off: false,
+        start_time: '',
+        end_time: '',
+        buffer_minutes: 10,
+        is_night_shift: false,
+      };
       return {
         ...prev,
         [`${employeeId}|${date}`]: { ...current, ...updates },
@@ -112,70 +244,160 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     });
   };
 
-  /** Fill employee row with standard Day timing (09:00 - 17:00) */
-  const fillRowDay = (emp) => {
-    if (!grid) return;
+  /**
+   * Apply custom duty hours across all current & future days for an employee
+   */
+  const handleApplyBatch = (e) => {
+    e.preventDefault();
+    if (!batchEmp || !grid) return;
+
+    if (!batchForm.start_time || !batchForm.end_time) {
+      setErrorMsg('Please specify both start and end times.');
+      return;
+    }
+
+    let count = 0;
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        const cur = next[`${emp.employee_id}|${d}`];
-        if (!cur?.is_week_off) {
-          next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '09:00', end_time: '17:00', buffer_minutes: cur?.buffer_minutes ?? 10 };
-        }
+        if (d < today) continue; // NEVER modify past days
+        next[`${batchEmp.employee_id}|${d}`] = {
+          is_week_off: false,
+          start_time: batchForm.start_time,
+          end_time: batchForm.end_time,
+          buffer_minutes: Number(batchForm.buffer_minutes) || 10,
+          is_night_shift: Boolean(batchForm.is_night_shift),
+        };
+        count++;
       }
       return next;
     });
+
+    const shiftName = batchForm.is_night_shift ? 'Night Shift' : 'Day Shift';
+    flash(`Applied ${shiftName} (${batchForm.start_time} – ${batchForm.end_time}) to ${count} active days for ${batchEmp.full_name}. Past days preserved.`);
+    setBatchEmp(null);
   };
 
-  /** Fill employee row with standard Night timing (20:00 - 08:00) */
-  const fillRowNight = (emp) => {
+  /**
+   * Mark remaining days as Week Off — SKIPS past days
+   */
+  const fillRowOff = (emp) => {
     if (!grid) return;
+    let count = 0;
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        const cur = next[`${emp.employee_id}|${d}`];
-        if (!cur?.is_week_off) {
-          next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '20:00', end_time: '08:00', buffer_minutes: cur?.buffer_minutes ?? 10 };
-        }
+        if (d < today) continue; // NEVER modify past days
+        next[`${emp.employee_id}|${d}`] = {
+          is_week_off: true,
+          start_time: '',
+          end_time: '',
+          buffer_minutes: 10,
+          is_night_shift: false,
+        };
+        count++;
       }
       return next;
     });
+    if (count > 0) {
+      flash(`Marked upcoming days as Week Off for ${emp.full_name}. Past days preserved.`);
+    } else {
+      setErrorMsg('No current or upcoming days in this week to update.');
+    }
   };
 
+  /**
+   * Clear employee row — SKIPS past days
+   */
   const clearRow = (emp) => {
     if (!grid) return;
+    let count = 0;
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10 };
+        if (d < today) continue; // NEVER modify past days
+        next[`${emp.employee_id}|${d}`] = {
+          is_week_off: false,
+          start_time: '',
+          end_time: '',
+          buffer_minutes: 10,
+          is_night_shift: false,
+        };
+        count++;
       }
       return next;
     });
+    if (count > 0) {
+      flash(`Cleared duties for upcoming days for ${emp.full_name}. Past days preserved.`);
+    } else {
+      setErrorMsg('No current or upcoming days in this week to clear.');
+    }
   };
 
-  /** Consecutive-worked-day run per employee */
-  const runsByEmployee = useMemo(() => {
+  /**
+   * Shift breakdown summary per employee (continuous night or day shifts fully supported)
+   */
+  const employeeShiftStats = useMemo(() => {
     if (!grid) return {};
-    const storedWorked = new Set(
-      grid.entries
-        .filter((e) => !e.is_week_off && e.custom_start_time)
-        .map((e) => `${e.employee_id}|${e.roster_date}`)
-    );
-    const out = {};
+    const stats = {};
     for (const emp of grid.employees) {
-      const worked = [];
+      let dayCount = 0;
+      let nightCount = 0;
+      let offCount = 0;
+      let unassignedCount = 0;
+
       for (const d of grid.days) {
         const c = getCell(emp.employee_id, d);
-        if (!c.is_week_off && c.start_time && c.end_time) worked.push(d);
+        if (c.is_week_off) {
+          offCount++;
+        } else if (c.start_time && c.end_time) {
+          if (c.is_night_shift) nightCount++;
+          else dayCount++;
+        } else {
+          unassignedCount++;
+        }
       }
-      for (const d of [addDays(grid.weekStart, -1), addDays(grid.weekEnd, 1)]) {
-        if (storedWorked.has(`${emp.employee_id}|${d}`)) worked.push(d);
-      }
-      out[emp.employee_id] = longestRun(worked);
+
+      stats[emp.employee_id] = {
+        dayCount,
+        nightCount,
+        offCount,
+        unassignedCount,
+        totalWorked: dayCount + nightCount,
+      };
     }
-    return out;
+    return stats;
   }, [grid, draft]);
 
+  /**
+   * Day coverage summary: count Day staff and Night staff rostered on each day
+   */
+  const dayCoverageStats = useMemo(() => {
+    if (!grid) return {};
+    const coverage = {};
+    for (const d of grid.days) {
+      let dayStaff = 0;
+      let nightStaff = 0;
+      let offStaff = 0;
+
+      for (const emp of grid.employees) {
+        const c = getCell(emp.employee_id, d);
+        if (c.is_week_off) {
+          offStaff++;
+        } else if (c.start_time && c.end_time) {
+          if (c.is_night_shift) nightStaff++;
+          else dayStaff++;
+        }
+      }
+
+      coverage[d] = { dayStaff, nightStaff, offStaff };
+    }
+    return coverage;
+  }, [grid, draft]);
+
+  /**
+   * Save duty roster — sends ONLY active and future days (d >= today)
+   */
   const handleSave = async () => {
     if (!grid) return;
     try {
@@ -185,6 +407,8 @@ export default function WeeklyRoster({ departments = [], onBack }) {
       const rows = [];
       for (const emp of grid.employees) {
         for (const d of grid.days) {
+          if (d < today) continue; // Past days cannot be overwritten
+
           const c = getCell(emp.employee_id, d);
           if (c.is_week_off) {
             rows.push({
@@ -193,6 +417,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
               is_week_off: true,
               custom_start_time: null,
               custom_end_time: null,
+              is_night_shift: false,
             });
           } else if (c.start_time && c.end_time) {
             rows.push({
@@ -201,14 +426,18 @@ export default function WeeklyRoster({ departments = [], onBack }) {
               is_week_off: false,
               custom_start_time: c.start_time.length === 5 ? `${c.start_time}:00` : c.start_time,
               custom_end_time: c.end_time.length === 5 ? `${c.end_time}:00` : c.end_time,
-              buffer_minutes: c.buffer_minutes !== '' && c.buffer_minutes !== undefined ? Number(c.buffer_minutes) : 10,
+              buffer_minutes:
+                c.buffer_minutes !== '' && c.buffer_minutes !== undefined
+                  ? Number(c.buffer_minutes)
+                  : 10,
+              is_night_shift: Boolean(c.is_night_shift),
             });
           }
         }
       }
 
       if (!rows.length) {
-        setErrorMsg('Nothing to save — assign at least one duty time range or week-off.');
+        setErrorMsg('Nothing to save for current or upcoming days in this week.');
         return;
       }
 
@@ -216,7 +445,8 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         method: 'POST',
         body: JSON.stringify({ weekStart: grid.weekStart, rows }),
       });
-      flash(`Saved ${result.saved} duty roster entries.`);
+
+      flash(`Successfully saved ${result.saved} duty assignments for active days.`);
       await load();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save duty roster.');
@@ -225,345 +455,766 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     }
   };
 
-  const handleSwapClick = (employeeId, date) => {
-    if (!swapPick) {
-      setSwapPick({ employeeId, date });
+  /**
+   * Handle shift swap between two staff members on the same date
+   */
+  const handleSwapClick = (employeeId, date, employeeName) => {
+    if (date < today) {
+      setErrorMsg('Cannot swap shifts for previous days. Past duties are locked.');
       return;
     }
-    if (swapPick.employeeId === employeeId) { setSwapPick(null); return; }
-    if (swapPick.date !== date) {
-      setErrorMsg('Swaps only work between two people on the same date.');
+
+    if (!swapPick) {
+      setSwapPick({ employeeId, date, employeeName });
+      return;
+    }
+
+    if (swapPick.employeeId === employeeId && swapPick.date === date) {
       setSwapPick(null);
       return;
     }
+
+    if (swapPick.date !== date) {
+      setErrorMsg('Swaps must be between two staff members on the exact same date.');
+      setSwapPick(null);
+      return;
+    }
+
     const keyA = `${swapPick.employeeId}|${date}`;
     const keyB = `${employeeId}|${date}`;
+
     setDraft((prev) => ({
       ...prev,
-      [keyA]: prev[keyB] || { is_week_off: false, start_time: '', end_time: '' },
-      [keyB]: prev[keyA] || { is_week_off: false, start_time: '', end_time: '' },
+      [keyA]: prev[keyB] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10, is_night_shift: false },
+      [keyB]: prev[keyA] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10, is_night_shift: false },
     }));
-    flash('Cells swapped in draft. Click "Save Week" to commit.');
+
+    flash(`Swapped duty between ${swapPick.employeeName} and ${employeeName} for ${monthLabel(date)}. Click "Save Duty Roster" to commit.`);
     setSwapPick(null);
   };
 
+  const isEntireWeekPast = grid && grid.days[6] < today;
+  const isCurrentWeek = grid && grid.days[0] <= today && grid.days[6] >= today;
+  const editableDaysCount = grid ? grid.days.filter((d) => d >= today).length : 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
+      {/* Toast Alerts */}
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-4 py-3 rounded-xl shadow-sm">
-          {successMsg}
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center gap-2 animate-fadeIn">
+          <CheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
         </div>
       )}
       {errorMsg && (
-        <div className="bg-rose-50 border border-red-200 text-rose-700 text-xs font-medium px-4 py-3 rounded-xl shadow-sm">
-          {errorMsg}
+        <div className="bg-rose-50 border border-rose-300 text-rose-800 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center justify-between gap-2 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <InformationCircleIcon className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMsg('')}
+            className="text-rose-500 hover:text-rose-800 text-xs font-bold cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
+      {/* Professional Page Header */}
       <PageHeader
         category="Staff & Salary"
-        title="Weekly Duty Roster (Day & Night)"
-        subtitle={grid ? (
-          <>
-            Cycle: <strong>Wednesday to Wednesday</strong> ({monthLabel(grid.weekStart)} – {monthLabel(grid.weekEnd)})
-          </>
-        ) : null}
+        title="Weekly Duty Roster"
+        subtitle={
+          grid ? (
+            <span className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+              <span>Cycle:</span>
+              <strong className="text-gray-800 font-bold">Wednesday to Tuesday</strong>
+              <span>({monthLabel(grid.weekStart)} – {monthLabel(grid.weekEnd)})</span>
+              {isEntireWeekPast ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                  <LockClosedIcon className="w-3 h-3 text-slate-500" /> Past Week (Locked)
+                </span>
+              ) : isCurrentWeek ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> Active Week ({editableDaysCount} days editable)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                  <CalendarIcon className="w-3 h-3 text-blue-600" /> Upcoming Week
+                </span>
+              )}
+            </span>
+          ) : null
+        }
         onBack={onBack}
         actions={
-          <>
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setShowTimingModal(true)}
               className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title="Configure hospital-wide standard shift hours"
             >
-              <GearIcon className="w-3.5 h-3.5" />
+              <GearIcon className="w-3.5 h-3.5 text-gray-500" />
               <span>Configure Shift Timings</span>
             </button>
             <button
+              type="button"
               onClick={handleSave}
-              disabled={isSaving || isLoading || !grid?.employees?.length}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+              disabled={isSaving || isLoading || !grid?.employees?.length || isEntireWeekPast}
+              className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSaving ? 'Saving…' : 'Save Duty Roster'}
+              <CheckIcon className="w-4 h-4" />
+              <span>{isSaving ? 'Saving…' : isEntireWeekPast ? 'Week Locked' : 'Save Duty Roster'}</span>
             </button>
-          </>
+          </div>
         }
       />
 
-      {/* Information Banner */}
-      <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs text-blue-800 space-y-1">
-        <div className="font-bold flex items-center gap-1.5">
-          <InfoIcon className="w-4 h-4 text-blue-600 shrink-0" />
-          <span>Day &amp; Night Shift Allotment</span>
+      {/* Roster Controls & Navigation Card */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-xs space-y-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Week Navigation */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg shadow-2xs border border-gray-200 bg-gray-50 p-0.5">
+              <button
+                type="button"
+                onClick={() => setWeekStart((w) => addDays(w, -7))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-white rounded-md transition-colors cursor-pointer"
+                title="Previous Week"
+              >
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
+                <span>Prev Week</span>
+              </button>
+              <div className="w-[1px] bg-gray-200 my-1"></div>
+              <button
+                type="button"
+                onClick={() => setWeekStart((w) => addDays(w, 7))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-white rounded-md transition-colors cursor-pointer"
+                title="Next Week"
+              >
+                <span>Next Week</span>
+                <ChevronRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1 bg-white">
+              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="date"
+                value={weekStart}
+                onChange={(e) => e.target.value && setWeekStart(startOfWeek(e.target.value))}
+                className="text-xs font-semibold text-gray-900 bg-transparent focus:outline-none cursor-pointer"
+                title="Pick week start date (Wednesday)"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setWeekStart(startOfWeek(today))}
+              className="px-3 py-1.5 bg-blue-50 text-[#1e40af] hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-blue-200 flex items-center gap-1"
+            >
+              <ClockIcon className="w-3.5 h-3.5 text-[#1e40af]" />
+              <span>Current Week</span>
+            </button>
+          </div>
+
+          {/* Department and Role Filter */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                <BuildingOffice2Icon className="w-3.5 h-3.5 text-gray-400" />
+                <span>Dept</span>
+              </span>
+              <select
+                value={deptFilter}
+                onChange={(e) => {
+                  setDeptFilter(e.target.value);
+                  setRoleFilter('');
+                }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">All departments</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                <UserGroupIcon className="w-3.5 h-3.5 text-gray-400" />
+                <span>Role</span>
+              </span>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                disabled={!deptFilter}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                <option value="">All roles</option>
+                {rolesForDept.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.roleName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-        <p className="text-[11px] text-blue-700 leading-relaxed">
-          The weekly duty roster runs on a <strong>Wednesday to Wednesday</strong> cycle exclusively for <strong>Day &amp; Night Shift</strong> staff.
-          Enter specific time ranges (e.g. 09:00 – 17:00 or 20:00 – 08:00) or toggle Week Off (WO) for each day.
-        </p>
-      </div>
 
-      {/* Controls */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col lg:flex-row lg:items-center gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setWeekStart((w) => addDays(w, -7))}
-            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-          >
-            ← Prev Week
-          </button>
-          <input
-            type="date"
-            value={weekStart}
-            onChange={(e) => e.target.value && setWeekStart(startOfWeek(e.target.value))}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-          />
-          <button
-            onClick={() => setWeekStart((w) => addDays(w, 7))}
-            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-          >
-            Next Week →
-          </button>
-          <button
-            onClick={() => setWeekStart(startOfWeek(today))}
-            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-          >
-            This Wednesday
-          </button>
+        {/* Legend & Instructions Strip */}
+        <div className="pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2.5 text-[11px]">
+            <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px] mr-1">
+              Shift Types:
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
+              <SunIcon className="w-3.5 h-3.5 text-blue-600" /> Day Shift
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
+              <MoonIcon className="w-3.5 h-3.5 text-indigo-600" /> Night Shift
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+              🏖️ Week Off (WO)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-semibold">
+              <LockClosedIcon className="w-3 h-3 text-slate-400" /> Past Day (Locked)
+            </span>
+          </div>
+
+          <div className="text-[11px] text-gray-500 flex items-center gap-1">
+            <InformationCircleIcon className="w-3.5 h-3.5 text-blue-500" />
+            <span>Enter exact start &amp; end time for each duty, and select Day or Night shift. Continuous shifts permitted.</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dept</span>
-          <select
-            value={deptFilter}
-            onChange={(e) => { setDeptFilter(e.target.value); setRoleFilter(''); }}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-2">Role</span>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            disabled={!deptFilter}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-50 disabled:text-gray-400"
-          >
-            <option value="">All roles</option>
-            {rolesForDept.map((r) => <option key={r.id} value={r.id}>{r.roleName}</option>)}
-          </select>
-        </div>
-
+        {/* Shift Swap Notification Banner */}
         {swapPick && (
-          <div className="lg:ml-auto text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
-            Pick a second person on {swapPick.date} to swap duty times ·{' '}
-            <button onClick={() => setSwapPick(null)} className="underline cursor-pointer">cancel</button>
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-center justify-between text-xs text-amber-900 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <ArrowsRightLeftIcon className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Shift Swap in Progress:</strong> Pick a second employee on{' '}
+                <strong>{monthLabel(swapPick.date)}</strong> to swap duties with{' '}
+                <strong>{swapPick.employeeName}</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSwapPick(null)}
+              className="text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer flex items-center gap-1"
+            >
+              <XMarkIcon className="w-3.5 h-3.5" />
+              <span>Cancel Swap</span>
+            </button>
           </div>
         )}
       </div>
 
-      {/* Grid Table */}
+      {/* Grid Content */}
       {isLoading ? (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-400">Loading duty roster…</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-12 text-center text-xs text-gray-400">
+          <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="font-semibold text-gray-600">Loading duty roster…</p>
+        </div>
       ) : !grid || grid.employees.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-500 space-y-2">
-          <p className="font-semibold text-gray-700">No Day &amp; Night shift employees found in this department/role.</p>
-          <p className="text-gray-400 text-[11px]">Staff with Fixed Day, Fixed Night, or General shift categories are managed with individual timings on the HR &amp; Employees page.</p>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-12 text-center text-xs text-gray-500 space-y-2">
+          <p className="font-bold text-gray-800 text-sm">No Day &amp; Night Shift Staff Found</p>
+          <p className="text-gray-400 max-w-md mx-auto leading-relaxed">
+            There are no employees configured with the Day &amp; Night shift model under this department/role filter.
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-xs">
+            <table className="w-full min-w-[1200px] text-xs border-collapse">
+              {/* Table Column Headers */}
               <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] sticky left-0 bg-gray-50/80 z-10 min-w-[180px]">
-                    Employee
+                <tr className="bg-gray-50/90 border-b border-gray-200">
+                  <th className="text-left px-4 py-3.5 font-bold text-gray-700 uppercase tracking-wider text-[11px] sticky left-0 bg-gray-50/95 z-20 min-w-[230px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                    Employee Details
                   </th>
-                  {grid.days.map((d, i) => (
-                    <th key={d} className="px-2 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center min-w-[130px]">
-                      <div className="text-blue-700 font-extrabold">{DAY_LABELS[i]}</div>
-                      <div className="text-gray-400 font-semibold">{dayNum(d)}</div>
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center min-w-[90px]">
-                    Week-offs
+
+                  {grid.days.map((d, i) => {
+                    const isToday = d === today;
+                    const isPast = d < today;
+                    const coverage = dayCoverageStats[d] || { dayStaff: 0, nightStaff: 0, offStaff: 0 };
+
+                    return (
+                      <th
+                        key={d}
+                        className={`px-2 py-3 text-center min-w-[155px] transition-colors border-l border-gray-200/60 ${
+                          isToday
+                            ? 'bg-blue-50/70 border-b-2 border-b-blue-600'
+                            : isPast
+                            ? 'bg-slate-50/80 text-slate-500'
+                            : 'bg-gray-50/90 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center">
+                          {isToday && (
+                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full bg-blue-600 text-white tracking-wider mb-0.5">
+                              TODAY
+                            </span>
+                          )}
+                          {isPast && (
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
+                              <LockClosedIcon className="w-2.5 h-2.5" /> Past
+                            </span>
+                          )}
+                          <div className={`font-extrabold text-[12px] ${isToday ? 'text-blue-900' : isPast ? 'text-slate-600' : 'text-gray-800'}`}>
+                            {DAY_LABELS[i]}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-semibold">{monthLabel(d).slice(0, 6)}</div>
+
+                          {/* Day Shift Coverage Counters */}
+                          <div className="mt-1 flex items-center gap-1.5 text-[9px] font-bold">
+                            <span className="inline-flex items-center gap-0.5 text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded" title="Staff scheduled for Day Shift">
+                              <SunIcon className="w-2.5 h-2.5 text-blue-600" /> {coverage.dayStaff}
+                            </span>
+                            <span className="inline-flex items-center gap-0.5 text-indigo-700 bg-indigo-100/70 px-1.5 py-0.5 rounded" title="Staff scheduled for Night Shift">
+                              <MoonIcon className="w-2.5 h-2.5 text-indigo-600" /> {coverage.nightStaff}
+                            </span>
+                          </div>
+                        </div>
+                      </th>
+                    );
+                  })}
+
+                  <th className="px-3 py-3.5 font-bold text-gray-700 uppercase tracking-wider text-[11px] text-center min-w-[125px] border-l border-gray-200/60 bg-gray-50/95">
+                    Week Summary
                   </th>
                 </tr>
               </thead>
+
+              {/* Table Rows */}
               <tbody className="divide-y divide-gray-100">
                 {grid.employees.map((emp) => {
-                  const run = runsByEmployee[emp.employee_id] ?? 0;
-                  const overLimit = run > MAX_CONSECUTIVE;
-                  const weekOffsInDraft = grid.days.filter(
-                    (d) => getCell(emp.employee_id, d).is_week_off
-                  ).length;
+                  const stats = employeeShiftStats[emp.employee_id] || {
+                    dayCount: 0,
+                    nightCount: 0,
+                    offCount: 0,
+                    unassignedCount: 0,
+                    totalWorked: 0,
+                  };
 
                   return (
-                    <tr key={emp.employee_id} className={overLimit ? 'bg-rose-50/40' : 'hover:bg-gray-50/60'}>
-                      <td className="px-4 py-3 sticky left-0 bg-inherit z-10">
-                        <div className="font-bold text-gray-900">{emp.full_name}</div>
-                        <div className="text-[10px] text-gray-400">
-                          {emp.employee_code} · {emp.role_name || '—'}
+                    <tr key={emp.employee_id} className="hover:bg-blue-50/20 transition-colors group">
+                      {/* Employee Info & Row Quick Actions */}
+                      <td className="px-4 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/90 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] align-top">
+                        <div className="font-bold text-gray-900 text-xs">{emp.full_name}</div>
+                        <div className="text-[10px] text-gray-500 font-mono">
+                          {emp.employee_code} · <span className="font-sans text-gray-600 font-medium">{emp.role_name || 'Staff'}</span>
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <button
-                            type="button"
-                            onClick={() => fillRowDay(emp)}
-                            className="text-[9px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-100 cursor-pointer"
-                          >
-                            Fill Day
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fillRowNight(emp)}
-                            className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded hover:bg-indigo-100 cursor-pointer"
-                          >
-                            Fill Night
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => clearRow(emp)}
-                            className="text-[9px] font-semibold text-gray-400 hover:text-gray-700 underline cursor-pointer"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                        {overLimit && (
-                          <div className="text-[10px] font-bold text-rose-600 mt-1 flex items-center gap-1">
-                            <AlertTriangleIcon className="w-3.5 h-3.5 shrink-0" />
-                            <span>{run} consecutive days (max is {MAX_CONSECUTIVE})</span>
+
+                        {/* Batch Apply Actions (affects only active future days) */}
+                        {!isEntireWeekPast && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBatchEmp(emp);
+                                setBatchForm({
+                                  start_time: '09:00',
+                                  end_time: '17:00',
+                                  is_night_shift: false,
+                                  buffer_minutes: 10,
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-100 cursor-pointer transition-colors shadow-2xs"
+                              title="Set custom start/end time and shift type across upcoming days for this employee"
+                            >
+                              <SparklesIcon className="w-3 h-3 text-blue-600" />
+                              <span>Apply to Week</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => fillRowOff(emp)}
+                              className="text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md hover:bg-amber-100 cursor-pointer transition-colors shadow-2xs"
+                              title="Mark remaining upcoming days as Week Off"
+                            >
+                              🏖️ Off
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => clearRow(emp)}
+                              className="text-[9px] font-semibold text-gray-400 hover:text-rose-600 underline cursor-pointer transition-colors ml-0.5"
+                              title="Clear duty for upcoming days"
+                            >
+                              Clear
+                            </button>
                           </div>
                         )}
                       </td>
 
+                      {/* Day Cells */}
                       {grid.days.map((d) => {
                         const cell = getCell(emp.employee_id, d);
-                        const isPicked = swapPick && swapPick.employeeId === emp.employee_id && swapPick.date === d;
+                        const isPast = d < today;
+                        const isToday = d === today;
+                        const cellKey = `${emp.employee_id}|${d}`;
+                        const isCustomEditing = editingCellKey === cellKey;
+                        const isPicked =
+                          swapPick &&
+                          swapPick.employeeId === emp.employee_id &&
+                          swapPick.date === d;
 
                         return (
-                          <td key={d} className="px-1.5 py-2 align-top">
-                            <div className={`p-1.5 rounded-lg border text-center transition-colors ${
-                              cell.is_week_off
-                                ? 'bg-amber-50/70 border-amber-200'
-                                : cell.start_time && cell.end_time
-                                  ? 'bg-blue-50/50 border-blue-200'
-                                  : 'bg-white border-gray-200'
-                            }`}>
-                              {cell.is_week_off ? (
-                                <div className="space-y-1 py-1">
-                                  <span className="inline-block font-extrabold text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                                    WEEK OFF
-                                  </span>
-                                  <div>
-                                    <button
-                                      type="button"
-                                      onClick={() => updateCell(emp.employee_id, d, { is_week_off: false, start_time: '09:00', end_time: '17:00' })}
-                                      className="text-[9px] font-semibold text-blue-600 hover:underline cursor-pointer"
-                                    >
-                                      Assign Hours
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="time"
-                                      value={cell.start_time || ''}
-                                      onChange={(e) => updateCell(emp.employee_id, d, { start_time: e.target.value })}
-                                      className="w-full text-[10px] font-bold p-0.5 border border-gray-200 rounded text-center bg-white"
-                                      placeholder="Start"
-                                    />
-                                    <span className="text-[10px] text-gray-400">–</span>
-                                    <input
-                                      type="time"
-                                      value={cell.end_time || ''}
-                                      onChange={(e) => updateCell(emp.employee_id, d, { end_time: e.target.value })}
-                                      className="w-full text-[10px] font-bold p-0.5 border border-gray-200 rounded text-center bg-white"
-                                      placeholder="End"
-                                    />
-                                  </div>
-
-                                  <div className="flex items-center justify-between text-[9px] text-gray-500 bg-gray-50 px-1 py-0.5 rounded border border-gray-100">
-                                    <span title="Allowed late arrival grace in minutes">Buf:</span>
-                                    <div className="flex items-center gap-0.5">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max="60"
-                                        value={cell.buffer_minutes ?? 10}
-                                        onChange={(e) => updateCell(emp.employee_id, d, { buffer_minutes: e.target.value })}
-                                        className="w-7 text-[9px] font-bold p-0 border border-gray-200 rounded text-center bg-white text-gray-800"
-                                        placeholder="10"
-                                        title="Buffer / Grace minutes"
-                                      />
-                                      <span className="text-[8px] text-gray-400">m</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center justify-between pt-0.5">
-                                    <div className="flex gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => updateCell(emp.employee_id, d, { start_time: '09:00', end_time: '17:00', buffer_minutes: cell.buffer_minutes ?? 10 })}
-                                        className="text-[8px] font-bold px-1 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
-                                        title="Preset Day 09:00 - 17:00"
-                                      >
-                                        D
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateCell(emp.employee_id, d, { start_time: '20:00', end_time: '08:00', buffer_minutes: cell.buffer_minutes ?? 10 })}
-                                        className="text-[8px] font-bold px-1 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
-                                        title="Preset Night 20:00 - 08:00"
-                                      >
-                                        N
-                                      </button>
-                                    </div>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => updateCell(emp.employee_id, d, { is_week_off: true, start_time: '', end_time: '' })}
-                                      className="text-[8px] font-bold px-1 py-0.5 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded cursor-pointer"
-                                      title="Mark Week Off"
-                                    >
-                                      WO
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() => handleSwapClick(emp.employee_id, d)}
-                                disabled={isSaving}
-                                className={`mt-1 w-full text-[8px] font-bold rounded py-0.5 cursor-pointer transition-colors disabled:opacity-40 ${
-                                  isPicked
-                                    ? 'bg-amber-500 text-white'
-                                    : 'text-gray-300 hover:text-gray-600 hover:bg-gray-100'
-                                }`}
-                                title="Swap this duty assignment with another person on the same day"
+                          <td
+                            key={d}
+                            className={`px-2 py-2.5 align-top border-l border-gray-100 ${
+                              isToday ? 'bg-blue-50/20' : isPast ? 'bg-slate-50/40' : ''
+                            }`}
+                          >
+                            {/* Past Day Display: Strictly Read-Only & Locked */}
+                            {isPast ? (
+                              <div
+                                className="p-2.5 rounded-xl border border-slate-200 bg-slate-100/70 text-center space-y-1.5"
+                                title="Past duty assignment (Locked / Completed)"
                               >
-                                {isPicked ? 'PICKED' : 'SWAP'}
-                              </button>
-                            </div>
+                                <div className="flex items-center justify-center gap-1 text-[9px] font-bold text-slate-400">
+                                  <LockClosedIcon className="w-3 h-3 text-slate-400" />
+                                  <span>Locked</span>
+                                </div>
+
+                                {cell.is_week_off ? (
+                                  <div className="px-2 py-1 rounded bg-amber-100/80 text-amber-900 font-extrabold text-[10px]">
+                                    WEEK OFF
+                                  </div>
+                                ) : cell.start_time && cell.end_time ? (
+                                  <div
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold flex flex-col items-center ${
+                                      cell.is_night_shift
+                                        ? 'bg-indigo-100/80 text-indigo-900'
+                                        : 'bg-blue-100/80 text-blue-900'
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-1">
+                                      {cell.is_night_shift ? (
+                                        <MoonIcon className="w-3 h-3 text-indigo-700 shrink-0" />
+                                      ) : (
+                                        <SunIcon className="w-3 h-3 text-blue-700 shrink-0" />
+                                      )}
+                                      <span>{cell.is_night_shift ? 'Night Shift' : 'Day Shift'}</span>
+                                    </span>
+                                    <span className="font-mono text-[9px] mt-0.5">
+                                      {cell.start_time} – {cell.end_time}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-slate-400 italic py-1">
+                                    — Unassigned —
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              /* Active / Future Day: Option to Enter Start/End Time and Toggle Day vs Night Shift */
+                              <div
+                                className={`p-2.5 rounded-xl border transition-all shadow-2xs space-y-2 ${
+                                  isPicked
+                                    ? 'bg-amber-100/80 border-amber-400 ring-2 ring-amber-400/40'
+                                    : cell.is_week_off
+                                    ? 'bg-amber-50/80 border-amber-200 hover:border-amber-300'
+                                    : cell.start_time && cell.end_time && !isCustomEditing
+                                    ? cell.is_night_shift
+                                      ? 'bg-indigo-50/70 border-indigo-200 hover:border-indigo-300'
+                                      : 'bg-blue-50/70 border-blue-200 hover:border-blue-300'
+                                    : 'bg-white border-dashed border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                {cell.is_week_off ? (
+                                  /* State 1: Week Off */
+                                  <div className="space-y-1.5 text-center py-1">
+                                    <div className="inline-block font-extrabold text-[10px] text-amber-900 bg-amber-200/70 px-2.5 py-0.5 rounded-full shadow-2xs">
+                                      WEEK OFF
+                                    </div>
+                                    <div className="pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          updateCell(emp.employee_id, d, {
+                                            is_week_off: false,
+                                            start_time: '09:00',
+                                            end_time: '17:00',
+                                            is_night_shift: false,
+                                          });
+                                          setEditingCellKey(cellKey);
+                                        }}
+                                        className="text-[9px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                        title="Assign custom work hours"
+                                      >
+                                        + Set Duty Hours
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : cell.start_time && cell.end_time && !isCustomEditing ? (
+                                  /* State 2: Assigned Duty (Display Card with 1-click Toggle & Edit) */
+                                  <div className="space-y-1.5">
+                                    <div
+                                      className={`px-2 py-1.5 rounded-lg text-center flex flex-col items-center justify-center ${
+                                        cell.is_night_shift
+                                          ? 'bg-indigo-100/70 text-indigo-950 border border-indigo-200/60'
+                                          : 'bg-blue-100/70 text-blue-950 border border-blue-200/60'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide">
+                                        {cell.is_night_shift ? (
+                                          <MoonIcon className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                                        ) : (
+                                          <SunIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                        )}
+                                        <span>{cell.is_night_shift ? 'Night Shift' : 'Day Shift'}</span>
+                                      </div>
+                                      <div className="font-mono font-bold text-[11px] text-gray-900 mt-0.5">
+                                        {cell.start_time} – {cell.end_time}
+                                      </div>
+                                      {cell.buffer_minutes ? (
+                                        <div className="text-[8px] font-bold text-gray-500 mt-0.5">
+                                          Grace: {cell.buffer_minutes}m
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {/* Action Bar */}
+                                    <div className="flex items-center justify-between gap-1 pt-0.5">
+                                      {/* Shift Type Switcher */}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_night_shift: !cell.is_night_shift,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs"
+                                        title={`Switch to ${cell.is_night_shift ? 'Day Shift' : 'Night Shift'}`}
+                                      >
+                                        {cell.is_night_shift ? (
+                                          <>
+                                            <SunIcon className="w-2.5 h-2.5 text-amber-600" />
+                                            <span>To Day</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <MoonIcon className="w-2.5 h-2.5 text-indigo-600" />
+                                            <span>To Night</span>
+                                          </>
+                                        )}
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingCellKey(cellKey)}
+                                        className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs flex items-center gap-0.5"
+                                        title="Change duty start/end hours"
+                                      >
+                                        <PencilSquareIcon className="w-2.5 h-2.5 text-gray-500" />
+                                        <span>Edit</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_week_off: true,
+                                            start_time: '',
+                                            end_time: '',
+                                          })
+                                        }
+                                        className="text-[8px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 hover:bg-amber-200 rounded cursor-pointer"
+                                        title="Mark as Week Off"
+                                      >
+                                        WO
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  /* State 3: Enter Start Time, End Time, and Select Day vs Night Shift */
+                                  <div className="space-y-1.5">
+                                    {/* Start & End Time Inputs */}
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="time"
+                                          value={cell.start_time || ''}
+                                          onChange={(e) =>
+                                            updateCell(emp.employee_id, d, {
+                                              is_week_off: false,
+                                              start_time: e.target.value,
+                                            })
+                                          }
+                                          className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          placeholder="Start"
+                                          title="Duty Start Time"
+                                        />
+                                        <span className="text-[10px] text-gray-400 font-bold">–</span>
+                                        <input
+                                          type="time"
+                                          value={cell.end_time || ''}
+                                          onChange={(e) =>
+                                            updateCell(emp.employee_id, d, {
+                                              is_week_off: false,
+                                              end_time: e.target.value,
+                                            })
+                                          }
+                                          className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          placeholder="End"
+                                          title="Duty End Time"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Shift Type Selector Toggle: Day vs Night */}
+                                    <div className="grid grid-cols-2 gap-1 p-0.5 bg-gray-100 rounded-lg border border-gray-200">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_night_shift: false,
+                                          })
+                                        }
+                                        className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                                          !cell.is_night_shift
+                                            ? 'bg-white text-blue-800 shadow-2xs border border-blue-200'
+                                            : 'text-gray-500 hover:text-gray-900'
+                                        }`}
+                                      >
+                                        <SunIcon className={`w-3 h-3 ${!cell.is_night_shift ? 'text-amber-500' : 'text-gray-400'}`} />
+                                        <span>Day</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_night_shift: true,
+                                          })
+                                        }
+                                        className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                                          cell.is_night_shift
+                                            ? 'bg-indigo-900 text-white shadow-2xs'
+                                            : 'text-gray-500 hover:text-gray-900'
+                                        }`}
+                                      >
+                                        <MoonIcon className={`w-3 h-3 ${cell.is_night_shift ? 'text-indigo-200' : 'text-gray-400'}`} />
+                                        <span>Night</span>
+                                      </button>
+                                    </div>
+
+                                    {/* Grace buffer & Done/WO actions */}
+                                    <div className="flex items-center justify-between text-[9px] text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                      <span title="Late arrival grace buffer">Grace:</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="60"
+                                          value={cell.buffer_minutes ?? 10}
+                                          onChange={(e) =>
+                                            updateCell(emp.employee_id, d, {
+                                              buffer_minutes: e.target.value,
+                                            })
+                                          }
+                                          className="w-7 text-[9px] font-bold p-0 border border-gray-200 rounded text-center bg-white text-gray-800"
+                                          title="Grace arrival buffer in minutes"
+                                        />
+                                        <span className="text-[8px] text-gray-400">m</span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateCell(emp.employee_id, d, {
+                                              is_week_off: true,
+                                              start_time: '',
+                                              end_time: '',
+                                            })
+                                          }
+                                          className="text-[8px] font-bold px-1 py-0.2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
+                                          title="Set as Week Off"
+                                        >
+                                          WO
+                                        </button>
+                                        {cell.start_time && cell.end_time && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingCellKey(null)}
+                                            className="text-[9px] text-blue-600 font-bold hover:underline cursor-pointer"
+                                          >
+                                            Done
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Shift Swap Action Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwapClick(emp.employee_id, d, emp.full_name)}
+                                  disabled={isSaving}
+                                  className={`mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all disabled:opacity-40 ${
+                                    isPicked
+                                      ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                                      : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
+                                  }`}
+                                  title="Swap duty hours with another person on the same date"
+                                >
+                                  <ArrowsRightLeftIcon className="w-3 h-3" />
+                                  <span>{isPicked ? 'PICKED FOR SWAP' : 'Swap'}</span>
+                                </button>
+                              </div>
+                            )}
                           </td>
                         );
                       })}
 
-                      <td className="px-3 py-3 text-center">
-                        <div className={`font-bold ${
-                          emp.week_offs_entitled > 0 && emp.week_offs_taken > emp.week_offs_entitled
-                            ? 'text-rose-600' : 'text-gray-800'
-                        }`}>
-                          {emp.week_offs_taken} / {emp.week_offs_entitled || '—'}
-                        </div>
-                        <div className="text-[9px] text-gray-400">this month</div>
-                        {weekOffsInDraft > 0 && (
-                          <div className="text-[9px] text-amber-600 font-semibold mt-0.5">
-                            {weekOffsInDraft} in week
+                      {/* Employee Summary Stats Column */}
+                      <td className="px-3 py-3.5 text-center border-l border-gray-100 align-top">
+                        <div className="space-y-1.5">
+                          {/* Continuous shift breakdown */}
+                          <div className="font-bold text-gray-900 text-xs">
+                            {stats.totalWorked} Shifts
                           </div>
-                        )}
+                          <div className="text-[10px] font-semibold text-gray-500 flex flex-col gap-1 items-center">
+                            {stats.dayCount > 0 && (
+                              <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200/60 px-1.5 py-0.5 rounded-md font-bold">
+                                <SunIcon className="w-3 h-3 text-blue-600" />
+                                <span>{stats.dayCount} Day</span>
+                              </span>
+                            )}
+                            {stats.nightCount > 0 && (
+                              <span className="inline-flex items-center gap-1 text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded-md font-bold">
+                                <MoonIcon className="w-3 h-3 text-indigo-600" />
+                                <span>{stats.nightCount} Night</span>
+                              </span>
+                            )}
+                            {stats.offCount > 0 && (
+                              <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-md font-bold">
+                                🏖️ {stats.offCount} Off
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="pt-1.5 border-t border-gray-100">
+                            <div
+                              className={`font-bold text-[10px] ${
+                                emp.week_offs_entitled > 0 &&
+                                emp.week_offs_taken > emp.week_offs_entitled
+                                  ? 'text-rose-600'
+                                  : 'text-gray-700'
+                              }`}
+                            >
+                              WO: {emp.week_offs_taken} / {emp.week_offs_entitled || '—'}
+                            </div>
+                            <div className="text-[9px] text-gray-400">entitled/mo</div>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -572,17 +1223,150 @@ export default function WeeklyRoster({ departments = [], onBack }) {
             </table>
           </div>
 
-          <div className="px-4 py-3 border-t border-gray-100 text-[11px] text-gray-500 flex flex-wrap items-center gap-4 bg-gray-50/50">
-            <span>• Time inputs accept start and end hours for day/night duty allotment.</span>
-            <span>• <strong className="text-amber-700">WO</strong> button sets Week Off for that day.</span>
-            <span>• <strong className="text-blue-700">SWAP</strong> lets you exchange hours between two staff on the same date.</span>
+          {/* Footer Guide Strip */}
+          <div className="px-4 py-3 border-t border-gray-100 text-[11px] text-gray-500 flex flex-wrap items-center justify-between gap-4 bg-gray-50/50">
+            <div className="flex flex-wrap items-center gap-4">
+              <span>• <strong>Previous Days:</strong> Locked automatically to protect attendance integrity.</span>
+              <span>• <strong>Custom Shifts:</strong> Enter custom start &amp; end times freely and choose Day or Night shift.</span>
+              <span>• <strong>Continuous Shifts:</strong> Continuous night or day shifts are fully supported across all 7 days.</span>
+            </div>
+            <div className="font-semibold text-gray-600">
+              Active staff: {grid.employees.length}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Batch Schedule Modal for an Employee */}
+      {batchEmp && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="w-5 h-5 text-blue-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Apply Duty Across Upcoming Days</h3>
+                  <p className="text-[11px] text-gray-500">{batchEmp.full_name} ({batchEmp.employee_code})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBatchEmp(null)}
+                className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyBatch} className="p-5 space-y-4">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Set custom start and end time and select Day or Night shift. This will be applied to all current and upcoming days in this week. Past days will remain locked.
+              </p>
+
+              {/* Time Inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={batchForm.start_time}
+                    onChange={(e) => setBatchForm((f) => ({ ...f, start_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={batchForm.end_time}
+                    onChange={(e) => setBatchForm((f) => ({ ...f, end_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Day vs Night Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1.5">
+                  Shift Category
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setBatchForm((f) => ({ ...f, is_night_shift: false }))}
+                    className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      !batchForm.is_night_shift
+                        ? 'bg-white text-blue-900 shadow-xs border border-blue-200'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <SunIcon className={`w-4 h-4 ${!batchForm.is_night_shift ? 'text-amber-500' : 'text-gray-400'}`} />
+                    <span>Day Shift</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchForm((f) => ({ ...f, is_night_shift: true }))}
+                    className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      batchForm.is_night_shift
+                        ? 'bg-indigo-900 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <MoonIcon className={`w-4 h-4 ${batchForm.is_night_shift ? 'text-indigo-200' : 'text-gray-400'}`} />
+                    <span>Night Shift</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grace Buffer Minutes */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                  Arrival Grace Buffer (Minutes)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={batchForm.buffer_minutes}
+                  onChange={(e) => setBatchForm((f) => ({ ...f, buffer_minutes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                  placeholder="10"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setBatchEmp(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#1e40af] hover:bg-[#1c399b] rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  Apply to Upcoming Days
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Configure Shift Timings Modal */}
       <ConfigureShiftTimingModal
         isOpen={showTimingModal}
         onClose={() => setShowTimingModal(false)}
-        onSuccess={() => flash('Shift timings updated successfully!')}
+        onSuccess={() => {
+          flash('Hospital shift timings updated successfully!');
+        }}
       />
     </div>
   );

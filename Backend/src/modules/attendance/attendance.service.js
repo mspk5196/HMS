@@ -156,7 +156,7 @@ const getShiftForDate = async (employeeId, date) => {
 
   // Priority 2 — Day & Night duty roster (custom time ranges in roster_entries)
   const [rosterRows] = await db.execute(
-    `SELECT re.custom_start_time, re.custom_end_time, re.buffer_minutes, re.is_week_off, re.is_holiday
+    `SELECT re.custom_start_time, re.custom_end_time, re.buffer_minutes, re.is_night_shift, re.is_week_off, re.is_holiday
      FROM roster_entries re
      WHERE re.employee_id = ? AND re.roster_date = ? LIMIT 1`,
     [employeeId, date]
@@ -171,7 +171,9 @@ const getShiftForDate = async (employeeId, date) => {
       });
     }
     if (re.custom_start_time && re.custom_end_time) {
-      const isNight = re.custom_start_time >= '18:00:00';
+      const isNight = re.is_night_shift !== undefined && re.is_night_shift !== null
+        ? Number(re.is_night_shift) === 1
+        : (re.custom_start_time >= '18:00:00');
       let grace = re.buffer_minutes;
       if (grace === null || grace === undefined) {
         const [sRows] = await db.execute(
