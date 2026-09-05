@@ -120,15 +120,32 @@ const createEmployee = async (data) => {
     department_id, designation_id, mobile, phone, address, status,
     bank_account_no, bank_ifsc, bank_name, uan_number,
     salary_type, basic_salary, per_day_salary, per_night_salary,
-    qualification, experience_description
+    qualification, experience_description,
+    aadhar_number, aadhar_doc_path, pan_number, pan_doc_path,
+    shift_category, custom_shift_start, custom_shift_end,
   } = data;
+  const isDayNight = shift_category === 'day_and_night';
+  const finalSalaryType = 'monthly';
+  let finalBasicSalary = Number(basic_salary) || 0;
+  let finalPerDaySalary = Number(per_day_salary) || 0;
+  let finalPerNightSalary = isDayNight ? (Number(per_night_salary) || 0) : 0;
+
+  if (isDayNight) {
+    finalBasicSalary = Math.round(finalPerDaySalary * 30 * 100) / 100;
+  } else {
+    finalPerDaySalary = Math.round((finalBasicSalary / 30) * 100) / 100;
+    finalPerNightSalary = 0;
+  }
+
   const [result] = await db.execute(
     `INSERT INTO employees (employee_code, full_name, gender, date_of_birth, date_of_joining,
        department_id, designation_id, phone, address, status,
        bank_account_no, bank_ifsc, bank_name, uan_number,
        salary_type, basic_salary, per_day_salary, per_night_salary,
-       qualification, experience_description)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       qualification, experience_description,
+       aadhar_number, aadhar_doc_path, pan_number, pan_doc_path,
+       shift_category, custom_shift_start, custom_shift_end)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       employee_code,
       full_name,
@@ -144,12 +161,19 @@ const createEmployee = async (data) => {
       bank_ifsc || null,
       bank_name || null,
       uan_number || null,
-      salary_type || 'monthly',
-      basic_salary ?? 0,
-      per_day_salary ?? 0,
-      per_night_salary ?? 0,
+      finalSalaryType,
+      finalBasicSalary,
+      finalPerDaySalary,
+      finalPerNightSalary,
       qualification || null,
-      experience_description || null
+      experience_description || null,
+      aadhar_number || null,
+      aadhar_doc_path || null,
+      pan_number || null,
+      pan_doc_path || null,
+      shift_category || null,
+      custom_shift_start || null,
+      custom_shift_end || null,
     ]
   );
   return result.insertId;
@@ -162,7 +186,10 @@ const updateEmployee = async (id, data) => {
     'bank_account_no', 'bank_ifsc', 'bank_name',
     'uan_number', 'esi_number',
     'salary_type', 'basic_salary', 'per_day_salary', 'per_night_salary',
-    'qualification', 'experience_description'
+    'qualification', 'experience_description',
+    // Document & shift fields (v9)
+    'aadhar_number', 'aadhar_doc_path', 'pan_number', 'pan_doc_path',
+    'shift_category', 'custom_shift_start', 'custom_shift_end',
   ];
   const booleans = ['pf_enrolled', 'esi_enrolled'];
   const fields = [];
@@ -184,7 +211,7 @@ const updateEmployee = async (id, data) => {
   if (data.dob !== undefined) { fields.push('date_of_birth = ?'); vals.push(data.dob); }
   if (data.phone !== undefined || data.mobile !== undefined) { fields.push('phone = ?'); vals.push(data.phone || data.mobile); }
   if (data.is_active !== undefined) { fields.push('status = ?'); vals.push(data.is_active ? 'active' : 'inactive'); }
-  
+
   if (!fields.length) return;
   vals.push(id);
   await db.execute(`UPDATE employees SET ${fields.join(', ')} WHERE id = ?`, vals);
@@ -192,6 +219,44 @@ const updateEmployee = async (id, data) => {
   if (data.designation_id !== undefined) {
     await syncUserRoleFromDesignation(id, data.designation_id);
   }
+};
+
+/* ─── SHIFT OVERRIDES ─── */
+
+/** List all single-day shift overrides for an employee. */
+const listShiftOverrides = async (employeeId) => {
+  const [rows] = await db.execute(
+    `SELECT * FROM employee_shift_overrides
+     WHERE employee_id = ?
+     ORDER BY override_date DESC`,
+    [employeeId]
+  );
+  return rows;
+};
+
+/** Insert or update a single-day shift override. */
+const upsertShiftOverride = async ({ employee_id, override_date, start_time, end_time, note, created_by }) => {
+  const [result] = await db.execute(
+    `INSERT INTO employee_shift_overrides
+       (employee_id, override_date, start_time, end_time, note, created_by)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       start_time  = VALUES(start_time),
+       end_time    = VALUES(end_time),
+       note        = VALUES(note),
+       created_by  = VALUES(created_by)`,
+    [employee_id, override_date, start_time, end_time, note ?? null, created_by ?? null]
+  );
+  return result.insertId || result.affectedRows;
+};
+
+/** Delete a single-day shift override by employee + date. */
+const deleteShiftOverride = async (employeeId, overrideDate) => {
+  const [result] = await db.execute(
+    `DELETE FROM employee_shift_overrides WHERE employee_id = ? AND override_date = ?`,
+    [employeeId, overrideDate]
+  );
+  return result.affectedRows;
 };
 
 /* ─── DEPARTMENTS ─── */
@@ -278,6 +343,40 @@ const updateShift = async (id, data) => {
 
 const deleteShift = async (id) => {
   await db.execute(`DELETE FROM shifts WHERE id = ?`, [id]);
+};
+
+const updateShiftTimings = async (data) => {
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      if (item.id) {
+        await updateShift(item.id, item);
+      }
+    }
+  } else {
+    if (data.dayShift) {
+      const { start_time, end_time, grace_period_minutes } = data.dayShift;
+      const updateData = {};
+      if (start_time) updateData.start_time = start_time;
+      if (end_time) updateData.end_time = end_time;
+      if (grace_period_minutes !== undefined) updateData.grace_period_minutes = grace_period_minutes;
+      const [rows] = await db.execute(`SELECT id FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
+      if (rows.length) {
+        await updateShift(rows[0].id, updateData);
+      }
+    }
+    if (data.nightShift) {
+      const { start_time, end_time, grace_period_minutes } = data.nightShift;
+      const updateData = {};
+      if (start_time) updateData.start_time = start_time;
+      if (end_time) updateData.end_time = end_time;
+      if (grace_period_minutes !== undefined) updateData.grace_period_minutes = grace_period_minutes;
+      const [rows] = await db.execute(`SELECT id FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
+      if (rows.length) {
+        await updateShift(rows[0].id, updateData);
+      }
+    }
+  }
+  return listShifts();
 };
 
 const createDepartment = async (data) => {
@@ -615,9 +714,22 @@ const listRemappingLogs = async ({ search, employeeId, page = 1, limit = 50 }) =
 };
 
 const updateEmployeeSalary = async (employeeId, data, userId = null) => {
-  const { salary_type, basic_salary, per_day_salary, per_night_salary, effective_from, reason } = data;
+  const { basic_salary, per_day_salary, per_night_salary, effective_from, reason } = data;
   const emp = await getEmployee(employeeId);
   if (!emp) throw new Error('Employee not found');
+
+  const isDayNight = emp.shift_category === 'day_and_night';
+  const finalSalaryType = 'monthly';
+  let finalBasicSalary = Number(basic_salary) || 0;
+  let finalPerDaySalary = Number(per_day_salary) || 0;
+  let finalPerNightSalary = isDayNight ? (Number(per_night_salary) || 0) : 0;
+
+  if (isDayNight) {
+    finalBasicSalary = Math.round(finalPerDaySalary * 30 * 100) / 100;
+  } else {
+    finalPerDaySalary = Math.round((finalBasicSalary / 30) * 100) / 100;
+    finalPerNightSalary = 0;
+  }
 
   await db.execute(
     `INSERT INTO employee_salary_logs
@@ -630,13 +742,13 @@ const updateEmployeeSalary = async (employeeId, data, userId = null) => {
     [
       employeeId,
       emp.salary_type || 'monthly',
-      salary_type || 'monthly',
+      finalSalaryType,
       Number(emp.basic_salary) || 0,
-      Number(basic_salary) || 0,
+      finalBasicSalary,
       Number(emp.per_day_salary) || 0,
-      Number(per_day_salary) || 0,
+      finalPerDaySalary,
       Number(emp.per_night_salary) || 0,
-      Number(per_night_salary) || 0,
+      finalPerNightSalary,
       effective_from,
       reason || null,
       userId
@@ -647,7 +759,7 @@ const updateEmployeeSalary = async (employeeId, data, userId = null) => {
     `UPDATE employees
      SET salary_type = ?, basic_salary = ?, per_day_salary = ?, per_night_salary = ?
      WHERE id = ?`,
-    [salary_type || 'monthly', Number(basic_salary) || 0, Number(per_day_salary) || 0, Number(per_night_salary) || 0, employeeId]
+    [finalSalaryType, finalBasicSalary, finalPerDaySalary, finalPerNightSalary, employeeId]
   );
 };
 
@@ -870,8 +982,9 @@ module.exports = {
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,
-  listShifts, createShift, updateShift, deleteShift, isShiftInUse,
+  listShifts, createShift, updateShift, updateShiftTimings, deleteShift, isShiftInUse,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   countEmployeesInDepartment, countStaffRolesInDepartment, countEmployeesWithStaffRole,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
+  listShiftOverrides, upsertShiftOverride, deleteShiftOverride,
 };

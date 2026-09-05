@@ -10,16 +10,15 @@ const db = require('../../config/db');
  */
 
 const ROSTER_SELECT = `
-  SELECT re.id, re.employee_id, re.roster_date, re.shift_id,
+  SELECT re.id, re.employee_id, re.roster_date,
          re.is_week_off, re.is_holiday, re.is_manual_override, re.notes,
-         s.name AS shift_name, s.start_time, s.end_time, s.is_night_shift,
+         re.custom_start_time, re.custom_end_time,
          e.full_name, e.employee_code,
          d.name AS department_name, sr.name AS role_name
   FROM roster_entries re
   JOIN employees e ON e.id = re.employee_id
   LEFT JOIN departments d ON d.id = e.department_id
   LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-  LEFT JOIN shifts s ON s.id = re.shift_id
 `;
 
 /** Roster rows for a Mon–Sun week (weekStart inclusive, 7 days). */
@@ -52,9 +51,9 @@ const getRosterForMonth = async (month, year, departmentId, staffRoleId) => {
   return rows;
 };
 
-/** Active employees for the roster grid, with their role's default shift. */
+/** Active Day & Night employees for the roster grid. */
 const getEmployeesByDeptAndRole = async (departmentId, staffRoleId) => {
-  const filters = ["e.status = 'active'"];
+  const filters = ["e.status = 'active'", "e.shift_category = 'day_and_night'"];
   const params = [];
 
   if (departmentId) { filters.push('e.department_id = ?'); params.push(departmentId); }
@@ -105,7 +104,7 @@ const getWorkedDatesInRange = async (employeeId, fromDate, toDate) => {
        AND roster_date BETWEEN ? AND ?
        AND is_week_off = 0
        AND is_holiday = 0
-       AND shift_id IS NOT NULL
+       AND (custom_start_time IS NOT NULL OR shift_id IS NOT NULL)
      ORDER BY roster_date`,
     [employeeId, fromDate, toDate]
   );
@@ -124,35 +123,39 @@ const getRosterEntry = async (employeeId, rosterDate) => {
 
 const UPSERT_SQL = `
   INSERT INTO roster_entries
-    (employee_id, roster_date, shift_id, is_week_off, is_holiday, is_manual_override, notes, created_by)
-  VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    (employee_id, roster_date, is_week_off, is_holiday, is_manual_override, notes,
+     custom_start_time, custom_end_time, created_by)
+  VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
   ON DUPLICATE KEY UPDATE
-    shift_id           = VALUES(shift_id),
     is_week_off        = VALUES(is_week_off),
     is_holiday         = VALUES(is_holiday),
     is_manual_override = 1,
-    notes              = VALUES(notes)
+    notes              = VALUES(notes),
+    custom_start_time  = VALUES(custom_start_time),
+    custom_end_time    = VALUES(custom_end_time)
 `;
 
-/** Upsert one cell. A week-off is shift_id NULL + is_week_off 1. */
+/** Upsert one cell. A week-off has no time range; a worked day requires start+end. */
 const upsertEmployeeShift = async ({
-  employee_id, roster_date, shift_id, is_week_off, is_holiday, notes, created_by,
+  employee_id, roster_date, is_week_off, is_holiday, notes,
+  custom_start_time, custom_end_time, created_by,
 }) => {
   const weekOff = is_week_off ? 1 : 0;
   await db.execute(UPSERT_SQL, [
     employee_id,
     roster_date,
-    weekOff ? null : (shift_id ?? null),
     weekOff,
     is_holiday ? 1 : 0,
     notes ?? null,
+    weekOff ? null : (custom_start_time ?? null),
+    weekOff ? null : (custom_end_time ?? null),
     created_by ?? null,
   ]);
 };
 
 /**
  * Upsert many cells in one transaction.
- * rows: [{ employee_id, roster_date, shift_id, is_week_off, is_holiday, notes }]
+ * rows: [{ employee_id, roster_date, is_week_off, is_holiday, notes, custom_start_time, custom_end_time }]
  */
 const bulkUpsertShifts = async (rows, createdBy = null) => {
   if (!rows.length) return 0;
@@ -164,10 +167,11 @@ const bulkUpsertShifts = async (rows, createdBy = null) => {
       await conn.execute(UPSERT_SQL, [
         r.employee_id,
         r.roster_date,
-        weekOff ? null : (r.shift_id ?? null),
         weekOff,
         r.is_holiday ? 1 : 0,
         r.notes ?? null,
+        weekOff ? null : (r.custom_start_time ?? null),
+        weekOff ? null : (r.custom_end_time ?? null),
         createdBy,
       ]);
     }
@@ -189,22 +193,23 @@ const swapRosterEntries = async (employeeA, employeeB, rosterDate, createdBy = n
 
     const readCell = async (employeeId) => {
       const [rows] = await conn.execute(
-        `SELECT shift_id, is_week_off, is_holiday FROM roster_entries
+        `SELECT is_week_off, is_holiday, custom_start_time, custom_end_time FROM roster_entries
          WHERE employee_id = ? AND roster_date = ?`,
         [employeeId, rosterDate]
       );
-      // A missing row is a valid state to swap into — treat it as "unassigned".
-      return rows[0] ?? { shift_id: null, is_week_off: 0, is_holiday: 0 };
+      return rows[0] ?? { is_week_off: 0, is_holiday: 0, custom_start_time: null, custom_end_time: null };
     };
 
     const rowA = await readCell(employeeA);
     const rowB = await readCell(employeeB);
 
     await conn.execute(UPSERT_SQL, [
-      employeeA, rosterDate, rowB.shift_id, rowB.is_week_off, rowB.is_holiday, null, createdBy,
+      employeeA, rosterDate, rowB.is_week_off, rowB.is_holiday, null,
+      rowB.custom_start_time, rowB.custom_end_time, createdBy,
     ]);
     await conn.execute(UPSERT_SQL, [
-      employeeB, rosterDate, rowA.shift_id, rowA.is_week_off, rowA.is_holiday, null, createdBy,
+      employeeB, rosterDate, rowA.is_week_off, rowA.is_holiday, null,
+      rowA.custom_start_time, rowA.custom_end_time, createdBy,
     ]);
 
     await conn.commit();

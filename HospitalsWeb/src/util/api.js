@@ -44,8 +44,9 @@ function refreshToken() {
 export async function apiFetch(endpoint, options = {}) {
   const { withMeta = false, _retried = false, ...fetchOptions } = options;
   const token = localStorage.getItem('token');
+  const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...fetchOptions.headers,
   };
 

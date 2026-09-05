@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../../util/api';
+import ConfigureShiftTimingModal from './ConfigureShiftTimingModal';
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const WEEK_OFF = 'WO';
+const DAY_LABELS = ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'];
 const MAX_CONSECUTIVE = 6;
 
-/** Monday-based start of the week containing an ISO date. */
+/** Wednesday-based start of the week containing an ISO date. */
 const startOfWeek = (iso) => {
   const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  const dow = d.getUTCDay(); // Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+  const daysSinceWed = (dow - 3 + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - daysSinceWed);
   return d.toISOString().slice(0, 10);
 };
 
@@ -25,7 +27,7 @@ const monthLabel = (iso) =>
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   });
 
-/** Longest run of consecutive worked days — mirrors the server-side rule. */
+/** Longest run of consecutive worked days. */
 const longestRun = (workedDates) => {
   const sorted = [...new Set(workedDates)].sort();
   let best = 0, run = 0, prev = null;
@@ -37,7 +39,7 @@ const longestRun = (workedDates) => {
   return best;
 };
 
-export default function WeeklyRoster({ departments = [], shifts = [], onBack }) {
+export default function WeeklyRoster({ departments = [], onBack }) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
@@ -45,11 +47,13 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
   const [roleFilter, setRoleFilter] = useState('');
 
   const [grid, setGrid] = useState(null);
-  const [draft, setDraft] = useState({}); // `${employeeId}|${date}` -> shiftId | 'WO' | ''
+  // `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM' }
+  const [draft, setDraft] = useState({});
   const [swapPick, setSwapPick] = useState(null); // { employeeId, date }
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showTimingModal, setShowTimingModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -58,7 +62,6 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  const activeShifts = shifts.filter((s) => s.is_active);
   const rolesForDept = (departments.find((d) => String(d.id) === String(deptFilter))?.roles) || [];
 
   const load = useCallback(async () => {
@@ -71,16 +74,20 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
 
       const data = await apiFetch(`/hr/roster/week?${params.toString()}`);
 
-      // Seed the draft from what's stored so unedited cells save unchanged.
+      // Seed the draft from stored roster entries
       const seeded = {};
       for (const e of data.entries) {
-        seeded[`${e.employee_id}|${e.roster_date}`] = e.is_week_off ? WEEK_OFF : (e.shift_id ?? '');
+        seeded[`${e.employee_id}|${e.roster_date}`] = {
+          is_week_off: Boolean(e.is_week_off),
+          start_time: e.custom_start_time ? String(e.custom_start_time).slice(0, 5) : '',
+          end_time: e.custom_end_time ? String(e.custom_end_time).slice(0, 5) : '',
+        };
       }
       setGrid(data);
       setDraft(seeded);
       setSwapPick(null);
     } catch (err) {
-      setErrorMsg(err.message || 'Failed to load the roster.');
+      setErrorMsg(err.message || 'Failed to load the weekly roster.');
       setGrid(null);
     } finally {
       setIsLoading(false);
@@ -89,17 +96,45 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
 
   useEffect(() => { load(); }, [load]);
 
-  const cellValue = (employeeId, date) => draft[`${employeeId}|${date}`] ?? '';
+  const getCell = (employeeId, date) =>
+    draft[`${employeeId}|${date}`] || { is_week_off: false, start_time: '', end_time: '' };
 
-  const setCell = (employeeId, date, value) =>
-    setDraft((prev) => ({ ...prev, [`${employeeId}|${date}`]: value }));
+  const updateCell = (employeeId, date, updates) => {
+    setDraft((prev) => {
+      const current = prev[`${employeeId}|${date}`] || { is_week_off: false, start_time: '', end_time: '' };
+      return {
+        ...prev,
+        [`${employeeId}|${date}`]: { ...current, ...updates },
+      };
+    });
+  };
 
-  /** Fill an employee's whole week with their role's default shift. */
-  const fillRowWithDefault = (emp) => {
-    if (!emp.default_shift_id || !grid) return;
+  /** Fill employee row with standard Day timing (09:00 - 17:00) */
+  const fillRowDay = (emp) => {
+    if (!grid) return;
     setDraft((prev) => {
       const next = { ...prev };
-      for (const d of grid.days) next[`${emp.employee_id}|${d}`] = emp.default_shift_id;
+      for (const d of grid.days) {
+        const cur = next[`${emp.employee_id}|${d}`];
+        if (!cur?.is_week_off) {
+          next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '09:00', end_time: '17:00' };
+        }
+      }
+      return next;
+    });
+  };
+
+  /** Fill employee row with standard Night timing (20:00 - 08:00) */
+  const fillRowNight = (emp) => {
+    if (!grid) return;
+    setDraft((prev) => {
+      const next = { ...prev };
+      for (const d of grid.days) {
+        const cur = next[`${emp.employee_id}|${d}`];
+        if (!cur?.is_week_off) {
+          next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '20:00', end_time: '08:00' };
+        }
+      }
       return next;
     });
   };
@@ -108,31 +143,28 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
     if (!grid) return;
     setDraft((prev) => {
       const next = { ...prev };
-      for (const d of grid.days) next[`${emp.employee_id}|${d}`] = '';
+      for (const d of grid.days) {
+        next[`${emp.employee_id}|${d}`] = { is_week_off: false, start_time: '', end_time: '' };
+      }
       return next;
     });
   };
 
-  /**
-   * Consecutive-worked-day run per employee, computed from the draft plus the
-   * days immediately outside the week that are already stored. This mirrors the
-   * server rule so the warning appears before the save is attempted.
-   */
+  /** Consecutive-worked-day run per employee */
   const runsByEmployee = useMemo(() => {
     if (!grid) return {};
     const storedWorked = new Set(
-      grid.entries.filter((e) => !e.is_week_off && e.shift_id).map((e) => `${e.employee_id}|${e.roster_date}`)
+      grid.entries
+        .filter((e) => !e.is_week_off && e.custom_start_time)
+        .map((e) => `${e.employee_id}|${e.roster_date}`)
     );
     const out = {};
     for (const emp of grid.employees) {
       const worked = [];
-      // Days inside the week come from the draft.
       for (const d of grid.days) {
-        const v = cellValue(emp.employee_id, d);
-        if (v && v !== WEEK_OFF) worked.push(d);
+        const c = getCell(emp.employee_id, d);
+        if (!c.is_week_off && c.start_time && c.end_time) worked.push(d);
       }
-      // Days just outside come from what's already stored, so runs that
-      // straddle the week boundary are still visible.
       for (const d of [addDays(grid.weekStart, -1), addDays(grid.weekEnd, 1)]) {
         if (storedWorked.has(`${emp.employee_id}|${d}`)) worked.push(d);
       }
@@ -150,19 +182,29 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
       const rows = [];
       for (const emp of grid.employees) {
         for (const d of grid.days) {
-          const v = cellValue(emp.employee_id, d);
-          if (v === '') continue; // never assigned — leave the roster alone
-          rows.push({
-            employee_id: emp.employee_id,
-            roster_date: d,
-            shift_id: v === WEEK_OFF ? null : Number(v),
-            is_week_off: v === WEEK_OFF,
-          });
+          const c = getCell(emp.employee_id, d);
+          if (c.is_week_off) {
+            rows.push({
+              employee_id: emp.employee_id,
+              roster_date: d,
+              is_week_off: true,
+              custom_start_time: null,
+              custom_end_time: null,
+            });
+          } else if (c.start_time && c.end_time) {
+            rows.push({
+              employee_id: emp.employee_id,
+              roster_date: d,
+              is_week_off: false,
+              custom_start_time: c.start_time.length === 5 ? `${c.start_time}:00` : c.start_time,
+              custom_end_time: c.end_time.length === 5 ? `${c.end_time}:00` : c.end_time,
+            });
+          }
         }
       }
 
       if (!rows.length) {
-        setErrorMsg('Nothing to save — assign at least one shift or week-off.');
+        setErrorMsg('Nothing to save — assign at least one duty time range or week-off.');
         return;
       }
 
@@ -170,43 +212,35 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
         method: 'POST',
         body: JSON.stringify({ weekStart: grid.weekStart, rows }),
       });
-      flash(`Saved ${result.saved} roster entries.`);
+      flash(`Saved ${result.saved} duty roster entries.`);
       await load();
     } catch (err) {
-      setErrorMsg(err.message || 'Failed to save the roster.');
+      setErrorMsg(err.message || 'Failed to save duty roster.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  /** Two clicks on the swap control exchange those two cells on the same date. */
-  const handleSwapClick = async (employeeId, date) => {
+  const handleSwapClick = (employeeId, date) => {
     if (!swapPick) {
       setSwapPick({ employeeId, date });
       return;
     }
     if (swapPick.employeeId === employeeId) { setSwapPick(null); return; }
     if (swapPick.date !== date) {
-      setErrorMsg('Swaps only work between two people on the same day.');
+      setErrorMsg('Swaps only work between two people on the same date.');
       setSwapPick(null);
       return;
     }
-    try {
-      setIsSaving(true);
-      setErrorMsg('');
-      await apiFetch('/hr/roster/swap', {
-        method: 'POST',
-        body: JSON.stringify({ employeeA: swapPick.employeeId, employeeB: employeeId, rosterDate: date }),
-      });
-      flash('Shifts swapped.');
-      await load();
-    } catch (err) {
-      setErrorMsg(err.message || 'Swap failed.');
-      await load();
-    } finally {
-      setSwapPick(null);
-      setIsSaving(false);
-    }
+    const keyA = `${swapPick.employeeId}|${date}`;
+    const keyB = `${employeeId}|${date}`;
+    setDraft((prev) => ({
+      ...prev,
+      [keyA]: prev[keyB] || { is_week_off: false, start_time: '', end_time: '' },
+      [keyB]: prev[keyA] || { is_week_off: false, start_time: '', end_time: '' },
+    }));
+    flash('Cells swapped in draft. Click "Save Week" to commit.');
+    setSwapPick(null);
   };
 
   return (
@@ -225,35 +259,57 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
-            title="Back to shifts"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2 rounded-lg hover:bg-gray-200/80 transition-colors cursor-pointer text-gray-500 hover:text-gray-800"
+              title="Back"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
           <div>
             <h1 className="text-xl font-bold text-gray-800 tracking-tight">
-              Staff &amp; Salary &nbsp;&gt;&nbsp; Shift &amp; Roster &nbsp;&gt;&nbsp;{' '}
-              <span className="text-blue-600 font-semibold">Weekly Duty Roster</span>
+              Staff &amp; Salary &nbsp;&gt;&nbsp; <span className="text-blue-600 font-semibold">Weekly Duty Roster (Day &amp; Night)</span>
             </h1>
             {grid && (
               <p className="text-xs text-gray-500 mt-0.5">
-                {monthLabel(grid.weekStart)} – {monthLabel(grid.weekEnd)}
+                Cycle: <strong>Wednesday to Wednesday</strong> ({monthLabel(grid.weekStart)} – {monthLabel(grid.weekEnd)})
               </p>
             )}
           </div>
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={isSaving || isLoading || !grid?.employees?.length}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 self-start sm:self-auto"
-        >
-          {isSaving ? 'Saving…' : 'Save Week'}
-        </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowTimingModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+          >
+            <span>⚙️</span>
+            <span>Configure Shift Timings</span>
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isLoading || !grid?.employees?.length}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+          >
+            {isSaving ? 'Saving…' : 'Save Duty Roster'}
+          </button>
+        </div>
+      </div>
+
+      {/* Information Banner */}
+      <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs text-blue-800 space-y-1">
+        <div className="font-bold flex items-center gap-1.5">
+          <span>ℹ️ Day &amp; Night Shift Allotment</span>
+        </div>
+        <p className="text-[11px] text-blue-700 leading-relaxed">
+          The weekly duty roster runs on a <strong>Wednesday to Wednesday</strong> cycle exclusively for <strong>Day &amp; Night Shift</strong> staff.
+          Enter specific time ranges (e.g. 09:00 – 17:00 or 20:00 – 08:00) or toggle Week Off (WO) for each day.
+        </p>
       </div>
 
       {/* Controls */}
@@ -263,7 +319,7 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
             onClick={() => setWeekStart((w) => addDays(w, -7))}
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
           >
-            ← Prev
+            ← Prev Week
           </button>
           <input
             type="date"
@@ -275,13 +331,13 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
             onClick={() => setWeekStart((w) => addDays(w, 7))}
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
           >
-            Next →
+            Next Week →
           </button>
           <button
             onClick={() => setWeekStart(startOfWeek(today))}
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
           >
-            This week
+            This Wednesday
           </button>
         </div>
 
@@ -310,35 +366,36 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
 
         {swapPick && (
           <div className="lg:ml-auto text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
-            Pick a second person on {swapPick.date} to swap with ·{' '}
+            Pick a second person on {swapPick.date} to swap duty times ·{' '}
             <button onClick={() => setSwapPick(null)} className="underline cursor-pointer">cancel</button>
           </div>
         )}
       </div>
 
-      {/* Grid */}
+      {/* Grid Table */}
       {isLoading ? (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-400">Loading…</div>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-400">Loading duty roster…</div>
       ) : !grid || grid.employees.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-500">
-          No active employees match this department and role.
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-10 text-center text-xs text-gray-500 space-y-2">
+          <p className="font-semibold text-gray-700">No Day &amp; Night shift employees found in this department/role.</p>
+          <p className="text-gray-400 text-[11px]">Staff with Fixed Day, Fixed Night, or General shift categories are managed with individual timings on the HR &amp; Employees page.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-xs">
+            <table className="w-full min-w-[1050px] text-xs">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] sticky left-0 bg-gray-50/80 z-10">
+                  <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] sticky left-0 bg-gray-50/80 z-10 min-w-[180px]">
                     Employee
                   </th>
                   {grid.days.map((d, i) => (
-                    <th key={d} className="px-2 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center min-w-[110px]">
-                      <div>{DAY_LABELS[i]}</div>
+                    <th key={d} className="px-2 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center min-w-[130px]">
+                      <div className="text-blue-700 font-extrabold">{DAY_LABELS[i]}</div>
                       <div className="text-gray-400 font-semibold">{dayNum(d)}</div>
                     </th>
                   ))}
-                  <th className="px-3 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center">
+                  <th className="px-3 py-3 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-center min-w-[90px]">
                     Week-offs
                   </th>
                 </tr>
@@ -348,78 +405,145 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
                   const run = runsByEmployee[emp.employee_id] ?? 0;
                   const overLimit = run > MAX_CONSECUTIVE;
                   const weekOffsInDraft = grid.days.filter(
-                    (d) => cellValue(emp.employee_id, d) === WEEK_OFF
+                    (d) => getCell(emp.employee_id, d).is_week_off
                   ).length;
 
                   return (
                     <tr key={emp.employee_id} className={overLimit ? 'bg-rose-50/40' : 'hover:bg-gray-50/60'}>
-                      <td className="px-4 py-2.5 sticky left-0 bg-inherit z-10">
+                      <td className="px-4 py-3 sticky left-0 bg-inherit z-10">
                         <div className="font-bold text-gray-900">{emp.full_name}</div>
                         <div className="text-[10px] text-gray-400">
                           {emp.employee_code} · {emp.role_name || '—'}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <button
-                            onClick={() => fillRowWithDefault(emp)}
-                            disabled={!emp.default_shift_id}
-                            className="text-[10px] font-semibold text-blue-600 hover:underline cursor-pointer disabled:text-gray-300 disabled:no-underline disabled:cursor-not-allowed"
-                            title={emp.default_shift_id ? 'Fill the week with this role\'s default shift' : 'This role has no default shift'}
+                            type="button"
+                            onClick={() => fillRowDay(emp)}
+                            className="text-[9px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-100 cursor-pointer"
                           >
-                            Fill week
+                            Fill Day
                           </button>
                           <button
+                            type="button"
+                            onClick={() => fillRowNight(emp)}
+                            className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded hover:bg-indigo-100 cursor-pointer"
+                          >
+                            Fill Night
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => clearRow(emp)}
-                            className="text-[10px] font-semibold text-gray-400 hover:text-gray-700 hover:underline cursor-pointer"
+                            className="text-[9px] font-semibold text-gray-400 hover:text-gray-700 underline cursor-pointer"
                           >
                             Clear
                           </button>
                         </div>
                         {overLimit && (
                           <div className="text-[10px] font-bold text-rose-600 mt-1">
-                            {run} consecutive days — limit is {MAX_CONSECUTIVE}
+                            ⚠️ {run} consecutive days (max is {MAX_CONSECUTIVE})
                           </div>
                         )}
                       </td>
 
                       {grid.days.map((d) => {
-                        const value = cellValue(emp.employee_id, d);
+                        const cell = getCell(emp.employee_id, d);
                         const isPicked = swapPick && swapPick.employeeId === emp.employee_id && swapPick.date === d;
+
                         return (
-                          <td key={d} className="px-1.5 py-2.5 align-top">
-                            <select
-                              value={value}
-                              onChange={(e) => setCell(emp.employee_id, d, e.target.value)}
-                              className={`w-full px-1.5 py-1.5 border rounded-lg text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                value === WEEK_OFF
-                                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                                  : value
-                                    ? 'bg-blue-50 border-blue-200 text-blue-900'
-                                    : 'bg-white border-gray-200 text-gray-400'
-                              }`}
-                            >
-                              <option value="">—</option>
-                              <option value={WEEK_OFF}>Week Off</option>
-                              {activeShifts.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => handleSwapClick(emp.employee_id, d)}
-                              disabled={isSaving}
-                              className={`mt-1 w-full text-[9px] font-bold rounded py-0.5 cursor-pointer transition-colors disabled:opacity-40 ${
-                                isPicked
-                                  ? 'bg-amber-500 text-white'
-                                  : 'text-gray-300 hover:text-gray-600 hover:bg-gray-100'
-                              }`}
-                              title="Swap this assignment with another person on the same day"
-                            >
-                              {isPicked ? 'PICKED' : 'SWAP'}
-                            </button>
+                          <td key={d} className="px-1.5 py-2 align-top">
+                            <div className={`p-1.5 rounded-lg border text-center transition-colors ${
+                              cell.is_week_off
+                                ? 'bg-amber-50/70 border-amber-200'
+                                : cell.start_time && cell.end_time
+                                  ? 'bg-blue-50/50 border-blue-200'
+                                  : 'bg-white border-gray-200'
+                            }`}>
+                              {cell.is_week_off ? (
+                                <div className="space-y-1 py-1">
+                                  <span className="inline-block font-extrabold text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                                    WEEK OFF
+                                  </span>
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => updateCell(emp.employee_id, d, { is_week_off: false, start_time: '09:00', end_time: '17:00' })}
+                                      className="text-[9px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                                    >
+                                      Assign Hours
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="time"
+                                      value={cell.start_time || ''}
+                                      onChange={(e) => updateCell(emp.employee_id, d, { start_time: e.target.value })}
+                                      className="w-full text-[10px] font-bold p-0.5 border border-gray-200 rounded text-center bg-white"
+                                      placeholder="Start"
+                                    />
+                                    <span className="text-[10px] text-gray-400">–</span>
+                                    <input
+                                      type="time"
+                                      value={cell.end_time || ''}
+                                      onChange={(e) => updateCell(emp.employee_id, d, { end_time: e.target.value })}
+                                      className="w-full text-[10px] font-bold p-0.5 border border-gray-200 rounded text-center bg-white"
+                                      placeholder="End"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-0.5">
+                                    <div className="flex gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateCell(emp.employee_id, d, { start_time: '09:00', end_time: '17:00' })}
+                                        className="text-[8px] font-bold px-1 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
+                                        title="Preset Day 09:00 - 17:00"
+                                      >
+                                        D
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateCell(emp.employee_id, d, { start_time: '20:00', end_time: '08:00' })}
+                                        className="text-[8px] font-bold px-1 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
+                                        title="Preset Night 20:00 - 08:00"
+                                      >
+                                        N
+                                      </button>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => updateCell(emp.employee_id, d, { is_week_off: true, start_time: '', end_time: '' })}
+                                      className="text-[8px] font-bold px-1 py-0.5 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded cursor-pointer"
+                                      title="Mark Week Off"
+                                    >
+                                      WO
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleSwapClick(emp.employee_id, d)}
+                                disabled={isSaving}
+                                className={`mt-1 w-full text-[8px] font-bold rounded py-0.5 cursor-pointer transition-colors disabled:opacity-40 ${
+                                  isPicked
+                                    ? 'bg-amber-500 text-white'
+                                    : 'text-gray-300 hover:text-gray-600 hover:bg-gray-100'
+                                }`}
+                                title="Swap this duty assignment with another person on the same day"
+                              >
+                                {isPicked ? 'PICKED' : 'SWAP'}
+                              </button>
+                            </div>
                           </td>
                         );
                       })}
 
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-3 py-3 text-center">
                         <div className={`font-bold ${
                           emp.week_offs_entitled > 0 && emp.week_offs_taken > emp.week_offs_entitled
                             ? 'text-rose-600' : 'text-gray-800'
@@ -429,7 +553,7 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
                         <div className="text-[9px] text-gray-400">this month</div>
                         {weekOffsInDraft > 0 && (
                           <div className="text-[9px] text-amber-600 font-semibold mt-0.5">
-                            {weekOffsInDraft} this week
+                            {weekOffsInDraft} in week
                           </div>
                         )}
                       </td>
@@ -440,13 +564,18 @@ export default function WeeklyRoster({ departments = [], shifts = [], onBack }) 
             </table>
           </div>
 
-          <div className="px-4 py-3 border-t border-gray-100 text-[11px] text-gray-500 flex flex-wrap items-center gap-4">
-            <span><strong className="text-gray-700">Fill week</strong> applies the role's default shift.</span>
-            <span>Week-off counts come from <strong className="text-gray-700">staff_roles.weekly_off_count</strong>; a role showing "—" has no entitlement set.</span>
-            <span>Cells left as "—" are not touched when you save.</span>
+          <div className="px-4 py-3 border-t border-gray-100 text-[11px] text-gray-500 flex flex-wrap items-center gap-4 bg-gray-50/50">
+            <span>• Time inputs accept start and end hours for day/night duty allotment.</span>
+            <span>• <strong className="text-amber-700">WO</strong> button sets Week Off for that day.</span>
+            <span>• <strong className="text-blue-700">SWAP</strong> lets you exchange hours between two staff on the same date.</span>
           </div>
         </div>
       )}
+      <ConfigureShiftTimingModal
+        isOpen={showTimingModal}
+        onClose={() => setShowTimingModal(false)}
+        onSuccess={() => flash('Shift timings updated successfully!')}
+      />
     </div>
   );
 }

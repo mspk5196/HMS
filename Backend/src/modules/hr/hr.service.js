@@ -1,6 +1,8 @@
 const q = require('./hr.queries');
 const { AppError } = require('../../utils/errors');
 
+const VALID_SHIFT_CATEGORIES = ['day', 'night', 'day_and_night', 'general'];
+
 const createEmployee = async (data) => {
   if (!data.employee_code || !data.full_name || !data.date_of_joining || !data.department_id || !data.designation_id) {
     throw new AppError('employee_code, full_name, date_of_joining, department_id, and designation_id are required', 400);
@@ -18,6 +20,10 @@ const createEmployee = async (data) => {
       `Employee code "${code}" is already used by ${existing.full_name}.`,
       409
     );
+  }
+
+  if (data.shift_category && !VALID_SHIFT_CATEGORIES.includes(data.shift_category)) {
+    throw new AppError(`shift_category must be one of: ${VALID_SHIFT_CATEGORIES.join(', ')}`, 400);
   }
 
   return q.createEmployee({ ...data, employee_code: code });
@@ -39,6 +45,12 @@ const updateEmployee = async (id, data) => {
     data = { ...data, employee_code: code };
   }
 
+  if (data.shift_category !== undefined && data.shift_category !== null && data.shift_category !== '') {
+    if (!VALID_SHIFT_CATEGORIES.includes(data.shift_category)) {
+      throw new AppError(`shift_category must be one of: ${VALID_SHIFT_CATEGORIES.join(', ')}`, 400);
+    }
+  }
+
   await q.updateEmployee(id, data);
 };
 
@@ -51,6 +63,10 @@ const createShift = async (data) => {
 
 const updateShift = async (id, data) => {
   await q.updateShift(id, data);
+};
+
+const updateShiftTimings = async (data) => {
+  return q.updateShiftTimings(data);
 };
 
 const deleteShift = async (id) => {
@@ -127,14 +143,40 @@ const updateEmployeeSalary = async (employeeId, data, userId) => {
   await q.updateEmployeeSalary(employeeId, data, userId);
 };
 
+/* ─── SHIFT OVERRIDES ─── */
+
+const upsertShiftOverride = async (employeeId, data, userId) => {
+  const { override_date, start_time, end_time, note } = data;
+  if (!override_date || !start_time || !end_time) {
+    throw new AppError('override_date, start_time, and end_time are required', 400);
+  }
+  const emp = await q.getEmployee(employeeId);
+  if (!emp) throw new AppError('Employee not found', 404);
+
+  await q.upsertShiftOverride({ employee_id: employeeId, override_date, start_time, end_time, note, created_by: userId });
+  return { employee_id: employeeId, override_date, start_time, end_time };
+};
+
+const listShiftOverrides = async (employeeId) => {
+  const emp = await q.getEmployee(employeeId);
+  if (!emp) throw new AppError('Employee not found', 404);
+  return q.listShiftOverrides(employeeId);
+};
+
+const deleteShiftOverride = async (employeeId, overrideDate) => {
+  const affected = await q.deleteShiftOverride(employeeId, overrideDate);
+  if (!affected) throw new AppError('No override found for this date', 404);
+};
+
 module.exports = {
   createEmployee, updateEmployee,
   bulkImportEmployees: q.bulkImportEmployees,
-  createShift, updateShift, deleteShift,
+  createShift, updateShift, updateShiftTimings, deleteShift,
   createDepartment, updateDepartment, deleteDepartment,
   createDesignation, createRole,
   createStaffRole, updateStaffRole, deleteStaffRole,
   remapEmployee, updateEmployeeSalary,
+  upsertShiftOverride, listShiftOverrides, deleteShiftOverride,
   // Pass-through
   listEmployees: q.listEmployees,
   listDoctors: q.listDoctors,

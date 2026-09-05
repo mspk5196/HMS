@@ -2,11 +2,12 @@ const router = require('express').Router();
 const ctrl = require('./hr.controller');
 const { verifyToken, requirePermissions } = require('../../middleware/auth');
 const { gate } = require('../../middleware/approvalGate');
+const { employeeDocUpload } = require('../../middleware/upload');
 
 router.use(verifyToken);
 const canViewEmployees = requirePermissions(['hr_employee.view']);
 const canViewDepartments = requirePermissions(['hr_department.view']);
-const canViewShifts = requirePermissions(['hr_shift.view']);
+const canViewShifts = requirePermissions(['hr_shift.view', 'hr_employee.view', 'hr_employee.create', 'hr_roster.view']);
 const canViewRoster = requirePermissions(['hr_roster.view']);
 
 // Employees — NOTE: static routes MUST precede /employees/:id
@@ -19,9 +20,15 @@ router.get('/employees/doctors', ctrl.listDoctors);
 router.post('/employees/remap', gate('hr_employee.remap', ctrl.remapEmployee));
 router.get('/employees', canViewEmployees, ctrl.listEmployees);
 router.get('/employees/:id', canViewEmployees, ctrl.getEmployee);
-router.post('/employees', gate('hr_employee.create', ctrl.createEmployee));
+router.post('/employees', employeeDocUpload, gate('hr_employee.create', ctrl.createEmployee));
 router.patch('/employees/:id/salary', gate('hr_employee.set_salary', ctrl.updateEmployeeSalary));
-router.patch('/employees/:id', gate('hr_employee.edit', ctrl.updateEmployee));
+router.patch('/employees/:id', employeeDocUpload, gate('hr_employee.edit', ctrl.updateEmployee));
+
+// Shift Overrides (per-employee per-day timing override for Day/Night/General)
+router.get('/employees/:id/shift-overrides', canViewEmployees, ctrl.getShiftOverrides);
+router.post('/employees/:id/shift-overrides', requirePermissions(['hr_employee.edit']), ctrl.upsertShiftOverride);
+router.delete('/employees/:id/shift-overrides/:date', requirePermissions(['hr_employee.edit']), ctrl.deleteShiftOverride);
+
 
 // Departments
 router.get('/departments', canViewDepartments, ctrl.listDepartments);
@@ -46,6 +53,7 @@ router.delete('/staff-roles/:id', gate('hr_department.delete', ctrl.deleteStaffR
 
 // Shifts
 router.get('/shifts', canViewShifts, ctrl.listShifts);
+router.patch('/shifts/timings', gate('hr_shift.edit', ctrl.updateShiftTimings));
 router.post('/shifts', gate('hr_shift.create', ctrl.createShift));
 router.patch('/shifts/:id', gate('hr_shift.edit', ctrl.updateShift));
 router.delete('/shifts/:id', gate('hr_shift.delete', ctrl.deleteShift));

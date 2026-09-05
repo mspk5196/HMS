@@ -25,11 +25,14 @@ const addDays = (iso, n) => {
   return d.toISOString().slice(0, 10);
 };
 
-/** Monday-based start of the week containing `iso`. */
+/** Wednesday-based start of the week containing `iso`. */
 const startOfWeek = (iso) => {
   const d = new Date(`${iso}T00:00:00Z`);
-  const dow = (d.getUTCDay() + 6) % 7; // Mon = 0
-  d.setUTCDate(d.getUTCDate() - dow);
+  // Wed=3, Thu=4, Fri=5, Sat=6, Sun=0, Mon=1, Tue=2
+  // Days since last Wednesday: (dow - 3 + 7) % 7
+  const dow = d.getUTCDay();
+  const daysSinceWed = (dow - 3 + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - daysSinceWed);
   return d.toISOString().slice(0, 10);
 };
 
@@ -49,10 +52,7 @@ const longestConsecutiveRun = (isoDates) => {
 
 /* ─── validation ─── */
 
-const loadActiveShiftIds = async () => {
-  const [rows] = await db.execute(`SELECT id FROM shifts WHERE is_active = 1`);
-  return new Set(rows.map((r) => Number(r.id)));
-};
+const isValidTime = (s) => /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(String(s ?? ''));
 
 const loadEmployeeIds = async (ids) => {
   if (!ids.length) return new Set();
@@ -94,65 +94,33 @@ const validateRows = async (rows, { weekStart } = {}) => {
     }
 
     const isWeekOff = !!r.is_week_off;
-    const shiftId = isWeekOff ? null : (r.shift_id == null ? null : Number(r.shift_id));
+    const customStart = isWeekOff ? null : (r.custom_start_time ?? null);
+    const customEnd   = isWeekOff ? null : (r.custom_end_time ?? null);
 
-    if (!isWeekOff && shiftId !== null && (!Number.isInteger(shiftId) || shiftId <= 0)) {
-      throw new AppError(`Row ${i + 1}: shift_id must be a valid shift`, 400);
+    // A worked cell requires both time fields
+    if (!isWeekOff && !r.is_holiday) {
+      if (!isValidTime(customStart) || !isValidTime(customEnd)) {
+        throw new AppError(`Row ${i + 1}: custom_start_time and custom_end_time are required for worked days (HH:MM)`, 400);
+      }
     }
 
     return {
       employee_id: employeeId,
       roster_date: rosterDate,
-      shift_id: shiftId,
+      custom_start_time: customStart,
+      custom_end_time: customEnd,
       is_week_off: isWeekOff,
       is_holiday: !!r.is_holiday,
       notes: r.notes ?? null,
     };
   });
 
-  // Every referenced employee must exist.
+  // Every referenced employee must exist and be a Day & Night employee.
   const employeeIds = [...new Set(normalised.map((r) => r.employee_id))];
   const knownEmployees = await loadEmployeeIds(employeeIds);
   const missingEmployee = employeeIds.find((id) => !knownEmployees.has(id));
   if (missingEmployee) {
     throw new AppError(`Employee ${missingEmployee} does not exist`, 400);
-  }
-
-  // Every referenced shift must exist and be active.
-  const shiftIds = [...new Set(normalised.map((r) => r.shift_id).filter((s) => s !== null))];
-  if (shiftIds.length) {
-    const activeShifts = await loadActiveShiftIds();
-    const badShift = shiftIds.find((id) => !activeShifts.has(id));
-    if (badShift) {
-      throw new AppError(`Shift ${badShift} does not exist or is inactive`, 400);
-    }
-  }
-
-  // No employee may exceed the consecutive-worked-day limit once this batch is
-  // applied. Check a window either side of the edit so the rule holds across
-  // week boundaries, not just inside the week being saved.
-  for (const employeeId of employeeIds) {
-    const mine = normalised.filter((r) => r.employee_id === employeeId);
-    const dates = mine.map((r) => r.roster_date).sort();
-    const from = addDays(dates[0], -(MAX_CONSECUTIVE_WORKED_DAYS + 1));
-    const to = addDays(dates[dates.length - 1], MAX_CONSECUTIVE_WORKED_DAYS + 1);
-
-    const existing = await q.getWorkedDatesInRange(employeeId, from, to);
-
-    // Rows in this batch override whatever is already stored for those dates.
-    const edited = new Set(dates);
-    const worked = new Set(existing.filter((d) => !edited.has(d)));
-    for (const r of mine) {
-      if (!r.is_week_off && !r.is_holiday && r.shift_id !== null) worked.add(r.roster_date);
-    }
-
-    const run = longestConsecutiveRun([...worked]);
-    if (run > MAX_CONSECUTIVE_WORKED_DAYS) {
-      throw new AppError(
-        `Employee ${employeeId} would be rostered ${run} consecutive days; the limit is ${MAX_CONSECUTIVE_WORKED_DAYS}.`,
-        400
-      );
-    }
   }
 
   return normalised;

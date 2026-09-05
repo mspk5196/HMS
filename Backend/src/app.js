@@ -41,6 +41,10 @@ app.options(/.*/, cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 
+// Serve uploaded employee documents (Aadhar, PAN, etc.)
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Log requests
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`, req.body);

@@ -25,12 +25,20 @@ const getEmployee = asyncHandler(async (req, res) => {
 });
 
 const createEmployee = asyncHandler(async (req, res) => {
-  const id = await svc.createEmployee(req.body);
+  // Parse file uploads from multer (files are optional at creation time)
+  const body = { ...req.body };
+  if (req.files?.aadhar_doc?.[0]) body.aadhar_doc_path = `/uploads/${req.files.aadhar_doc[0].filename}`;
+  if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
+  const id = await svc.createEmployee(body);
   return res.status(201).json(created({ id }, 'Employee created'));
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
-  await svc.updateEmployee(Number(req.params.id), req.body);
+  // Parse file uploads from multer
+  const body = { ...req.body };
+  if (req.files?.aadhar_doc?.[0]) body.aadhar_doc_path = `/uploads/${req.files.aadhar_doc[0].filename}`;
+  if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
+  await svc.updateEmployee(Number(req.params.id), body);
   return res.json(success(null, 'Employee updated'));
 });
 
@@ -58,6 +66,11 @@ const createShift = asyncHandler(async (req, res) => {
 const updateShift = asyncHandler(async (req, res) => {
   await svc.updateShift(Number(req.params.id), req.body);
   return res.json(success(null, 'Shift updated'));
+});
+
+const updateShiftTimings = asyncHandler(async (req, res) => {
+  const result = await svc.updateShiftTimings(req.body);
+  return res.json(success(result, 'Shift timings updated successfully'));
 });
 
 const deleteShift = asyncHandler(async (req, res) => {
@@ -213,13 +226,31 @@ const bulkImportEmployees = asyncHandler(async (req, res) => {
   return res.status(200).json(success(result, msg));
 });
 
+/* ─── SHIFT OVERRIDES ─── */
+
+const getShiftOverrides = asyncHandler(async (req, res) => {
+  const data = await svc.listShiftOverrides(Number(req.params.id));
+  return res.json(success(data));
+});
+
+const upsertShiftOverride = asyncHandler(async (req, res) => {
+  const data = await svc.upsertShiftOverride(Number(req.params.id), req.body, req.user?.id ?? null);
+  return res.json(success(data, 'Shift override saved'));
+});
+
+const deleteShiftOverride = asyncHandler(async (req, res) => {
+  await svc.deleteShiftOverride(Number(req.params.id), req.params.date);
+  return res.json(success(null, 'Shift override removed'));
+});
+
 module.exports = {
   listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee, bulkImportEmployees,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,
-  listShifts, createShift, updateShift, deleteShift,
+  listShifts, createShift, updateShift, updateShiftTimings, deleteShift,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   getRoster, getRosterWeek, getEmployeesForRoster, saveRosterDay, bulkSaveRoster, swapRosterShifts,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
+  getShiftOverrides, upsertShiftOverride, deleteShiftOverride,
 };

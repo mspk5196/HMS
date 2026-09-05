@@ -75,51 +75,106 @@ const DEFAULT_SHIFT = {
 
 /**
  * Which shift does this employee work on this date?
- *   1. the rostered shift for that exact date, else
- *   2. their role's default shift, else
- *   3. a generic 09:00–17:00 fallback so lateness is still computable.
+ * Priority order (new shift model v9):
+ *   1. employee_shift_overrides — per-day override for any category
+ *   2. roster_entries — Day & Night duty roster (custom_start_time/end_time)
+ *   3. employees.custom_shift_start/end — General / individually-timed Day or Night
+ *   4. Category default: Day = 09:00–17:00, Night = 20:00–08:00
+ *   5. Hard fallback 09:00–17:00 (unrostered / no category set)
  */
 const getShiftForDate = async (employeeId, date) => {
-  const [rostered] = await db.execute(
-    `SELECT s.id AS shift_id, s.name AS shift_name, s.start_time, s.end_time,
-            s.is_night_shift, s.grace_period_minutes,
-            s.biometric_in_start, s.biometric_in_end,
-            s.biometric_out_start, s.biometric_out_end,
-            re.is_week_off, re.is_holiday
-     FROM roster_entries re
-     JOIN shifts s ON s.id = re.shift_id
-     WHERE re.employee_id = ? AND re.roster_date = ?
-     LIMIT 1`,
+  // Priority 1 — single-day override
+  const [overrideRows] = await db.execute(
+    `SELECT start_time, end_time FROM employee_shift_overrides
+     WHERE employee_id = ? AND override_date = ? LIMIT 1`,
     [employeeId, date]
   );
-  if (rostered.length) return rostered[0];
-
-  // Rostered as a week-off/holiday with no shift — report it, don't fall through.
-  const [offDay] = await db.execute(
-    `SELECT is_week_off, is_holiday FROM roster_entries
-     WHERE employee_id = ? AND roster_date = ? LIMIT 1`,
-    [employeeId, date]
-  );
-  if (offDay.length && (offDay[0].is_week_off || offDay[0].is_holiday)) {
-    return { ...DEFAULT_SHIFT, ...offDay[0], shift_id: null };
+  if (overrideRows.length) {
+    const ov = overrideRows[0];
+    const isNight = ov.start_time >= '18:00:00' || ov.end_time <= '09:00:00';
+    return {
+      ...DEFAULT_SHIFT,
+      shift_name: 'Override',
+      start_time: ov.start_time,
+      end_time: ov.end_time,
+      is_night_shift: isNight ? 1 : 0,
+      is_week_off: 0, is_holiday: 0,
+    };
   }
 
-  const [roleDefault] = await db.execute(
-    `SELECT s.id AS shift_id, s.name AS shift_name, s.start_time, s.end_time,
-            s.is_night_shift, s.grace_period_minutes,
-            s.biometric_in_start, s.biometric_in_end,
-            s.biometric_out_start, s.biometric_out_end
-     FROM employees e
-     JOIN staff_roles sr ON sr.id = e.designation_id
-     JOIN shifts s ON s.id = sr.default_shift_id
-     WHERE e.id = ?
-     LIMIT 1`,
+  // Priority 2 — Day & Night duty roster (custom time ranges in roster_entries)
+  const [rosterRows] = await db.execute(
+    `SELECT re.custom_start_time, re.custom_end_time, re.is_week_off, re.is_holiday
+     FROM roster_entries re
+     WHERE re.employee_id = ? AND re.roster_date = ? LIMIT 1`,
+    [employeeId, date]
+  );
+  if (rosterRows.length) {
+    const re = rosterRows[0];
+    if (re.is_week_off || re.is_holiday) {
+      return { ...DEFAULT_SHIFT, is_week_off: re.is_week_off, is_holiday: re.is_holiday, shift_id: null };
+    }
+    if (re.custom_start_time && re.custom_end_time) {
+      const isNight = re.custom_start_time >= '18:00:00';
+      return {
+        ...DEFAULT_SHIFT,
+        shift_name: 'Roster',
+        start_time: re.custom_start_time,
+        end_time: re.custom_end_time,
+        is_night_shift: isNight ? 1 : 0,
+        is_week_off: 0, is_holiday: 0,
+      };
+    }
+  }
+
+  // Priority 3 — category resolution
+  const [empRows] = await db.execute(
+    `SELECT shift_category, custom_shift_start, custom_shift_end FROM employees WHERE id = ? LIMIT 1`,
     [employeeId]
   );
-  if (roleDefault.length) return { ...roleDefault[0], is_week_off: 0, is_holiday: 0 };
+  if (empRows.length) {
+    const emp = empRows[0];
 
+    // Day and Night shifts always follow the hospital-wide configured timing from shifts table
+    if (emp.shift_category === 'day' || emp.shift_category === 'night') {
+      const isNight = emp.shift_category === 'night';
+      const [shiftRows] = await db.execute(
+        `SELECT start_time, end_time FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
+        [isNight ? 1 : 0]
+      );
+      const configured = shiftRows[0];
+      const start = configured?.start_time || (isNight ? '20:00:00' : '09:00:00');
+      const end = configured?.end_time || (isNight ? '08:00:00' : '17:00:00');
+      return {
+        ...DEFAULT_SHIFT,
+        shift_name: isNight ? 'Night' : 'Day',
+        start_time: start,
+        end_time: end,
+        is_night_shift: isNight ? 1 : 0,
+        is_week_off: 0,
+        is_holiday: 0,
+      };
+    }
+
+    // Day & Night and General shifts use custom timing
+    if (emp.custom_shift_start && emp.custom_shift_end) {
+      const isNight = emp.custom_shift_start >= '18:00:00';
+      return {
+        ...DEFAULT_SHIFT,
+        shift_name: emp.shift_category ?? 'Custom',
+        start_time: emp.custom_shift_start,
+        end_time: emp.custom_shift_end,
+        is_night_shift: isNight ? 1 : 0,
+        is_week_off: 0,
+        is_holiday: 0,
+      };
+    }
+  }
+
+  // Priority 5 — hard fallback
   return { ...DEFAULT_SHIFT, is_week_off: 0, is_holiday: 0 };
 };
+
 
 /** DEFAULT_BUFFER_MINUTES from system_config, used when a role sets none. */
 const getDefaultBufferMinutes = async () => {

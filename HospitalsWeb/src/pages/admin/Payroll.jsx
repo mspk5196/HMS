@@ -340,6 +340,41 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
     }
   };
 
+  const exportExcel = async () => {
+    try {
+      setBusy(true);
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || '/api';
+      const res = await fetch(`${API_URL}/salary/payroll-runs/${runId}/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        let errMsg = 'Failed to export payroll';
+        try {
+          const json = await res.json();
+          errMsg = json.message || errMsg;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(errMsg);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payroll_${MONTH_NAMES[run.period_month - 1]}_${run.period_year}_Run${runId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      onSuccess('Payroll exported to Excel spreadsheet successfully (overtime excluded).');
+    } catch (err) {
+      onError(err, 'Failed to export payroll Excel file.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const lock = async () => {
     if (!window.confirm('Locking a payroll run is final — it marks every fine in it as deducted and prevents recalculation. Continue?')) return;
     try {
@@ -423,7 +458,15 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={exportExcel}
+            disabled={busy || items.length === 0}
+            className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            title="Download payroll spreadsheet (.xlsx) without overtime compensations"
+          >
+            📥 Export Excel
+          </button>
           <button
             onClick={calculate}
             disabled={busy || run.status !== 'draft'}

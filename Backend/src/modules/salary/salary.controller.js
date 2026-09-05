@@ -268,12 +268,77 @@ const createOvertime = asyncHandler(async (req, res) => {
   );
 });
 
+/* ─── PAYROLL EXCEL EXPORT ─── */
+
+const XLSX = require('xlsx');
+
+/**
+ * GET /api/salary/payroll-runs/:id/export
+ * Streams a .xlsx file with all employee payslip lines for the run.
+ * Overtime compensation is intentionally excluded per business requirement.
+ */
+const exportPayrollRun = asyncHandler(async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = await svc.getPayrollRun(runId);
+  if (!run) return res.status(404).json(fail('Payroll run not found'));
+
+  const { rows } = await q.getPayrollItems(runId, 1, 10000);
+
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+  const periodLabel = `${MONTH_NAMES[(run.period_month || 1) - 1]} ${run.period_year}`;
+
+  const sheetData = [
+    [
+      'Emp Code', 'Name', 'Department', 'Role',
+      'Days Present', 'Days Leave (Paid)', 'Days LOP', 'Shifts Worked',
+      'Base Salary (₹)', 'Night Shift Extra (₹)', 'Gross Pay (₹)',
+      'LOP Deduction (₹)', 'Late/Buffer Deduction (₹)',
+      'EPF Employee (₹)', 'ESI Employee (₹)', 'Fines Deducted (₹)',
+      'Net Pay (₹)',
+    ],
+    ...rows.map((r) => [
+      r.employee_code,
+      r.full_name,
+      r.department_name || '',
+      r.designation_name || '',
+      Number(r.days_present ?? 0),
+      Number(r.days_paid_leave ?? 0),
+      Number(r.days_lop ?? 0),
+      Number(r.shifts_worked ?? 0),
+      Number(r.base_salary_component ?? 0),
+      Number(r.night_shift_component ?? 0),
+      Number(r.gross_pay ?? 0),
+      Number(r.lop_amount ?? 0),
+      Number(r.buffer_late_deduction ?? 0),
+      Number(r.pf_employee_amount ?? 0),
+      Number(r.esi_employee_amount ?? 0),
+      Number(r.fines_amount ?? 0),
+      Number(r.net_pay ?? 0),
+    ]),
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  const colWidths = sheetData[0].map((_, ci) =>
+    Math.max(...sheetData.map((row) => String(row[ci] ?? '').length)) + 3
+  );
+  ws['!cols'] = colWidths.map((w) => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
+
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const filename = `Payroll_${periodLabel.replace(' ', '_')}_Run${runId}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
 module.exports = {
   listStructures, createStructure, updateStructure, getEffectiveSalary, addRevision,
   getConfig, updateConfig,
   listNightShiftRates, addNightShiftRate,
   listRuns, getRun, createRun, calculateRun, generatePayroll, lockRun, getPayslip,
-  listItems,
+  listItems, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,
   listOvertime, createOvertime,

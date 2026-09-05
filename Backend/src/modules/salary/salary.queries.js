@@ -73,6 +73,7 @@ const getEffectiveSalary = async (employeeId, month, year) => {
   // Fall back to the role default the Department-Role screen actually writes.
   const [roleRows] = await db.execute(
     `SELECT sr.basic_salary, sr.hra, sr.da, e.basic_salary AS employee_basic,
+            e.shift_category, e.per_day_salary, e.per_night_salary,
             e.pf_enrolled, e.esi_enrolled, e.uan_number, e.esi_number
      FROM employees e
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
@@ -94,15 +95,22 @@ const getEffectiveSalary = async (employeeId, month, year) => {
   const fixed = basic + hra + da;
   if (fixed <= 0) return null;
 
+  const nightAllowance = r.shift_category === 'day_and_night'
+    ? Math.max(0, Number(r.per_night_salary || 0) - Number(r.per_day_salary || 0))
+    : 0;
+
   return {
     source: employeeBasic > 0 ? 'employee' : 'staff_role',
     salary_structure_id: null,
     fixed_salary: fixed,
     basic_da_amount: basic + da,
     hra_amount: hra,
-    night_shift_extra_amount: 0,
+    night_shift_extra_amount: nightAllowance,
     pf_applicable: Boolean(r.pf_enrolled),
     esi_applicable: Boolean(r.esi_enrolled),
+    shift_category: r.shift_category,
+    per_day_salary: Number(r.per_day_salary || 0),
+    per_night_salary: Number(r.per_night_salary || 0),
   };
 };
 
