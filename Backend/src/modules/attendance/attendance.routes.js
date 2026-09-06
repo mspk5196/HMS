@@ -49,10 +49,21 @@ router.patch('/corrections/:id/review', ctrl.reviewCorrection);
 router.get('/devices', ctrl.listDevices);
 router.post('/devices', ctrl.createDevice);
 router.post('/devices/sync-all', ctrl.syncAllDevices);
+router.post('/devices/sync-all-users', ctrl.syncAllDeviceUsers);
 router.put('/devices/:id', ctrl.updateDevice);
 router.delete('/devices/:id', ctrl.deleteDevice);
 router.post('/devices/:id/test', ctrl.testDevice);
 router.post('/devices/:id/sync', ctrl.syncDevice);
+router.post('/devices/:id/sync-users', ctrl.syncDeviceUsers);
+router.post('/devices/:id/fetch-users', ctrl.syncDeviceUsers);
+
+// Biometric Enrolled Staff Registrations
+router.get('/enrolled-users/next-code', ctrl.getNextEnrollCode);
+router.get('/enrolled-users', ctrl.listEnrolledUsers);
+router.post('/enrolled-users', ctrl.upsertEnrolledUsers);
+router.post('/enrolled-users/register', ctrl.registerEnrolledUser);
+router.post('/enrolled-users/auto-link', ctrl.autoLinkUsers);
+router.post('/enrolled-users/:id/link', ctrl.linkEnrolledUser);
 
 // Buffer pool
 router.get('/buffer', ctrl.getBufferSummary);

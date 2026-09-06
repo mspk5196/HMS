@@ -67,6 +67,49 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
   });
   const [showTimingModal, setShowTimingModal] = useState(false);
 
+  // Biometric Enrolled Users (from Windows / Machine database)
+  const [unlinkedBioUsers, setUnlinkedBioUsers] = useState([]);
+  const [loadingBioUsers, setLoadingBioUsers] = useState(false);
+  const [isGeneratingId, setIsGeneratingId] = useState(false);
+
+  const fetchUnlinkedBioUsers = async () => {
+    try {
+      setLoadingBioUsers(true);
+      const res = await apiFetch('/attendance/enrolled-users?unlinked=true&limit=50');
+      const list = res?.users || (Array.isArray(res) ? res : []);
+      setUnlinkedBioUsers(list);
+    } catch {
+      /* non-critical fallback */
+    } finally {
+      setLoadingBioUsers(false);
+    }
+  };
+
+  const handlePickBioUser = (bio) => {
+    setFormData((prev) => ({
+      ...prev,
+      employeeCode: bio.enroll_code,
+      name: prev.name.trim() ? prev.name : (bio.name || ''),
+    }));
+    if (errors.employeeCode) setErrors((prev) => ({ ...prev, employeeCode: '' }));
+  };
+
+  const handleGenerateNextId = async () => {
+    try {
+      setIsGeneratingId(true);
+      const res = await apiFetch('/attendance/enrolled-users/next-code');
+      const nextId = res?.nextCode || res?.data?.nextCode;
+      if (nextId) {
+        setFormData((prev) => ({ ...prev, employeeCode: String(nextId) }));
+        if (errors.employeeCode) setErrors((prev) => ({ ...prev, employeeCode: '' }));
+      }
+    } catch {
+      /* non-critical fallback */
+    } finally {
+      setIsGeneratingId(false);
+    }
+  };
+
   const fetchShiftConfigs = async () => {
     try {
       const data = await apiFetch('/hr/shifts');
@@ -101,6 +144,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
 
   useEffect(() => {
     fetchShiftConfigs();
+    fetchUnlinkedBioUsers();
   }, []);
 
   const [errors, setErrors] = useState({});
@@ -302,11 +346,77 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
             </select>
           </div>
 
+          {/* Biometric Registrations Quick Picker Banner */}
+          {unlinkedBioUsers.length > 0 && (
+            <div className="md:col-span-2 bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-slate-50 p-4 rounded-xl border border-blue-200/80 shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                  <span className="text-xs font-bold text-blue-900">
+                    Newly Enrolled Biometric Registrations ({unlinkedBioUsers.length})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchUnlinkedBioUsers}
+                  disabled={loadingBioUsers}
+                  className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1 cursor-pointer"
+                >
+                  <svg className={`w-3 h-3 ${loadingBioUsers ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Refresh Biometrics</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-blue-800/80">
+                Staff registered on the biometric terminal / Windows station with fingerprint &amp; face. Click any profile below to auto-fill their Employee ID &amp; Name:
+              </p>
+              <div className="flex items-center gap-2 flex-wrap max-h-36 overflow-y-auto pt-1">
+                {unlinkedBioUsers.map((bio) => {
+                  const isSelected = String(formData.employeeCode).trim() === String(bio.enroll_code).trim();
+                  return (
+                    <button
+                      key={bio.id || bio.enroll_code}
+                      type="button"
+                      onClick={() => handlePickBioUser(bio)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                          : 'bg-white text-gray-800 border-blue-200 hover:bg-blue-100/60 hover:border-blue-300'
+                      }`}
+                    >
+                      <span className="font-mono font-bold">#{bio.enroll_code}</span>
+                      <span>·</span>
+                      <span>{bio.name || 'New Staff'}</span>
+                      <span className="text-[10px] opacity-75">
+                        ({bio.has_face ? '👤 Face' : ''}{bio.has_face && bio.has_fingerprint ? ' + ' : ''}{bio.has_fingerprint ? '👆 Finger' : ''})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Employee Code — must match the biometric device */}
           <div className="space-y-1.5 md:col-span-2">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-              Employee Code <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                Employee Code <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateNextId}
+                  disabled={isGeneratingId}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1"
+                  title="Query database for next incremental Employee Code"
+                >
+                  {isGeneratingId ? 'Generating…' : '⚡ Auto-Generate Next ID'}
+                </button>
+              </div>
+            </div>
+
             <input
               type="text"
               value={formData.employeeCode}
@@ -316,9 +426,34 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                 errors.employeeCode ? 'border-red-400 bg-red-50/30' : 'border-gray-200 bg-white'
               }`}
             />
+
+            {/* Biometric Verification Badge if matched */}
+            {(() => {
+              const matched = unlinkedBioUsers.find(
+                (b) => String(b.enroll_code).trim() === String(formData.employeeCode).trim()
+              );
+              if (matched) {
+                return (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 text-emerald-800 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                      <span>Biometric Hardware Verified</span>
+                      <span className="text-emerald-700 font-normal">
+                        — Fingerprint: {matched.has_fingerprint ? 'Yes' : 'No'} · Face: {matched.has_face ? 'Yes' : 'No'} ({matched.device_id || 'Terminal'})
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded font-mono">
+                      Will automatically link punches
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {errors.employeeCode
               ? <p className="text-[11px] text-red-500">{errors.employeeCode}</p>
-              : <p className="text-[11px] text-gray-400">Must exactly match this staff member's Emp Code on the biometric device — attendance is matched on this, not on name.</p>}
+              : <p className="text-[11px] text-gray-400">Must match this staff member's Emp Code on the biometric device — attendance is matched on this, not on name.</p>}
           </div>
 
           {/* Member Name */}

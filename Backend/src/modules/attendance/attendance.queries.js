@@ -33,6 +33,17 @@ const bulkInsertPunches = async (rows) => {
      VALUES ?`,
     [values]
   );
+
+  // Auto-record newly seen employee codes into biometric_enrolled_users
+  try {
+    const codes = Array.from(new Set(rows.map((r) => String(r.employee_code || '').trim()).filter(Boolean)));
+    if (codes.length > 0) {
+      await autoRecordPunchesInEnrolledUsers(codes);
+    }
+  } catch (err) {
+    console.warn('[bulkInsertPunches] Warning recording enrolled users:', err.message);
+  }
+
   return { inserted: result.affectedRows };
 };
 
@@ -814,6 +825,317 @@ const updateDeviceSyncStatus = async (id, { status, last_sync_at, last_sync_coun
   );
 };
 
+/* ─────────────────────────────────────────────
+   BIOMETRIC ENROLLED USERS (Staff Registrations)
+───────────────────────────────────────────── */
+
+/** Ensures biometric_enrolled_users table exists */
+const ensureBiometricEnrolledUsersTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS \`biometric_enrolled_users\` (
+      \`id\` bigint unsigned NOT NULL AUTO_INCREMENT,
+      \`enroll_code\` varchar(50) NOT NULL,
+      \`name\` varchar(150) NULL DEFAULT NULL,
+      \`device_id\` varchar(100) NULL DEFAULT NULL,
+      \`card_number\` varchar(50) NULL DEFAULT NULL,
+      \`privilege\` varchar(20) NOT NULL DEFAULT 'user',
+      \`has_fingerprint\` tinyint(1) NOT NULL DEFAULT 0,
+      \`has_face\` tinyint(1) NOT NULL DEFAULT 0,
+      \`has_password\` tinyint(1) NOT NULL DEFAULT 0,
+      \`template_count\` int unsigned NOT NULL DEFAULT 0,
+      \`registered_at\` datetime NULL DEFAULT NULL,
+      \`is_linked\` tinyint(1) NOT NULL DEFAULT 0,
+      \`linked_employee_id\` bigint unsigned NULL DEFAULT NULL,
+      \`raw_details\` json NULL,
+      \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uk_enroll_code\` (\`enroll_code\`),
+      KEY \`idx_is_linked\` (\`is_linked\`),
+      KEY \`idx_linked_employee_id\` (\`linked_employee_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  `);
+};
+
+/** Upsert biometric enrolled users */
+const upsertBiometricEnrolledUsers = async (users) => {
+  if (!Array.isArray(users) || users.length === 0) return { upserted: 0 };
+  await ensureBiometricEnrolledUsersTable();
+
+  let count = 0;
+  for (const u of users) {
+    const enrollCode = String(u.enroll_code || u.employee_code || u.userId || '').trim();
+    if (!enrollCode) continue;
+
+    const name = u.name ? String(u.name).trim() : null;
+    const deviceId = u.device_id || u.deviceName || 'Biometric Terminal';
+    const cardNum = u.card_number || u.cardNumber || null;
+    const privilege = u.privilege || 'user';
+    const hasFinger = u.has_fingerprint || u.fingerprint ? 1 : 0;
+    const hasFace = u.has_face || u.face ? 1 : 0;
+    const hasPass = u.has_password || u.password ? 1 : 0;
+    const templateCount = Number(u.template_count || u.templateCount) || 0;
+    const registeredAt = u.registered_at ? new Date(u.registered_at) : null;
+    const rawDetails = u.raw_details ? JSON.stringify(u.raw_details) : null;
+
+    await db.query(
+      `INSERT INTO biometric_enrolled_users
+        (enroll_code, name, device_id, card_number, privilege, has_fingerprint, has_face, has_password, template_count, registered_at, raw_details)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+        name = COALESCE(VALUES(name), name),
+        device_id = VALUES(device_id),
+        card_number = COALESCE(VALUES(card_number), card_number),
+        privilege = VALUES(privilege),
+        has_fingerprint = GREATEST(has_fingerprint, VALUES(has_fingerprint)),
+        has_face = GREATEST(has_face, VALUES(has_face)),
+        template_count = GREATEST(template_count, VALUES(template_count)),
+        raw_details = COALESCE(VALUES(raw_details), raw_details)`,
+      [enrollCode, name, deviceId, cardNum, privilege, hasFinger, hasFace, hasPass, templateCount, registeredAt, rawDetails]
+    );
+    count++;
+  }
+
+  // Auto-link with existing employees
+  await autoLinkEnrolledUsers();
+  return { upserted: count };
+};
+
+/** Automatically links any unlinked enrolled users whose enroll_code matches an employee */
+const autoLinkEnrolledUsers = async () => {
+  await ensureBiometricEnrolledUsersTable();
+  const [res] = await db.query(`
+    UPDATE biometric_enrolled_users b
+    JOIN employees e ON b.enroll_code = e.employee_code
+    SET b.is_linked = 1, b.linked_employee_id = e.id
+    WHERE b.is_linked = 0
+  `);
+  return res.affectedRows;
+};
+
+/** Auto-records employee_codes from punches if not already in enrolled users */
+const autoRecordPunchesInEnrolledUsers = async (codes) => {
+  if (!codes || codes.length === 0) return;
+  await ensureBiometricEnrolledUsersTable();
+  for (const c of codes) {
+    await db.query(`
+      INSERT IGNORE INTO biometric_enrolled_users (enroll_code, device_id, has_fingerprint)
+      VALUES (?, 'Biometric Punch Terminal', 1)
+    `, [c]);
+  }
+  await autoLinkEnrolledUsers();
+};
+
+/** List enrolled users with employee details */
+const listBiometricEnrolledUsers = async ({ unlinkedOnly = false, search = '', limit = 100, offset = 0 } = {}) => {
+  await ensureBiometricEnrolledUsersTable();
+  let where = '1=1';
+  const params = [];
+
+  if (unlinkedOnly) {
+    where += ' AND b.is_linked = 0';
+  }
+  if (search) {
+    where += ' AND (b.enroll_code LIKE ? OR b.name LIKE ? OR e.full_name LIKE ?)';
+    const s = `%${search}%`;
+    params.push(s, s, s);
+  }
+
+  const [rows] = await db.query(
+    `SELECT 
+       b.id,
+       b.enroll_code,
+       b.name,
+       b.device_id,
+       b.card_number,
+       b.privilege,
+       b.has_fingerprint,
+       b.has_face,
+       b.has_password,
+       b.template_count,
+       b.registered_at,
+       b.is_linked,
+       b.linked_employee_id,
+       b.created_at,
+       b.updated_at,
+       e.full_name AS employee_name,
+       e.employee_code AS employee_code,
+       d.name AS department_name,
+       COALESCE(sr.name, des.name) AS designation_title
+     FROM biometric_enrolled_users b
+     LEFT JOIN employees e ON b.linked_employee_id = e.id OR b.enroll_code = e.employee_code
+     LEFT JOIN departments d ON e.department_id = d.id
+     LEFT JOIN staff_roles sr ON e.designation_id = sr.id
+     LEFT JOIN designations des ON e.designation_id = des.id
+     WHERE ${where}
+     ORDER BY b.is_linked ASC, b.registered_at DESC, b.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, Number(limit), Number(offset)]
+  );
+
+  const [countRows] = await db.query(
+    `SELECT COUNT(*) AS total FROM biometric_enrolled_users b
+     LEFT JOIN employees e ON b.linked_employee_id = e.id OR b.enroll_code = e.employee_code
+     WHERE ${where}`,
+    params
+  );
+
+  return { users: rows, total: countRows[0].total };
+};
+
+/**
+ * Calculates the next recommended employee / biometric enrollment code.
+ * Scans both biometric_enrolled_users and employees to find the maximum numeric ID.
+ */
+const getNextBiometricEnrollCode = async () => {
+  await ensureBiometricEnrolledUsersTable();
+  let maxCode = 1000;
+  try {
+    const [empRows] = await db.query(`
+      SELECT employee_code FROM employees WHERE employee_code IS NOT NULL AND employee_code != ''
+    `);
+    const [bioRows] = await db.query(`
+      SELECT enroll_code FROM biometric_enrolled_users WHERE enroll_code IS NOT NULL AND enroll_code != ''
+    `);
+
+    for (const r of empRows) {
+      const num = parseInt(String(r.employee_code).replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num > maxCode && num < 1000000) maxCode = num;
+    }
+    for (const r of bioRows) {
+      const num = parseInt(String(r.enroll_code).replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num > maxCode && num < 1000000) maxCode = num;
+    }
+  } catch (err) {
+    console.warn('[getNextBiometricEnrollCode] fallback scan:', err.message);
+  }
+  return String(maxCode + 1);
+};
+
+/**
+ * Directly records a newly enrolled employee from Windows system or biometric hardware.
+ */
+const registerSingleBiometricUser = async (data = {}) => {
+  await ensureBiometricEnrolledUsersTable();
+  const enrollCode = String(data.enroll_code || data.employee_code || data.userId || '').trim();
+  if (!enrollCode) throw new Error('Biometric enroll_code / employee ID is required.');
+
+  const name = data.name ? String(data.name).trim() : null;
+  const deviceId = data.device_id || data.deviceName || 'Windows Enrollment Station';
+  const cardNum = data.card_number || data.cardNumber || null;
+  const privilege = data.privilege || 'user';
+  const hasFinger = data.has_fingerprint !== undefined ? (data.has_fingerprint ? 1 : 0) : 1;
+  const hasFace = data.has_face !== undefined ? (data.has_face ? 1 : 0) : 1;
+  const hasPass = data.has_password ? 1 : 0;
+  const templateCount = Number(data.template_count) || 0;
+  const registeredAt = data.registered_at ? new Date(data.registered_at) : new Date();
+  const rawDetails = data.raw_details ? JSON.stringify(data.raw_details) : null;
+
+  // Check if this enrollCode already corresponds to an existing employee
+  const [empMatches] = await db.query(
+    'SELECT id, employee_code, full_name FROM employees WHERE employee_code = ? LIMIT 1',
+    [enrollCode]
+  );
+  const matchedEmp = empMatches[0] || null;
+  const isLinked = matchedEmp ? 1 : 0;
+  const linkedEmployeeId = matchedEmp ? matchedEmp.id : null;
+
+  await db.query(
+    `INSERT INTO biometric_enrolled_users
+      (enroll_code, name, device_id, card_number, privilege, has_fingerprint, has_face, has_password, template_count, registered_at, is_linked, linked_employee_id, raw_details)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      name = COALESCE(VALUES(name), name),
+      device_id = VALUES(device_id),
+      card_number = COALESCE(VALUES(card_number), card_number),
+      privilege = VALUES(privilege),
+      has_fingerprint = GREATEST(has_fingerprint, VALUES(has_fingerprint)),
+      has_face = GREATEST(has_face, VALUES(has_face)),
+      template_count = GREATEST(template_count, VALUES(template_count)),
+      is_linked = IF(is_linked = 1, 1, VALUES(is_linked)),
+      linked_employee_id = COALESCE(linked_employee_id, VALUES(linked_employee_id)),
+      raw_details = COALESCE(VALUES(raw_details), raw_details)`,
+    [
+      enrollCode,
+      name,
+      deviceId,
+      cardNum,
+      privilege,
+      hasFinger,
+      hasFace,
+      hasPass,
+      templateCount,
+      registeredAt,
+      isLinked,
+      linkedEmployeeId,
+      rawDetails,
+    ]
+  );
+
+  // If linked, also link any past unlinked punches with this enrollCode
+  if (linkedEmployeeId) {
+    try {
+      await db.query(
+        'UPDATE employee_attendance_punches SET employee_id = ? WHERE (employee_id IS NULL OR employee_id = 0) AND employee_code = ?',
+        [linkedEmployeeId, enrollCode]
+      );
+    } catch (_) {}
+  }
+
+  // Retrieve saved record
+  const [rows] = await db.query('SELECT * FROM biometric_enrolled_users WHERE enroll_code = ? LIMIT 1', [enrollCode]);
+  return rows[0];
+};
+
+/**
+ * Links or unlinks a biometric enrollment record with an employee.
+ */
+const linkBiometricUser = async (id, employeeId) => {
+  await ensureBiometricEnrolledUsersTable();
+  const [existing] = await db.query('SELECT * FROM biometric_enrolled_users WHERE id = ?', [id]);
+  if (!existing || existing.length === 0) {
+    throw new Error(`Biometric enrollment record with ID ${id} not found`);
+  }
+  const bioUser = existing[0];
+
+  if (!employeeId) {
+    // Unlink
+    await db.query(
+      'UPDATE biometric_enrolled_users SET is_linked = 0, linked_employee_id = NULL WHERE id = ?',
+      [id]
+    );
+    return { id, is_linked: 0, linked_employee_id: null, message: 'Unlinked successfully' };
+  }
+
+  // Link to target employee
+  const [empRows] = await db.query('SELECT id, employee_code, full_name FROM employees WHERE id = ?', [employeeId]);
+  if (!empRows || empRows.length === 0) {
+    throw new Error(`Employee with ID ${employeeId} not found`);
+  }
+  const emp = empRows[0];
+
+  await db.query(
+    'UPDATE biometric_enrolled_users SET is_linked = 1, linked_employee_id = ? WHERE id = ?',
+    [emp.id, id]
+  );
+
+  // Connect past raw punches for both this bio user's enroll_code and emp's employee_code
+  try {
+    await db.query(
+      'UPDATE employee_attendance_punches SET employee_id = ? WHERE (employee_id IS NULL OR employee_id = 0) AND employee_code IN (?, ?)',
+      [emp.id, bioUser.enroll_code, emp.employee_code]
+    );
+  } catch (_) {}
+
+  return {
+    id,
+    is_linked: 1,
+    linked_employee_id: emp.id,
+    employee_name: emp.full_name,
+    employee_code: emp.employee_code,
+  };
+};
+
 module.exports = {
   bulkInsertPunches,
   resolveEmployeeCodes,
@@ -847,5 +1169,13 @@ module.exports = {
   updateBiometricDevice,
   deleteBiometricDevice,
   updateDeviceSyncStatus,
+  ensureBiometricEnrolledUsersTable,
+  upsertBiometricEnrolledUsers,
+  autoLinkEnrolledUsers,
+  autoRecordPunchesInEnrolledUsers,
+  listBiometricEnrolledUsers,
+  getNextBiometricEnrollCode,
+  registerSingleBiometricUser,
+  linkBiometricUser,
 };
 

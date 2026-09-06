@@ -283,6 +283,78 @@ const syncAllDevices = asyncHandler(async (req, res) => {
   return res.json(success(results, 'All active biometric devices synced.'));
 });
 
+/** GET /api/attendance/enrolled-users — list enrolled staff from biometric machines */
+const listEnrolledUsers = asyncHandler(async (req, res) => {
+  const { unlinked, search, limit, offset } = req.query;
+  const data = await q.listBiometricEnrolledUsers({
+    unlinkedOnly: unlinked === 'true' || unlinked === '1',
+    search: search || '',
+    limit: Number(limit) || 100,
+    offset: Number(offset) || 0,
+  });
+  return res.json(success(data));
+});
+
+/** POST /api/attendance/enrolled-users — store or push enrolled users into database */
+const upsertEnrolledUsers = asyncHandler(async (req, res) => {
+  const users = Array.isArray(req.body) ? req.body : (req.body.users || [req.body]);
+  const result = await q.upsertBiometricEnrolledUsers(users);
+  return res.status(201).json(success(result, `Saved ${result.upserted} enrolled biometric user(s) to database.`));
+});
+
+/** POST /api/attendance/devices/:id/sync-users — pull enrolled staff registrations from device into database */
+const syncDeviceUsers = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await esslSvc.syncBiometricEnrolledUsers(Number(id));
+  return res.json(success(result, `Synced ${result.totalEnrolledOnDevice} enrolled user(s) from ${result.deviceName}`));
+});
+
+/** POST /api/attendance/devices/sync-all-users — sync enrolled users from all active devices */
+const syncAllDeviceUsers = asyncHandler(async (req, res) => {
+  const devices = await q.listBiometricDevices();
+  const activeDevices = devices.filter((d) => d.auto_sync_enabled !== 0 && d.status !== 'unreachable');
+  const targets = activeDevices.length > 0 ? activeDevices : devices;
+  const results = [];
+  let totalUsers = 0;
+
+  for (const dev of targets) {
+    try {
+      const resDev = await esslSvc.syncBiometricEnrolledUsers(dev.id);
+      results.push(resDev);
+      totalUsers += (resDev.totalEnrolledOnDevice || 0);
+    } catch (err) {
+      results.push({ success: false, deviceId: dev.id, deviceName: dev.name, error: err.message });
+    }
+  }
+  return res.json(success({ results, totalUsers }, `Synced enrolled users across ${targets.length} device(s).`));
+});
+
+/** POST /api/attendance/enrolled-users/auto-link — link enrolled biometric users with employee profiles */
+const autoLinkUsers = asyncHandler(async (req, res) => {
+  const linkedCount = await q.autoLinkEnrolledUsers();
+  return res.json(success({ linkedCount }, `Linked ${linkedCount} biometric registration(s) to employee profiles.`));
+});
+
+/** GET /api/attendance/enrolled-users/next-code — suggest next available employee / biometric ID */
+const getNextEnrollCode = asyncHandler(async (req, res) => {
+  const nextCode = await q.getNextBiometricEnrollCode();
+  return res.json(success({ nextCode }, `Next available employee code is ${nextCode}`));
+});
+
+/** POST /api/attendance/enrolled-users/register — register single new staff enrollment from Windows/Web */
+const registerEnrolledUser = asyncHandler(async (req, res) => {
+  const record = await q.registerSingleBiometricUser(req.body);
+  return res.status(201).json(success(record, `Registered biometric profile for #${record.enroll_code} in database.`));
+});
+
+/** POST /api/attendance/enrolled-users/:id/link — manually map biometric enrollment to employee */
+const linkEnrolledUser = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { employee_id } = req.body;
+  const result = await q.linkBiometricUser(Number(id), employee_id ? Number(employee_id) : null);
+  return res.json(success(result, result.message || 'Updated biometric employee mapping.'));
+});
+
 module.exports = {
   listSummaries,
   getSummary,
@@ -307,5 +379,13 @@ module.exports = {
   testDevice,
   syncDevice,
   syncAllDevices,
+  listEnrolledUsers,
+  upsertEnrolledUsers,
+  syncDeviceUsers,
+  syncAllDeviceUsers,
+  autoLinkUsers,
+  getNextEnrollCode,
+  registerEnrolledUser,
+  linkEnrolledUser,
 };
 

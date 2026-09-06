@@ -3,3 +3,5 @@ node_modules
 *.xlsx
 Sql/confedential/
 Backend/scripts/
+BiometricConnector/.env
+BiometricConnector/devices.json

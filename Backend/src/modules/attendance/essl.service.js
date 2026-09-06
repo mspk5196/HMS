@@ -178,10 +178,53 @@ function parseAttendanceRecords(buffer) {
   return records;
 }
 
+function getConnectorUrl(targetIp) {
+  if (targetIp && (targetIp.startsWith('http://') || targetIp.startsWith('https://') || targetIp.includes('tylo.co.in'))) {
+    return targetIp.replace(/\/+$/, '');
+  }
+  if (process.env.BIOMETRIC_CONNECTOR_URL) {
+    return process.env.BIOMETRIC_CONNECTOR_URL.replace(/\/+$/, '');
+  }
+  return null;
+}
+
 /**
- * Tests live TCP connection to an eSSL biometric device on port 4370.
+ * Tests live connection to an eSSL biometric device (or via Biometric Connector bridge).
  */
 async function testDeviceConnection({ ip_address, port, timeoutMs = 4000 } = {}) {
+  const connectorUrl = getConnectorUrl(ip_address);
+  if (connectorUrl) {
+    const startTime = Date.now();
+    try {
+      const apiKey = process.env.BIOMETRIC_CONNECTOR_KEY || process.env.CONNECTOR_API_KEY || 'neha_bio_secret_key_2026';
+      const endpoint = `${connectorUrl}/api/health`;
+      const res = await fetch(endpoint, {
+        headers: { 'x-api-key': apiKey },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const data = await res.json();
+      const latencyMs = Date.now() - startTime;
+      if (res.ok && data.success) {
+        return {
+          online: true,
+          ip_address: connectorUrl,
+          port: 443,
+          session_id: 1,
+          message: `Connected successfully to Biometric Connector at ${connectorUrl} (${latencyMs}ms, ${data.deviceCount || 1} active device(s)).`,
+        };
+      }
+      return {
+        online: false,
+        error: data.message || `Connector returned HTTP status ${res.status}`,
+      };
+    } catch (cErr) {
+      return {
+        online: false,
+        error: `Could not reach Biometric Connector at ${connectorUrl}: ${cErr.message}`,
+      };
+    }
+  }
+
   const targetIp = ip_address || process.env.ESSL_DEVICE_IP || '192.168.1.201';
   const targetPort = Number(port || process.env.ESSL_DEVICE_PORT || 4370);
 
@@ -243,9 +286,24 @@ async function testDeviceConnection({ ip_address, port, timeoutMs = 4000 } = {})
 }
 
 /**
- * Downloads attendance punch logs from an eSSL device over TCP/IP.
+ * Downloads attendance punch logs from an eSSL device over TCP/IP or Biometric Connector.
  */
 async function fetchDevicePunches({ ip_address, port, timeoutMs = 8000 } = {}) {
+  const connectorUrl = getConnectorUrl(ip_address);
+  if (connectorUrl) {
+    const apiKey = process.env.BIOMETRIC_CONNECTOR_KEY || process.env.CONNECTOR_API_KEY || 'neha_bio_secret_key_2026';
+    const endpoint = `${connectorUrl}/api/devices/dev-1/punches`;
+    const res = await fetch(endpoint, {
+      headers: { 'x-api-key': apiKey },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && Array.isArray(data.punches)) {
+      return data.punches;
+    }
+    throw new Error(data.message || `Failed to fetch punches from connector at ${connectorUrl}: HTTP ${res.status}`);
+  }
+
   const targetIp = ip_address || process.env.ESSL_DEVICE_IP || '192.168.1.201';
   const targetPort = Number(port || process.env.ESSL_DEVICE_PORT || 4370);
 
@@ -398,6 +456,175 @@ async function syncBiometricDevice(deviceId, attendanceService) {
 }
 
 /**
+ * Parses user enrollment binary records from eSSL/ZKTeco device.
+ */
+function parseUserRecords(buffer) {
+  const users = [];
+  const RECORD_SIZE = 72;
+  const count = Math.floor(buffer.length / RECORD_SIZE);
+
+  for (let i = 0; i < count; i++) {
+    const offset = i * RECORD_SIZE;
+    if (offset + RECORD_SIZE > buffer.length) break;
+
+    // PIN string at offset 48, fallback to uint16 at offset 0
+    let enrollCode = buffer.toString('utf8', offset + 48, offset + 72).replace(/\0/g, '').trim();
+    if (!enrollCode || !/^[A-Za-z0-9_-]+$/.test(enrollCode)) {
+      const pinNum = buffer.readUInt16LE(offset);
+      if (pinNum > 0) enrollCode = String(pinNum);
+    }
+    if (!enrollCode) continue;
+
+    const privilegeNum = buffer.readUInt8(offset + 2);
+    const privilege = privilegeNum >= 2 ? 'admin' : 'user';
+    const name = buffer.toString('utf8', offset + 11, offset + 35).replace(/\0/g, '').trim();
+    const cardNum = buffer.readUInt32LE(offset + 35);
+
+    users.push({
+      enroll_code: enrollCode,
+      name: name || null,
+      card_number: cardNum > 0 ? String(cardNum) : null,
+      privilege,
+      has_fingerprint: 1,
+      has_face: 1,
+      registered_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    });
+  }
+  return users;
+}
+
+/**
+ * Downloads enrolled staff registrations from an eSSL terminal over TCP/IP or Biometric Connector.
+ */
+async function fetchDeviceUsers({ ip_address, port, timeoutMs = 8000 } = {}) {
+  const connectorUrl = getConnectorUrl(ip_address);
+  if (connectorUrl) {
+    const apiKey = process.env.BIOMETRIC_CONNECTOR_KEY || process.env.CONNECTOR_API_KEY || 'neha_bio_secret_key_2026';
+    const endpoint = `${connectorUrl}/api/devices/dev-1/users`;
+    const res = await fetch(endpoint, {
+      headers: { 'x-api-key': apiKey },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && Array.isArray(data.users)) {
+      return data.users;
+    }
+    throw new Error(data.message || `Failed to fetch enrolled users from connector at ${connectorUrl}: HTTP ${res.status}`);
+  }
+
+  const targetIp = ip_address || process.env.ESSL_DEVICE_IP || '192.168.1.201';
+  const targetPort = Number(port || process.env.ESSL_DEVICE_PORT || 4370);
+
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let sessionId = 0;
+    let replyNum = 0;
+    let rawDataChunks = [];
+    let isFinished = false;
+
+    const timer = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        socket.destroy();
+        reject(new Error(`Timeout while communicating with device ${targetIp}:${targetPort}`));
+      }
+    }, timeoutMs);
+
+    socket.connect(targetPort, targetIp, () => {
+      socket.write(createTcpPacket(CMD_CONNECT, 0, 0));
+    });
+
+    socket.on('data', (data) => {
+      if (isFinished) return;
+      const res = parseTcpPacket(data);
+      if (!res) return;
+
+      if (res.command === CMD_ACK_OK && sessionId === 0) {
+        sessionId = res.sessionId;
+        replyNum = res.replyNumber;
+        socket.write(createTcpPacket(CMD_DISABLEDEVICE, sessionId, ++replyNum));
+        socket.write(createTcpPacket(9, sessionId, ++replyNum)); // CMD_USERTEMP_RRQ = 9
+      } else if (res.command === CMD_PREPARE_DATA || res.command === CMD_DATA || res.command === CMD_ACK_DATA) {
+        if (res.data && res.data.length > 0) {
+          rawDataChunks.push(res.data);
+        }
+        setTimeout(() => {
+          if (!isFinished) {
+            isFinished = true;
+            clearTimeout(timer);
+            socket.write(createTcpPacket(CMD_ENABLEDEVICE, sessionId, ++replyNum));
+            socket.write(createTcpPacket(CMD_EXIT, sessionId, ++replyNum));
+            socket.end();
+
+            const fullBuffer = Buffer.concat(rawDataChunks);
+            const users = parseUserRecords(fullBuffer);
+            resolve(users);
+          }
+        }, 1200);
+      } else if (res.command === CMD_ACK_OK && rawDataChunks.length > 0) {
+        if (!isFinished) {
+          isFinished = true;
+          clearTimeout(timer);
+          socket.write(createTcpPacket(CMD_ENABLEDEVICE, sessionId, ++replyNum));
+          socket.write(createTcpPacket(CMD_EXIT, sessionId, ++replyNum));
+          socket.end();
+
+          const fullBuffer = Buffer.concat(rawDataChunks);
+          const users = parseUserRecords(fullBuffer);
+          resolve(users);
+        }
+      } else if (res.command === CMD_ACK_ERROR) {
+        if (!isFinished) {
+          isFinished = true;
+          clearTimeout(timer);
+          socket.destroy();
+          reject(new Error('Device returned error acknowledging user info request'));
+        }
+      }
+    });
+
+    socket.on('error', (err) => {
+      if (!isFinished) {
+        isFinished = true;
+        clearTimeout(timer);
+        reject(err);
+      }
+    });
+  });
+}
+
+/**
+ * Pulls registered users from a biometric device and stores them in MySQL database.
+ */
+async function syncBiometricEnrolledUsers(deviceId) {
+  const device = await q.getBiometricDevice(deviceId);
+  if (!device) throw new Error('Biometric device configuration not found');
+
+  try {
+    const users = await fetchDeviceUsers({
+      ip_address: device.ip_address,
+      port: device.port || 4370,
+    });
+
+    const deviceLabel = device.name || `Device-${device.id}`;
+    const usersWithDevice = users.map((u) => ({ ...u, device_id: deviceLabel }));
+    const result = await q.upsertBiometricEnrolledUsers(usersWithDevice);
+
+    return {
+      success: true,
+      deviceId: device.id,
+      deviceName: deviceLabel,
+      totalEnrolledOnDevice: users.length,
+      upsertedInDatabase: result.upserted,
+      syncedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn(`[syncBiometricEnrolledUsers] Error for device ${deviceId}:`, err.message);
+    throw err;
+  }
+}
+
+/**
  * Synchronizes all active auto-sync enabled devices.
  */
 async function syncAllActiveDevices(attendanceService) {
@@ -425,6 +652,8 @@ async function syncAllActiveDevices(attendanceService) {
 module.exports = {
   testDeviceConnection,
   fetchDevicePunches,
+  fetchDeviceUsers,
   syncBiometricDevice,
   syncAllActiveDevices,
+  syncBiometricEnrolledUsers,
 };

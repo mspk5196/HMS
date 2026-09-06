@@ -821,10 +821,10 @@ function PayslipView({ payslip, onBack }) {
                 Advanced Multispeciality Healthcare &amp; Research Center
               </p> */}
               <p className="text-[10px] text-gray-600 leading-tight mt-1 max-w-lg">
-                47, South Park Street, Kutchery Medu, Gobichettipalayam, Erode District, Tamil Nadu – 638452
+                47, South Park Street (Kambar Veethi, Ganga Nagar), Kutchery Medu, Gobichettipalayam, Tamil Nadu – 638452
               </p>
               <p className="text-[10px] text-gray-500 mt-0.5 font-medium">
-                Reg No: TN/ERD/HOSP-2018/492 · Phone: +91 4285 222333 · Emergency 24x7
+                (Opp. Palaniammal Girls HR SEC School, Near Dr. Ravindran Hospital) · 24 Hours Emergency &amp; Medical Facility
               </p>
             </div>
           </div>
@@ -1166,6 +1166,8 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [data, setData] = useState(null);
+  const [activePayslip, setActivePayslip] = useState(null);
+  const [loadingPayslipEmpId, setLoadingPayslipEmpId] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -1187,6 +1189,19 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
       setIsLoading(false);
     }
   }, [month, year]);
+
+  const handleOpenPayslip = async (employeeId) => {
+    if (!data?.run?.id) return;
+    try {
+      setLoadingPayslipEmpId(employeeId);
+      const res = await apiFetch(`/salary/payroll-runs/${data.run.id}/payslip/${employeeId}`);
+      setActivePayslip(res);
+    } catch (err) {
+      onError(err, 'Failed to load employee payslip.');
+    } finally {
+      setLoadingPayslipEmpId(null);
+    }
+  };
 
   useEffect(() => {
     loadData();

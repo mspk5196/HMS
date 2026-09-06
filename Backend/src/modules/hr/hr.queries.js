@@ -194,7 +194,22 @@ const createEmployee = async (data) => {
       finalCustomBuffer,
     ]
   );
-  return result.insertId;
+  const insertId = result.insertId;
+
+  // Auto-link biometric enrolled user if code matches
+  if (employee_code) {
+    try {
+      await db.query(`
+        UPDATE biometric_enrolled_users
+        SET is_linked = 1, linked_employee_id = ?
+        WHERE enroll_code = ?
+      `, [insertId, employee_code]);
+    } catch (err) {
+      // Biometric table might not exist yet during migrations, suppress error
+    }
+  }
+
+  return insertId;
 };
 
 const updateEmployee = async (id, data) => {
@@ -247,6 +262,16 @@ const updateEmployee = async (id, data) => {
 
   if (data.designation_id !== undefined) {
     await syncUserRoleFromDesignation(id, data.designation_id);
+  }
+
+  if (data.employee_code) {
+    try {
+      await db.query(`
+        UPDATE biometric_enrolled_users
+        SET is_linked = 1, linked_employee_id = ?
+        WHERE enroll_code = ?
+      `, [id, data.employee_code]);
+    } catch (err) {}
   }
 };
 

@@ -1,0 +1,25 @@
+{
+  "name": "neha-biometric-connector",
+  "version": "1.0.0",
+  "description": "Biometric device edge connector microservice for Neha Hospitals ERP",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "biometric",
+    "essl",
+    "zkteco",
+    "attendance",
+    "cloudflare-tunnel"
+  ],
+  "author": "Neha Hospitals IT",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,435 @@
+/**
+ * deviceManager.js
+ *
+ * Multi-device manager for biometric attendance terminals on local LAN.
+ * Handles device registration, status tracking, punch collection, and forwarding to main backend.
+ */
+
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const config = require('../config');
+const { EsslDevice } = require('../drivers/essl.driver');
+
+const STORAGE_FILE = path.resolve(__dirname, '..', '..', 'devices.json');
+
+class DeviceManager {
+  constructor() {
+    this.devices = new Map();
+    this.deviceMetrics = new Map();
+    this.loadDevices();
+  }
+
+  loadDevices() {
+    try {
+      if (fs.existsSync(STORAGE_FILE)) {
+        const raw = fs.readFileSync(STORAGE_FILE, 'utf8');
+        const list = JSON.parse(raw);
+        if (Array.isArray(list) && list.length > 0) {
+          list.forEach((d) => this.devices.set(String(d.id), d));
+          console.log(`[DeviceManager] Loaded ${this.devices.size} device(s) from devices.json`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[DeviceManager] Could not load devices.json, using defaults:', err.message);
+    }
+
+    // Initialize with default device from config
+    const def = config.defaultDevice;
+    this.devices.set(def.id, def);
+    this.saveDevices();
+    console.log(`[DeviceManager] Initialized with default device: ${def.name} (${def.ip}:${def.port})`);
+  }
+
+  saveDevices() {
+    try {
+      const list = Array.from(this.devices.values());
+      fs.writeFileSync(STORAGE_FILE, JSON.stringify(list, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[DeviceManager] Failed to persist devices.json:', err.message);
+    }
+  }
+
+  listDevices() {
+    return Array.from(this.devices.values()).map((d) => {
+      const metrics = this.deviceMetrics.get(String(d.id)) || {
+        status: 'unknown',
+        lastTestedAt: null,
+        lastSyncedAt: null,
+        lastSyncCount: 0,
+        lastLatencyMs: null,
+      };
+      return { ...d, metrics };
+    });
+  }
+
+  getDevice(id) {
+    return this.devices.get(String(id)) || null;
+  }
+
+  addDevice(data) {
+    const id = data.id || `dev-${Date.now()}`;
+    const device = {
+      id: String(id),
+      name: data.name || `Biometric Device ${this.devices.size + 1}`,
+      ip: data.ip || '192.168.1.201',
+      port: Number(data.port) || 4370,
+      commKey: data.commKey || '0',
+      location: data.location || 'Hospital Gate',
+      enabled: data.enabled !== false,
+      createdAt: new Date().toISOString(),
+    };
+    this.devices.set(device.id, device);
+    this.saveDevices();
+    return device;
+  }
+
+  updateDevice(id, data) {
+    const existing = this.devices.get(String(id));
+    if (!existing) return null;
+
+    const updated = {
+      ...existing,
+      ...data,
+      id: existing.id, // preserve ID
+      updatedAt: new Date().toISOString(),
+    };
+    this.devices.set(existing.id, updated);
+    this.saveDevices();
+    return updated;
+  }
+
+  deleteDevice(id) {
+    const existed = this.devices.delete(String(id));
+    if (existed) {
+      this.deviceMetrics.delete(String(id));
+      this.saveDevices();
+    }
+    return existed;
+  }
+
+  /**
+   * Tests live TCP connection to a device on LAN.
+   */
+  async testDevice(id) {
+    const device = this.getDevice(id);
+    if (!device) throw new Error(`Device with ID "${id}" not found`);
+
+    const driver = new EsslDevice({
+      name: device.name,
+      ip: device.ip,
+      port: device.port,
+      commKey: device.commKey,
+      timeoutMs: 6000,
+    });
+
+    try {
+      const result = await driver.testConnection();
+      this.deviceMetrics.set(String(id), {
+        status: 'online',
+        lastTestedAt: new Date().toISOString(),
+        lastLatencyMs: result.latencyMs,
+      });
+      return { success: true, ...result };
+    } catch (err) {
+      this.deviceMetrics.set(String(id), {
+        status: 'unreachable',
+        lastTestedAt: new Date().toISOString(),
+        lastError: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Fetches raw attendance punches from a specific device.
+   */
+  async fetchPunchesFromDevice(id) {
+    const device = this.getDevice(id);
+    if (!device) throw new Error(`Device with ID "${id}" not found`);
+
+    const driver = new EsslDevice({
+      name: device.name,
+      ip: device.ip,
+      port: device.port,
+      commKey: device.commKey,
+      timeoutMs: 12000,
+    });
+
+    const rawPunches = await driver.fetchPunches();
+    
+    // Enrich punches with device identifier
+    const punches = rawPunches.map((p) => ({
+      employee_code: String(p.employee_code).trim(),
+      punch_time: p.punch_time,
+      punch_type: p.punch_type || 'in',
+      device_id: device.name || `DEV-${device.id}`,
+    }));
+
+    const prevMetrics = this.deviceMetrics.get(String(id)) || {};
+    this.deviceMetrics.set(String(id), {
+      ...prevMetrics,
+      status: 'online',
+      lastSyncedAt: new Date().toISOString(),
+      lastSyncCount: punches.length,
+    });
+
+    return {
+      deviceId: device.id,
+      deviceName: device.name,
+      totalPunches: punches.length,
+      punches,
+    };
+  }
+
+  /**
+   * Forwards a list of punches to the central Neha Hospital backend.
+   */
+  async forwardPunchesToBackend(punches) {
+    if (!punches || punches.length === 0) return { inserted: 0, message: 'No punches to forward' };
+
+    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/punches/import`;
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (config.mainBackendApiKey) {
+      headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+      headers['x-api-key'] = config.mainBackendApiKey;
+    }
+
+    console.log(`[DeviceManager] Forwarding ${punches.length} punch(es) to ${targetUrl}...`);
+
+    try {
+      const resp = await axios.post(targetUrl, { punches }, { headers, timeout: 15000 });
+      return resp.data;
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
+      console.error(`[DeviceManager] Failed to forward punches to backend: ${errMsg}`);
+      throw new Error(`Failed to forward punches to main backend (${targetUrl}): ${errMsg}`);
+    }
+  }
+
+  /**
+   * Syncs one device: pulls from hardware terminal, then forwards to central backend.
+   */
+  async syncDevice(id) {
+    const fetchResult = await this.fetchPunchesFromDevice(id);
+    let forwardResult = null;
+    let error = null;
+
+    if (fetchResult.punches.length > 0 && config.mainBackendUrl) {
+      try {
+        forwardResult = await this.forwardPunchesToBackend(fetchResult.punches);
+      } catch (fErr) {
+        error = fErr.message;
+      }
+    }
+
+    return {
+      success: !error,
+      deviceId: id,
+      deviceName: fetchResult.deviceName,
+      totalLogsFetched: fetchResult.totalPunches,
+      forwardResult,
+      error,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Syncs all enabled devices in sequence.
+   */
+  async syncAllDevices() {
+    const enabledDevices = Array.from(this.devices.values()).filter((d) => d.enabled !== false);
+    const results = [];
+    const allPunches = [];
+
+    for (const dev of enabledDevices) {
+      try {
+        const fetchRes = await this.fetchPunchesFromDevice(dev.id);
+        allPunches.push(...fetchRes.punches);
+        results.push({
+          deviceId: dev.id,
+          deviceName: dev.name,
+          status: 'success',
+          count: fetchRes.totalPunches,
+        });
+      } catch (err) {
+        results.push({
+          deviceId: dev.id,
+          deviceName: dev.name,
+          status: 'failed',
+          error: err.message,
+        });
+      }
+    }
+
+    let forwardResult = null;
+    if (allPunches.length > 0 && config.mainBackendUrl) {
+      try {
+        forwardResult = await this.forwardPunchesToBackend(allPunches);
+      } catch (err) {
+        console.error('[DeviceManager] Error pushing combined punches to backend:', err.message);
+      }
+    }
+
+    return {
+      success: true,
+      devicesSynced: results,
+      totalPunchesFetched: allPunches.length,
+      backendForward: forwardResult,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Fetches enrolled users directly from a biometric device.
+   */
+  async fetchUsersFromDevice(id) {
+    const device = this.getDevice(id);
+    if (!device) throw new Error(`Device with ID "${id}" not found`);
+
+    const driver = new EsslDevice({
+      name: device.name,
+      ip: device.ip,
+      port: device.port,
+      commKey: device.commKey,
+      timeoutMs: 12000,
+    });
+
+    const rawUsers = await driver.fetchUsers();
+    const users = rawUsers.map((u) => ({
+      ...u,
+      device_id: device.name || `DEV-${device.id}`,
+    }));
+
+    return {
+      deviceId: device.id,
+      deviceName: device.name,
+      totalUsers: users.length,
+      users,
+    };
+  }
+
+  /**
+   * Forwards enrolled users list to the central Neha Hospital backend.
+   */
+  async forwardUsersToBackend(users) {
+    if (!users || users.length === 0) return { upserted: 0, message: 'No users to forward' };
+
+    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/enrolled-users`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (config.mainBackendApiKey) {
+      headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+      headers['x-api-key'] = config.mainBackendApiKey;
+    }
+
+    console.log(`[DeviceManager] Forwarding ${users.length} enrolled user(s) to ${targetUrl}...`);
+    try {
+      const resp = await axios.post(targetUrl, { users }, { headers, timeout: 15000 });
+      return resp.data;
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
+      console.error(`[DeviceManager] Failed to forward enrolled users: ${errMsg}`);
+      throw new Error(`Failed to forward enrolled users to main backend (${targetUrl}): ${errMsg}`);
+    }
+  }
+
+  /**
+   * Pulls enrolled users from hardware terminal, then saves to central backend.
+   */
+  async syncDeviceUsers(id) {
+    const fetchResult = await this.fetchUsersFromDevice(id);
+    let forwardResult = null;
+    let error = null;
+
+    if (fetchResult.users.length > 0 && config.mainBackendUrl) {
+      try {
+        forwardResult = await this.forwardUsersToBackend(fetchResult.users);
+      } catch (fErr) {
+        error = fErr.message;
+      }
+    }
+
+    return {
+      success: !error,
+      deviceId: id,
+      deviceName: fetchResult.deviceName,
+      totalUsersFetched: fetchResult.totalUsers,
+      forwardResult,
+      error,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Syncs enrolled users across all enabled biometric devices to the central hospital backend.
+   */
+  async syncAllEnrolledUsers() {
+    const enabledDevices = Array.from(this.devices.values()).filter((d) => d.enabled !== false);
+    const results = [];
+    const allUsers = [];
+
+    for (const dev of enabledDevices) {
+      try {
+        const fetchRes = await this.fetchUsersFromDevice(dev.id);
+        allUsers.push(...fetchRes.users);
+        results.push({
+          deviceId: dev.id,
+          deviceName: dev.name,
+          status: 'success',
+          count: fetchRes.totalUsers,
+        });
+      } catch (err) {
+        results.push({
+          deviceId: dev.id,
+          deviceName: dev.name,
+          status: 'failed',
+          error: err.message,
+        });
+      }
+    }
+
+    let forwardResult = null;
+    if (allUsers.length > 0 && config.mainBackendUrl) {
+      try {
+        forwardResult = await this.forwardUsersToBackend(allUsers);
+      } catch (err) {
+        console.error('[DeviceManager] Error pushing combined enrolled users to backend:', err.message);
+      }
+    }
+
+    return {
+      success: true,
+      devicesSynced: results,
+      totalUsersFetched: allUsers.length,
+      backendForward: forwardResult,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Directly register single staff member from Windows machine to backend.
+   */
+  async registerStaffDirectly(staffData) {
+    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/enrolled-users/register`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (config.mainBackendApiKey) {
+      headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+      headers['x-api-key'] = config.mainBackendApiKey;
+    }
+
+    console.log(`[DeviceManager] Registering staff #${staffData.enroll_code} directly to ${targetUrl}...`);
+    try {
+      const resp = await axios.post(targetUrl, staffData, { headers, timeout: 15000 });
+      return resp.data;
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message;
+      console.error(`[DeviceManager] Failed to register staff on backend: ${errMsg}`);
+      throw new Error(`Failed to register staff on main backend (${targetUrl}): ${errMsg}`);
+    }
+  }
+}
+
+module.exports = new DeviceManager();

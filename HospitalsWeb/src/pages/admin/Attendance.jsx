@@ -16,6 +16,9 @@ import {
   XIcon,
   SearchIcon,
   BookOpenIcon,
+  UsersIcon,
+  UserIcon,
+  SyncIcon,
 } from '../../components/Icons';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -938,6 +941,84 @@ function BiometricDevices({ onError, onSuccess }) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Enrolled Biometric Users state
+  const [enrolledUsers, setEnrolledUsers] = useState([]);
+  const [enrolledLoading, setEnrolledLoading] = useState(false);
+  const [fetchingUsersId, setFetchingUsersId] = useState(null);
+  const [isAutoLinking, setIsAutoLinking] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [linkFilter, setLinkFilter] = useState('all'); // 'all' | 'linked' | 'unlinked'
+  const [linkingUser, setLinkingUser] = useState(null);
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [isSavingLink, setIsSavingLink] = useState(false);
+  const [employees, setEmployees] = useState([]);
+
+  // Direct Biometric Staff Registration Modal state
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
+  const [isFetchingNextCode, setIsFetchingNextCode] = useState(false);
+  const [enrollForm, setEnrollForm] = useState({
+    enroll_code: '',
+    name: '',
+    device_id: 'Reception eSSL',
+    card_number: '',
+    has_fingerprint: true,
+    has_face: true,
+  });
+
+  const handleOpenEnrollModal = async () => {
+    setEnrollForm({
+      enroll_code: '',
+      name: '',
+      device_id: devices[0]?.name || 'Reception eSSL',
+      card_number: '',
+      has_fingerprint: true,
+      has_face: true,
+    });
+    setShowEnrollModal(true);
+    try {
+      setIsFetchingNextCode(true);
+      const res = await apiFetch('/attendance/enrolled-users/next-code');
+      const nextId = res?.nextCode || res?.data?.nextCode;
+      if (nextId) {
+        setEnrollForm((prev) => ({ ...prev, enroll_code: String(nextId) }));
+      }
+    } catch (_) {
+    } finally {
+      setIsFetchingNextCode(false);
+    }
+  };
+
+  const handleSaveEnrollment = async (e) => {
+    e.preventDefault();
+    if (!enrollForm.enroll_code.trim()) {
+      onError(new Error('Employee / Biometric Code is required.'));
+      return;
+    }
+    if (!enrollForm.name.trim()) {
+      onError(new Error('Staff Name is required.'));
+      return;
+    }
+    try {
+      setIsSubmittingEnroll(true);
+      await apiFetch('/attendance/enrolled-users/register', {
+        method: 'POST',
+        body: {
+          ...enrollForm,
+          has_fingerprint: enrollForm.has_fingerprint ? 1 : 0,
+          has_face: enrollForm.has_face ? 1 : 0,
+        },
+      });
+      onSuccess(`Successfully registered biometric profile #${enrollForm.enroll_code} (${enrollForm.name}) in database!`);
+      setShowEnrollModal(false);
+      loadEnrolledUsers();
+    } catch (err) {
+      onError(err, 'Failed to save biometric registration.');
+    } finally {
+      setIsSubmittingEnroll(false);
+    }
+  };
+
   const loadDevices = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -951,9 +1032,33 @@ function BiometricDevices({ onError, onSuccess }) {
     }
   }, [onError]);
 
+  const loadEnrolledUsers = useCallback(async () => {
+    try {
+      setEnrolledLoading(true);
+      const res = await apiFetch('/attendance/enrolled-users?limit=500');
+      setEnrolledUsers(res?.users || []);
+    } catch (err) {
+      console.warn('Failed to load biometric enrolled users:', err);
+    } finally {
+      setEnrolledLoading(false);
+    }
+  }, []);
+
+  const loadEmployees = useCallback(async () => {
+    try {
+      const res = await apiFetch('/hr/employees?limit=500&status=active');
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      setEmployees(list);
+    } catch (err) {
+      console.warn('Could not load employees for mapping:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadDevices();
-  }, [loadDevices]);
+    loadEnrolledUsers();
+    loadEmployees();
+  }, [loadDevices, loadEnrolledUsers, loadEmployees]);
 
   const handleOpenAdd = () => {
     setEditingDevice(null);
@@ -1066,6 +1171,63 @@ function BiometricDevices({ onError, onSuccess }) {
       onError(err, 'Sync failed. Check device network connection and power.');
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const handleFetchUsers = async (id) => {
+    try {
+      setFetchingUsersId(id);
+      const res = await apiFetch(`/attendance/devices/${id}/fetch-users`, { method: 'POST' });
+      onSuccess(
+        `Staff enrollment download complete! Downloaded ${res.usersFetched} registered staff from device (${res.newUsers} newly discovered, ${res.linkedCount} mapped to hospital employees).`
+      );
+      loadEnrolledUsers();
+      loadDevices();
+    } catch (err) {
+      onError(err, 'Failed to pull registered staff from biometric device. Check device connection.');
+    } finally {
+      setFetchingUsersId(null);
+    }
+  };
+
+  const handleAutoLink = async () => {
+    try {
+      setIsAutoLinking(true);
+      const res = await apiFetch('/attendance/enrolled-users/auto-link', { method: 'POST' });
+      onSuccess(`Auto-link complete! ${res.linkedCount} biometric profiles linked to employee records.`);
+      loadEnrolledUsers();
+    } catch (err) {
+      onError(err, 'Failed to execute auto-link.');
+    } finally {
+      setIsAutoLinking(false);
+    }
+  };
+
+  const handleOpenManualLink = (user) => {
+    setLinkingUser(user);
+    setSelectedEmpId(user.linked_employee_id ? String(user.linked_employee_id) : '');
+  };
+
+  const handleSaveManualLink = async (overrideEmpId) => {
+    if (!linkingUser) return;
+    try {
+      setIsSavingLink(true);
+      const targetEmpId = overrideEmpId !== undefined ? overrideEmpId : (selectedEmpId ? Number(selectedEmpId) : null);
+      await apiFetch(`/attendance/enrolled-users/${linkingUser.id}/link`, {
+        method: 'POST',
+        body: { employee_id: targetEmpId },
+      });
+      onSuccess(
+        targetEmpId
+          ? `Biometric PIN #${linkingUser.enroll_code} successfully mapped to employee!`
+          : `Biometric PIN #${linkingUser.enroll_code} unlinked.`
+      );
+      setLinkingUser(null);
+      loadEnrolledUsers();
+    } catch (err) {
+      onError(err, 'Failed to update employee link.');
+    } finally {
+      setIsSavingLink(false);
     }
   };
 
@@ -1259,11 +1421,12 @@ function BiometricDevices({ onError, onSuccess }) {
                 )}
 
                 {/* Card Actions */}
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button
                     onClick={() => handleSyncNow(dev.id)}
-                    disabled={isSyncingThis || isTestingThis}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    disabled={isSyncingThis || isTestingThis || fetchingUsersId === dev.id}
+                    className="flex-1 min-w-[130px] bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Download attendance punches from device"
                   >
                     {isSyncingThis ? (
                       <>
@@ -1271,24 +1434,48 @@ function BiometricDevices({ onError, onSuccess }) {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                         </svg>
-                        Downloading Punches…
+                        <span>Downloading…</span>
                       </>
                     ) : (
                       <>
                         <BoltIcon className="w-4 h-4 text-white" />
-                        <span>Sync Punches Now</span>
+                        <span>Sync Punches</span>
                       </>
                     )}
                   </button>
+
+                  <button
+                    onClick={() => handleFetchUsers(dev.id)}
+                    disabled={isSyncingThis || isTestingThis || fetchingUsersId === dev.id}
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    title="Download all registered staff/PINs from this machine"
+                  >
+                    {fetchingUsersId === dev.id ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5 text-blue-700" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span>Reading Users…</span>
+                      </>
+                    ) : (
+                      <>
+                        <UsersIcon className="w-3.5 h-3.5 text-blue-700" />
+                        <span>Pull Staff</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={() => handleTestConnection(dev.id)}
-                    disabled={isTestingThis || isSyncingThis}
+                    disabled={isTestingThis || isSyncingThis || fetchingUsersId === dev.id}
                     className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    title="Ping device over LAN"
                   >
                     {isTestingThis ? 'Testing…' : (
                       <>
                         <SearchIcon className="w-3.5 h-3.5" />
-                        <span>Test Connection</span>
+                        <span>Test</span>
                       </>
                     )}
                   </button>
@@ -1299,11 +1486,527 @@ function BiometricDevices({ onError, onSuccess }) {
         </div>
       )}
 
+      {/* ── ENROLLED BIOMETRIC STAFF DIRECTORY & EMPLOYEE MAPPING ── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Header & Stats Bar */}
+        <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              <h3 className="font-bold text-gray-900 text-base">Enrolled Biometric Staff & Hardware Mapping</h3>
+            </div>
+            <p className="text-xs text-gray-500">
+              Fingerprint & face PINs registered on local eSSL hardware mapped to Neha Hospital employee payroll profiles.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleOpenEnrollModal}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Register a newly enrolled staff member into database"
+            >
+              <PlusIcon className="w-3.5 h-3.5 text-white" />
+              <span>Register Biometric Staff</span>
+            </button>
+
+            <button
+              onClick={handleAutoLink}
+              disabled={isAutoLinking || enrolledLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Automatically match unlinked hardware PINs to staff by Employee Code or exact Name"
+            >
+              <SyncIcon className={`w-3.5 h-3.5 ${isAutoLinking ? 'animate-spin' : ''}`} />
+              <span>{isAutoLinking ? 'Matching…' : 'Auto-Match by Code/Name'}</span>
+            </button>
+
+            <button
+              onClick={loadEnrolledUsers}
+              disabled={enrolledLoading}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Refresh enrolled staff list"
+            >
+              <svg className={`w-3.5 h-3.5 text-gray-600 ${enrolledLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter and Tab Strip */}
+        <div className="p-4 bg-gray-50/70 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          {/* Tabs */}
+          <div className="flex items-center gap-1.5 bg-gray-200/80 p-1 rounded-xl w-full sm:w-auto">
+            <button
+              onClick={() => setLinkFilter('all')}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                linkFilter === 'all' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              All Profiles ({enrolledUsers.length})
+            </button>
+            <button
+              onClick={() => setLinkFilter('linked')}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                linkFilter === 'linked' ? 'bg-white text-emerald-800 shadow-xs' : 'text-gray-600 hover:text-emerald-800'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Linked ({enrolledUsers.filter((u) => u.linked_employee_id).length})</span>
+            </button>
+            <button
+              onClick={() => setLinkFilter('unlinked')}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                linkFilter === 'unlinked' ? 'bg-white text-amber-800 shadow-xs' : 'text-gray-600 hover:text-amber-800'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              <span>Unlinked ({enrolledUsers.filter((u) => !u.linked_employee_id).length})</span>
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative w-full sm:w-72">
+            <SearchIcon className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search PIN, name, emp code, dept…"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            {userSearch && (
+              <button
+                onClick={() => setUserSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Directory Table */}
+        {enrolledLoading && enrolledUsers.length === 0 ? (
+          <div className="py-12 text-center text-xs text-gray-500">
+            <svg className="animate-spin h-6 w-6 text-blue-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            Loading enrolled staff records from database…
+          </div>
+        ) : enrolledUsers.length === 0 ? (
+          <div className="py-12 px-6 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto text-blue-600">
+              <UsersIcon className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-bold text-gray-900 text-sm">No Enrolled Biometric Staff Found Yet</h4>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">
+                Click <strong>"Pull Staff"</strong> on any configured eSSL device above or <strong>"Register Biometric Staff"</strong> to add staff directly into the database.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50/80 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                  <th className="py-3 px-4">PIN / User ID</th>
+                  <th className="py-3 px-4">Device / Location</th>
+                  <th className="py-3 px-4">Device Registered Name</th>
+                  <th className="py-3 px-4">Hospital Employee Mapping</th>
+                  <th className="py-3 px-4">Privilege</th>
+                  <th className="py-3 px-4">Last Synced</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {enrolledUsers
+                  .filter((u) => {
+                    if (linkFilter === 'linked' && !u.linked_employee_id) return false;
+                    if (linkFilter === 'unlinked' && u.linked_employee_id) return false;
+                    if (userSearch.trim()) {
+                      const q = userSearch.toLowerCase();
+                      const matchPin = String(u.enroll_code || '').toLowerCase().includes(q);
+                      const matchDev = String(u.device_name || u.device_id || '').toLowerCase().includes(q);
+                      const matchName = String(u.name || '').toLowerCase().includes(q);
+                      const matchEmpCode = String(u.emp_code || u.employee_code || '').toLowerCase().includes(q);
+                      const matchEmpName = String(u.emp_name || u.employee_name || '').toLowerCase().includes(q);
+                      const matchDept = String(u.department_name || '').toLowerCase().includes(q);
+                      return matchPin || matchDev || matchName || matchEmpCode || matchEmpName || matchDept;
+                    }
+                    return true;
+                  })
+                  .map((u) => {
+                    const isLinked = Boolean(u.linked_employee_id);
+                    return (
+                      <tr key={u.id} className="hover:bg-blue-50/30 transition-colors">
+                        {/* PIN */}
+                        <td className="py-3 px-4 font-mono font-bold text-gray-900">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-[11px] border border-gray-200">
+                            #{u.enroll_code}
+                          </span>
+                        </td>
+
+                        {/* Device */}
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-gray-800">{u.device_name || u.device_id || 'eSSL Terminal'}</div>
+                          <div className="text-[10px] text-gray-400">{u.device_location || u.ip_address || 'LAN Terminal'}</div>
+                        </td>
+
+                        {/* Name on Device & Biometric Types */}
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-gray-900">{u.name || '—'}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`inline-flex items-center text-[10px] px-1.5 py-0.2 rounded font-medium ${u.has_fingerprint ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-400'}`}>
+                              👆 {u.has_fingerprint ? 'Finger' : 'No Finger'}
+                            </span>
+                            <span className={`inline-flex items-center text-[10px] px-1.5 py-0.2 rounded font-medium ${u.has_face ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-400'}`}>
+                              👤 {u.has_face ? 'Face' : 'No Face'}
+                            </span>
+                          </div>
+                          {(u.card_number || u.card_no) && (
+                            <span className="block text-[10px] text-gray-500 font-mono mt-0.5">Card: {u.card_number || u.card_no}</span>
+                          )}
+                        </td>
+
+                        {/* Linked Employee */}
+                        <td className="py-3 px-4">
+                          {isLinked ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px] shrink-0">
+                                {u.emp_name ? u.emp_name.charAt(0).toUpperCase() : 'E'}
+                              </div>
+                              <div>
+                                <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+                                  <span>{u.emp_name}</span>
+                                  <span className="font-mono text-[10px] bg-emerald-50 text-emerald-800 px-1 py-0.2 rounded border border-emerald-200">
+                                    {u.emp_code}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-gray-500">
+                                  {u.department_name || 'Staff'} {u.role_name ? `· ${u.role_name}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span>Not Linked · Punches Uncredited</span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Privilege */}
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-block text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              u.role === 'admin'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {u.role || 'User'}
+                          </span>
+                        </td>
+
+                        {/* Last Synced */}
+                        <td className="py-3 px-4 text-[11px] text-gray-500 whitespace-nowrap">
+                          {u.last_synced_at
+                            ? new Date(u.last_synced_at).toLocaleString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '—'}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenManualLink(u)}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer"
+                            >
+                              {isLinked ? 'Change Link' : 'Map Employee'}
+                            </button>
+                            {isLinked && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Unlink Biometric PIN #${u.enroll_code} from ${u.emp_name}?`)) {
+                                    setLinkingUser(u);
+                                    handleSaveManualLink(null);
+                                  }
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-600 transition-colors cursor-pointer rounded"
+                                title="Unlink"
+                              >
+                                <XIcon className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Manual Link Modal */}
+      {linkingUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UsersIcon className="w-4 h-4 text-blue-400" />
+                <h3 className="font-bold text-sm">Map Hardware PIN to Hospital Employee</h3>
+              </div>
+              <button
+                onClick={() => setLinkingUser(null)}
+                className="text-gray-400 hover:text-white transition-colors cursor-pointer text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {/* Hardware Profile Box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Biometric Hardware Profile</span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-500 block text-[10px]">Enroll Code / PIN:</span>
+                    <span className="font-mono font-bold text-blue-700 text-sm">#{linkingUser.enroll_code}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[10px]">Machine Name:</span>
+                    <span className="font-semibold text-gray-800">{linkingUser.device_name}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-gray-500 block text-[10px]">Registered Name on Hardware:</span>
+                    <span className="font-bold text-gray-900">{linkingUser.name || '(No name set in device)'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Select Employee */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Assign to Hospital Staff Profile:
+                </label>
+                <select
+                  value={selectedEmpId}
+                  onChange={(e) => setSelectedEmpId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Select Hospital Employee --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      [{emp.employee_code}] {emp.full_name} — {emp.department_name || 'Staff'} ({emp.role_name || 'Employee'})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-500">
+                  When biometric punches arrive with PIN #{linkingUser.enroll_code}, they will automatically be recorded under this employee.
+                </p>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 flex items-center justify-between border-t border-gray-100">
+                {linkingUser.linked_employee_id ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveManualLink(null)}
+                    disabled={isSavingLink}
+                    className="text-red-600 hover:text-red-700 text-xs font-semibold cursor-pointer"
+                  >
+                    Unlink Profile
+                  </button>
+                ) : <div></div>}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLinkingUser(null)}
+                    className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveManualLink()}
+                    disabled={isSavingLink || !selectedEmpId}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingLink ? 'Saving…' : 'Confirm Mapping'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct Biometric Staff Registration Modal */}
+      {showEnrollModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <h3 className="font-bold text-sm">Register Biometric Staff in Database</h3>
+              </div>
+              <button
+                onClick={() => setShowEnrollModal(false)}
+                className="text-gray-400 hover:text-white transition-colors cursor-pointer text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEnrollment} className="p-5 space-y-4 text-xs">
+              <p className="text-gray-500 text-xs">
+                Store newly enrolled fingerprint and face registrations into the hospital database. This employee ID can then be selected when creating staff in the HR portal.
+              </p>
+
+              {/* Employee / Biometric Code */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block">
+                    Employee ID / Biometric Code <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setIsFetchingNextCode(true);
+                        const res = await apiFetch('/attendance/enrolled-users/next-code');
+                        const nextId = res?.nextCode || res?.data?.nextCode;
+                        if (nextId) setEnrollForm((prev) => ({ ...prev, enroll_code: String(nextId) }));
+                      } finally {
+                        setIsFetchingNextCode(false);
+                      }
+                    }}
+                    disabled={isFetchingNextCode}
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    {isFetchingNextCode ? 'Generating…' : '⚡ Auto-Generate Next Code'}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 1043"
+                  value={enrollForm.enroll_code}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, enroll_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Staff Full Name */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block">
+                  Staff Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rajesh Kumar"
+                  value={enrollForm.name}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Terminal / Device Station */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block">
+                  Enrollment Terminal / Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Reception eSSL / Windows Workstation"
+                  value={enrollForm.device_id}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, device_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* RFID Card */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block">
+                  RFID Card Number (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 00129845"
+                  value={enrollForm.card_number}
+                  onChange={(e) => setEnrollForm({ ...enrollForm, card_number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Biometric Verification Checkboxes */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Enrolled Biometric Credentials
+                </span>
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={enrollForm.has_fingerprint}
+                      onChange={(e) => setEnrollForm({ ...enrollForm, has_fingerprint: e.target.checked })}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>👆 Fingerprint Registered</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={enrollForm.has_face}
+                      onChange={(e) => setEnrollForm({ ...enrollForm, has_face: e.target.checked })}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>👤 Face Recognition Registered</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEnrollModal(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEnroll}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingEnroll ? 'Saving to Database…' : 'Save Registration to Database'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Help & Setup Guide Card */}
       <div className="bg-blue-50/60 rounded-xl border border-blue-100 p-5 space-y-3 text-xs text-blue-900">
         <h3 className="font-bold text-blue-950 flex items-center gap-2 text-sm">
           <BookOpenIcon className="w-4 h-4 text-blue-900" />
-          <span>How to Connect your Local eSSL Device</span>
+          <span>How to Connect your Local eSSL Device & Sync Staff</span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-[11px]">
           <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
@@ -1313,15 +2016,15 @@ function BiometricDevices({ onError, onSuccess }) {
             </p>
           </div>
           <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
-            <span className="font-bold text-blue-800 block">2. LAN / Wi-Fi Network</span>
+            <span className="font-bold text-blue-800 block">2. Pull Enrolled Staff</span>
             <p className="text-gray-600">
-              Ensure this hospital server computer and the eSSL biometric machine are connected to the same local router / subnet.
+              Click <strong>"Pull Staff"</strong> to download all fingerprints/faces registered on the machine. Use <strong>"Auto-Match"</strong> or manually link them to Hospital Employees.
             </p>
           </div>
           <div className="bg-white/80 p-3 rounded-lg border border-blue-100/80 space-y-1">
-            <span className="font-bold text-blue-800 block">3. Employee Code Matching</span>
+            <span className="font-bold text-blue-800 block">3. Automated Sync & Payroll</span>
             <p className="text-gray-600">
-              Staff registered on the biometric device (User ID / Enroll ID) must match their <strong>Emp Code</strong> in Neha Hospital staff records.
+              Once linked, all punch logs automatically create attendance records, calculate night shifts, overtime, and buffer late deductions in monthly payroll.
             </p>
           </div>
         </div>
