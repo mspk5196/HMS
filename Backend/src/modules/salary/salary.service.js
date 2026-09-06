@@ -332,7 +332,9 @@ const getPayslip = async (runId, employeeId) => {
 
   const [rows] = await db.execute(
     `SELECT pi.*, e.full_name, e.employee_code, e.uan_number, e.esi_number,
-            e.bank_account_no, e.bank_name,
+            e.bank_account_no, e.bank_name, e.bank_ifsc,
+            COALESCE(pi.payment_mode, e.payment_mode, 'account') AS payment_mode,
+            e.date_of_joining AS joining_date, e.shift_category,
             d.name AS department_name, sr.name AS role_name
      FROM payroll_items pi
      JOIN employees e ON e.id = pi.employee_id

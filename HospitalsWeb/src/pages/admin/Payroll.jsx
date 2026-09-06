@@ -641,209 +641,510 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   PAYSLIP VIEW
+   PAYSLIP VIEW — EXECUTIVE PRINTABLE HOSPITAL GRADE PAYSLIP
 ═══════════════════════════════════════════════════════════════════════ */
 
-function PayslipRow({ label, value, strong }) {
-  return (
-    <div className={`flex items-center justify-between py-1.5 ${strong ? 'font-bold text-gray-900' : 'text-gray-600'}`}>
-      <span className="text-xs">{label}</span>
-      <span className="text-xs">{value}</span>
-    </div>
-  );
-}
+const numberToWordsIndian = (num) => {
+  const n = Math.round(Number(num) || 0);
+  if (n === 0) return 'Rupees Zero Only';
+  if (n < 0) return 'Negative ' + numberToWordsIndian(Math.abs(n));
+
+  const a = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const convertLessThanOneThousand = (val) => {
+    let str = '';
+    if (val >= 100) {
+      str += a[Math.floor(val / 100)] + ' Hundred ';
+      val %= 100;
+    }
+    if (val >= 20) {
+      str += b[Math.floor(val / 10)] + ' ';
+      val %= 10;
+    }
+    if (val > 0) {
+      str += a[val] + ' ';
+    }
+    return str.trim();
+  };
+
+  const crore = Math.floor(n / 10000000);
+  const lakh = Math.floor((n % 10000000) / 100000);
+  const thousand = Math.floor((n % 100000) / 1000);
+  const remainder = n % 1000;
+
+  let result = '';
+  if (crore > 0) result += convertLessThanOneThousand(crore) + ' Crore ';
+  if (lakh > 0) result += convertLessThanOneThousand(lakh) + ' Lakh ';
+  if (thousand > 0) result += convertLessThanOneThousand(thousand) + ' Thousand ';
+  if (remainder > 0) result += convertLessThanOneThousand(remainder);
+
+  return 'Rupees ' + result.trim() + ' Only';
+};
 
 function PayslipView({ payslip, onBack }) {
   const { run, item, day_rate } = payslip;
 
+  const totalDaysInMonth = new Date(run.period_year, run.period_month, 0).getDate();
+  const periodMonthName = MONTH_NAMES[run.period_month - 1];
+  const periodStart = `01 ${periodMonthName.slice(0, 3)} ${run.period_year}`;
+  const periodEnd = `${totalDaysInMonth} ${periodMonthName.slice(0, 3)} ${run.period_year}`;
+
+  const basicDa = Number(item.earned_basic) || Math.round(Number(item.base_salary_component || 0) * 0.7);
+  const hra = Number(item.earned_hra) || (Number(item.base_salary_component || 0) - basicDa);
+  const nightAllowance = Number(item.night_shift_component) || 0;
+  const overtimeAmount = Number(item.overtime_amount) || 0;
+
+  const lopAmount = Number(item.lop_amount) || 0;
+  const bufferLate = Number(item.buffer_late_deduction) || 0;
+  const finesAmount = Number(item.fines_amount) || 0;
+  const pfEmployee = Number(item.pf_employee_amount) || 0;
+  const esiEmployee = Number(item.esi_employee_amount) || 0;
+
+  const totalDeductions = lopAmount + bufferLate + finesAmount + pfEmployee + esiEmployee;
+  const grossPay = Number(item.gross_pay) || (basicDa + hra + nightAllowance + overtimeAmount);
+  const netPay = Number(item.net_pay) || (grossPay - totalDeductions);
+
+  const pfEmployer = Number(item.pf_employer_amount) || 0;
+  const pfEps = Number(item.pf_employer_eps_amount) || Math.round(Number(item.pf_wage || 0) * 0.0833);
+  const pfEpf = Number(item.pf_employer_epf_amount) || (pfEmployer - pfEps);
+  const esiEmployer = Number(item.esi_employer_amount) || 0;
+  const totalCtc = grossPay + pfEmployer + esiEmployer;
+
+  const payableDays = Math.max(0, totalDaysInMonth - (Number(item.days_lop) || 0));
+
+  const formatJoinDate = (d) => {
+    if (!d) return '—';
+    try {
+      return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return String(d).slice(0, 10);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 print:hidden">
+    <div className="space-y-5 pb-12">
+      {/* Print Specific Styles */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          body {
+            background: #ffffff !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #printable-payslip, #printable-payslip * {
+            visibility: visible;
+          }
+          #printable-payslip {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            box-shadow: none !important;
+            border: none !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* Screen Toolbar (Hidden on Print) */}
+      <div className="flex flex-wrap items-center justify-between gap-4 print:hidden bg-white p-4 rounded-xl border border-gray-200/80 shadow-xs">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 transition-colors cursor-pointer text-gray-700 shadow-xs">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          <button
+            type="button"
+            onClick={onBack}
+            className="p-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer text-gray-700 shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
+            title="Return to payroll run details"
+          >
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
+            <span>Back to Payroll</span>
           </button>
           <div>
-            <h2 className="text-base font-bold text-gray-900">
-              Salary Payslip — {item.full_name} ({item.employee_code})
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <span>Salary Payslip:</span>
+              <span className="text-[#1e40af]">{item.full_name}</span>
+              <span className="font-mono text-xs text-gray-500 font-normal">({item.employee_code})</span>
             </h2>
-            <p className="text-xs text-gray-500">
-              Period: {MONTH_NAMES[run.period_month - 1]} {run.period_year}
+            <p className="text-xs text-gray-500 font-medium">
+              Period: {periodMonthName} {run.period_year} · Net Pay: <strong className="text-emerald-700 font-bold">{money(netPay)}</strong>
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => window.print()}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <PrintIcon className="w-4 h-4 text-white" />
-          <span>Print Official Payslip</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <PrintIcon className="w-4 h-4 text-white" />
+            <span>Print Official Payslip (A4)</span>
+          </button>
+        </div>
       </div>
 
-      {/* Printable Payslip Card */}
-      <div className="bg-white rounded-2xl border border-gray-300 shadow-md p-8 max-w-2xl mx-auto print:border-none print:shadow-none print:p-2 text-gray-800">
+      {/* Printable Official Payslip Sheet */}
+      <div id="printable-payslip" className="printable-payslip bg-white rounded-xl border border-gray-200 shadow-sm p-8 sm:p-10 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:m-0 text-gray-900 font-sans">
         
-        {/* Hospital Header */}
-        <div className="text-center pb-4 border-b-2 border-blue-900 space-y-1">
-          <h1 className="text-xl font-extrabold text-blue-950 uppercase tracking-wide">NEHA HOSPITAL</h1>
-          <p className="text-[11px] text-gray-600 leading-snug">
-            47, South Park Street (Kambar Veethi, Ganga Nagar, near Dr. Ravindran Hospital and opposite Palaniammal Girls Higher Secondary School),<br />
-            Kutchery Medu, Gobichettipalayam, Tamil Nadu - 638452 | 24 Hours Emergency Service
-          </p>
-          <div className="inline-block bg-blue-50 text-blue-900 font-extrabold text-xs px-4 py-1 rounded-full uppercase tracking-wider mt-1 border border-blue-200">
-            Salary Payslip for {MONTH_NAMES[run.period_month - 1]} {run.period_year}
+        {/* Hospital Header / Letterhead */}
+        <div className="pb-5 border-b-2 border-[#1e3a8a] flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
+          <div className="flex items-center gap-3.5 text-center sm:text-left">
+            {/* Hospital Crest Emblem */}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1e40af] to-[#0f172a] text-white flex items-center justify-center font-extrabold text-xl shadow-md border-2 border-blue-200 shrink-0 print:border-[#1e40af]">
+              <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                <circle cx="12" cy="12" r="9" strokeWidth="1.5" strokeDasharray="2 2" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-[#1e3a8a] tracking-tight uppercase leading-none">
+                NEHA HOSPITAL
+              </h1>
+              {/* <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">
+                Advanced Multispeciality Healthcare &amp; Research Center
+              </p> */}
+              <p className="text-[10px] text-gray-600 leading-tight mt-1 max-w-lg">
+                47, South Park Street, Kutchery Medu, Gobichettipalayam, Erode District, Tamil Nadu – 638452
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5 font-medium">
+                Reg No: TN/ERD/HOSP-2018/492 · Phone: +91 4285 222333 · Emergency 24x7
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right flex flex-col items-center sm:items-end justify-center">
+            <span className="inline-block bg-[#1e40af] text-white font-extrabold text-[11px] px-3.5 py-1 rounded-md uppercase tracking-wider print:bg-[#1e40af] print:text-white">
+              SALARY PAYSLIP
+            </span>
+            <span className="text-xs font-bold text-gray-800 mt-1">
+              {periodMonthName} {run.period_year}
+            </span>
+            <span className="text-[10px] text-gray-400 font-mono">
+              Pay Period: {periodStart} – {periodEnd}
+            </span>
           </div>
         </div>
 
-        {/* Employee Info Box */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2.5 gap-x-4 py-4 border-b border-gray-200 text-xs">
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Employee Name</span>
-            <div className="font-extrabold text-gray-900 text-sm">{item.full_name}</div>
+        {/* Employee Details Master Box */}
+        <div className="my-5 border border-gray-200 rounded-lg overflow-hidden bg-gray-50/40 text-xs">
+          <div className="bg-gray-100/80 px-3.5 py-1.5 border-b border-gray-200 font-extrabold text-[10px] text-gray-700 uppercase tracking-wider flex items-center justify-between">
+            <span>Employee Identification &amp; Statutory Particulars</span>
+            <span className="font-mono text-gray-500 font-semibold lowercase">status: {run.status}</span>
           </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Employee Code</span>
-            <div className="font-mono font-bold text-blue-800">{item.employee_code}</div>
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Department</span>
-            <div className="font-semibold text-gray-800">{item.department_name || 'General'}</div>
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Designation / Role</span>
-            <div className="font-semibold text-gray-800">{item.role_name || 'Staff'}</div>
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Daily Day Rate</span>
-            <div className="font-mono font-bold text-gray-900">{money(day_rate)}</div>
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase">Bank Account / UAN</span>
-            <div className="font-mono text-gray-700">{item.bank_account_no || item.uan_number || '—'}</div>
+
+          <div className="p-3.5 grid grid-cols-2 sm:grid-cols-4 gap-y-2.5 gap-x-4">
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Employee Name</span>
+              <span className="font-extrabold text-gray-900 text-[13px]">{item.full_name}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Employee ID</span>
+              <span className="font-mono font-bold text-[#1e40af] text-[13px]">{item.employee_code}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Department</span>
+              <span className="font-semibold text-gray-800">{item.department_name || 'General'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Designation / Role</span>
+              <span className="font-semibold text-gray-800">{item.role_name || 'Staff'}</span>
+            </div>
+
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Date of Joining</span>
+              <span className="font-medium text-gray-700">{formatJoinDate(item.joining_date)}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Shift Model</span>
+              <span className="font-semibold text-gray-700">
+                {item.shift_category === 'day_and_night'
+                  ? 'Day & Night Shift'
+                  : item.shift_category === 'night'
+                  ? 'Fixed Night Shift'
+                  : 'Fixed Day Shift'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Bank Account No</span>
+              <span className="font-mono font-bold text-gray-900">
+                {item.bank_account_no ? item.bank_account_no : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Bank Name &amp; IFSC</span>
+              <span className="font-medium text-gray-700">
+                {item.bank_name || 'Indian Bank'}{item.bank_ifsc ? ` (${item.bank_ifsc})` : ''}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">EPF / UAN Number</span>
+              <span className="font-mono font-bold text-gray-800">{item.uan_number || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">ESIC IP Number</span>
+              <span className="font-mono font-bold text-gray-800">{item.esi_number || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Disbursement Mode</span>
+              <span className="font-bold text-emerald-800 uppercase tracking-wide text-[11px]">
+                {item.payment_mode === 'cash' ? '💵 Cash Payment' : '🏦 Bank Transfer'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-gray-400 font-bold uppercase block">Daily Calculation Rate</span>
+              <span className="font-mono font-bold text-gray-900">{money(day_rate)} / day</span>
+            </div>
           </div>
         </div>
 
-        {/* Attendance Summary */}
-        <div className="py-3 border-b border-gray-200 bg-gray-50/60 px-3 rounded-xl my-3 text-xs">
-          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Monthly Attendance Record</div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div className="bg-white p-2 rounded-lg border border-gray-200">
-              <span className="text-[10px] text-gray-400 block">Days Present</span>
-              <span className="font-extrabold text-emerald-800 text-sm">{item.days_present}</span>
+        {/* Monthly Attendance Ribbon */}
+        <div className="my-4 border border-blue-200/80 rounded-lg overflow-hidden bg-blue-50/30 text-xs">
+          <div className="bg-blue-100/60 px-3.5 py-1 border-b border-blue-200 text-[10px] font-extrabold text-blue-900 uppercase tracking-wider flex items-center justify-between">
+            <span>Attendance &amp; Working Days Summary</span>
+            <span>Total Month Days: {totalDaysInMonth}</span>
+          </div>
+          <div className="p-2.5 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs">
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Days Present</span>
+              <span className="font-extrabold text-emerald-700 text-sm">{item.days_present}</span>
             </div>
-            <div className="bg-white p-2 rounded-lg border border-gray-200">
-              <span className="text-[10px] text-gray-400 block">Paid Leaves</span>
-              <span className="font-bold text-blue-800 text-sm">{item.days_paid_leave}</span>
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Paid Leave</span>
+              <span className="font-extrabold text-blue-700 text-sm">{item.days_paid_leave}</span>
             </div>
-            <div className="bg-white p-2 rounded-lg border border-gray-200">
-              <span className="text-[10px] text-gray-400 block">LOP Absences</span>
-              <span className={`font-bold text-sm ${Number(item.days_lop) > 0 ? 'text-orange-600' : 'text-gray-600'}`}>{item.days_lop}</span>
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Payable Days</span>
+              <span className="font-extrabold text-gray-900 text-sm">{payableDays}</span>
             </div>
-            <div className="bg-white p-2 rounded-lg border border-gray-200">
-              <span className="text-[10px] text-gray-400 block">Shifts Worked</span>
-              <span className="font-bold text-gray-800 text-sm">{item.shifts_worked}</span>
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">LOP Absences</span>
+              <span className={`font-extrabold text-sm ${lopAmount > 0 ? 'text-rose-600' : 'text-gray-500'}`}>
+                {item.days_lop}
+              </span>
+            </div>
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Shifts Worked</span>
+              <span className="font-extrabold text-indigo-700 text-sm">{item.shifts_worked}</span>
+            </div>
+            <div className="bg-white p-2 rounded-md border border-gray-200">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Overtime Days</span>
+              <span className="font-extrabold text-gray-800 text-sm">
+                {item.overtime_days || (overtimeAmount > 0 ? Math.round(overtimeAmount / (day_rate || 1)) : 0)}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Breakdown: Earnings & Deductions Columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 border-b border-gray-200 text-xs">
-          {/* Earnings */}
-          <div className="space-y-2 pr-2 sm:border-r border-gray-200">
-            <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Earnings (A)</div>
-            <PayslipRow label="Base Monthly Fixed Salary" value={money(item.base_salary_component)} />
-            <PayslipRow label="  • Basic + DA (70%)" value={money(item.earned_basic || Math.round(Number(item.base_salary_component || 0) * 0.7))} />
-            <PayslipRow label="  • HRA (30%)" value={money(item.earned_hra || (Number(item.base_salary_component || 0) - Math.round(Number(item.base_salary_component || 0) * 0.7)))} />
-            {Number(item.night_shift_component) > 0 && (
-              <PayslipRow label="Night Shift Allowance" value={money(item.night_shift_component)} />
-            )}
-            {Number(item.overtime_amount) > 0 && (
-              <PayslipRow label="Paid Extra Days Overtime" value={money(item.overtime_amount)} />
-            )}
-            <div className="pt-2 border-t border-gray-200">
-              <PayslipRow label="Gross Earnings" value={money(item.gross_pay)} strong />
+        {/* Dual Column Ledger: Earnings vs Deductions */}
+        <div className="my-5 border border-gray-300 rounded-lg overflow-hidden text-xs">
+          <div className="grid grid-cols-2 divide-x divide-gray-300 bg-gray-100 font-extrabold text-[11px] uppercase tracking-wider text-gray-800 border-b border-gray-300">
+            <div className="px-4 py-2 flex items-center justify-between">
+              <span>Earnings (Components)</span>
+              <span>Amount (₹)</span>
+            </div>
+            <div className="px-4 py-2 flex items-center justify-between">
+              <span>Deductions</span>
+              <span>Amount (₹)</span>
             </div>
           </div>
 
-          {/* Deductions */}
-          <div className="space-y-2 pl-0 sm:pl-2">
-            <div className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider">Deductions (B)</div>
-            {Number(item.lop_amount) > 0 && (
-              <PayslipRow label={`Loss of Pay (${item.days_lop} days)`} value={money(item.lop_amount)} />
-            )}
-            {Number(item.buffer_late_deduction) > 0 && (
-              <PayslipRow label="Late Attendance Buffer" value={money(item.buffer_late_deduction)} />
-            )}
-            {Number(item.fines_amount) > 0 && (
-              <PayslipRow label="Disciplinary Fines / Advance" value={money(item.fines_amount)} />
-            )}
-            <PayslipRow
-              label={`Employee PF (12%)${Number(item.pf_wage) > 0 ? ` [Wage: ₹${Number(item.pf_wage).toLocaleString('en-IN')}]` : ''}`}
-              value={money(item.pf_employee_amount)}
-            />
-            <PayslipRow
-              label={`Employee ESI (0.75%)${Number(item.esi_wage) > 0 ? ` [Wage: ₹${Number(item.esi_wage).toLocaleString('en-IN')}]` : ''}`}
-              value={money(item.esi_employee_amount)}
-            />
-            <div className="pt-2 border-t border-gray-200">
-              <PayslipRow
-                label="Total Deductions"
-                value={money(
-                  (Number(item.lop_amount) || 0) +
-                  (Number(item.buffer_late_deduction) || 0) +
-                  (Number(item.fines_amount) || 0) +
-                  (Number(item.pf_employee_amount) || 0) +
-                  (Number(item.esi_employee_amount) || 0)
+          <div className="grid grid-cols-2 divide-x divide-gray-300">
+            {/* Earnings Column */}
+            <div className="p-3.5 space-y-2 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-gray-800">
+                  <span>Base Fixed Salary</span>
+                  <span className="font-mono font-semibold">{money(item.base_salary_component)}</span>
+                </div>
+                <div className="flex items-center justify-between text-gray-700 pl-3 border-l-2 border-blue-300 text-[11px]">
+                  <span>• Basic + DA (70%)</span>
+                  <span className="font-mono">{money(basicDa)}</span>
+                </div>
+                <div className="flex items-center justify-between text-gray-700 pl-3 border-l-2 border-blue-300 text-[11px]">
+                  <span>• House Rent Allowance (HRA 30%)</span>
+                  <span className="font-mono">{money(hra)}</span>
+                </div>
+
+                {nightAllowance > 0 && (
+                  <div className="flex items-center justify-between text-indigo-900 font-medium">
+                    <span>Night Shift Allowance</span>
+                    <span className="font-mono">{money(nightAllowance)}</span>
+                  </div>
                 )}
-                strong
-              />
-            </div>
-          </div>
-        </div>
 
-        {/* Employer Statutory Contributions */}
-        <div className="py-2.5 border-b border-gray-200 text-xs">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employer Contribution (Non-Deductible)</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <PayslipRow label="Employer PF Total (12%)" value={money(item.pf_employer_amount)} strong />
-              <div className="text-[11px] text-gray-500 pl-2">
-                <div>• Pension Fund (EPS 8.33%): {money(item.pf_employer_eps_amount || Math.round(Number(item.pf_wage || 0) * 0.0833))}</div>
-                <div>• Provident Fund (EPF 3.67%): {money(item.pf_employer_epf_amount || (Number(item.pf_employee_amount || 0) - Math.round(Number(item.pf_wage || 0) * 0.0833)))}</div>
+                {overtimeAmount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-900 font-medium">
+                    <span>Paid Extra Days / Overtime</span>
+                    <span className="font-mono">{money(overtimeAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-gray-200 mt-4 flex items-center justify-between font-black text-gray-900 text-xs">
+                <span className="uppercase text-[#1e3a8a]">Total Gross Earnings (A)</span>
+                <span className="font-mono text-sm text-[#1e3a8a]">{money(grossPay)}</span>
               </div>
             </div>
-            <div>
-              <PayslipRow label="Employer ESI (3.25%)" value={money(item.esi_employer_amount)} strong />
-              <div className="text-[11px] text-gray-500 pl-2">
-                <div>• ESI Wage Base: {money(item.esi_wage)}</div>
-                <div>• Total ESI Remittance (4.5%): {money(Number(item.esi_employee_amount || 0) + Number(item.esi_employer_amount || 0))}</div>
+
+            {/* Deductions Column */}
+            <div className="p-3.5 space-y-2 flex flex-col justify-between bg-rose-50/10">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-gray-800">
+                  <div>
+                    <span>Employee PF (EPF 12%)</span>
+                    {Number(item.pf_wage) > 0 && (
+                      <span className="text-[9px] text-gray-400 block font-mono">Wage: {money(item.pf_wage)}</span>
+                    )}
+                  </div>
+                  <span className="font-mono font-semibold">{money(pfEmployee)}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-gray-800">
+                  <div>
+                    <span>Employee ESI (ESIC 0.75%)</span>
+                    {Number(item.esi_wage) > 0 && (
+                      <span className="text-[9px] text-gray-400 block font-mono">Wage: {money(item.esi_wage)}</span>
+                    )}
+                  </div>
+                  <span className="font-mono font-semibold">{money(esiEmployee)}</span>
+                </div>
+
+                {lopAmount > 0 && (
+                  <div className="flex items-center justify-between text-rose-800">
+                    <span>Loss of Pay Deduction ({item.days_lop} days)</span>
+                    <span className="font-mono">{money(lopAmount)}</span>
+                  </div>
+                )}
+
+                {bufferLate > 0 && (
+                  <div className="flex items-center justify-between text-rose-800">
+                    <span>Late Attendance Buffer Deduction</span>
+                    <span className="font-mono">{money(bufferLate)}</span>
+                  </div>
+                )}
+
+                {finesAmount > 0 && (
+                  <div className="flex items-center justify-between text-rose-800">
+                    <span>Salary Advance / Disciplinary Fine</span>
+                    <span className="font-mono">{money(finesAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-gray-200 mt-4 flex items-center justify-between font-black text-rose-900 text-xs">
+                <span className="uppercase">Total Deductions (B)</span>
+                <span className="font-mono text-sm text-rose-900">{money(totalDeductions)}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Net Salary Payable */}
-        <div className="py-4 flex items-center justify-between bg-emerald-50/80 px-4 rounded-xl my-4 border border-emerald-200">
-          <div>
-            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Net Take-Home Pay (A - B)</span>
-            <span className="text-xs text-gray-600 font-medium">Disbursed to registered bank account</span>
+        {/* Net Salary Payable Box */}
+        <div className="my-5 border-2 border-emerald-600 rounded-xl p-4 bg-emerald-50/60 print:bg-emerald-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-center sm:text-left">
+            <div className="text-[11px] font-black text-emerald-950 uppercase tracking-wider">
+              NET SALARY PAYABLE (A – B)
+            </div>
+            <div className="font-bold text-gray-800 text-xs">
+              {numberToWordsIndian(netPay)}
+            </div>
+            <div className="text-[10px] text-gray-500 font-medium">
+              Disbursement Method: {item.payment_mode === 'cash' ? 'Cash Payment at Hospital Accounts' : `Account Transfer to ${item.bank_name || 'Bank'} (${item.bank_account_no || 'Registered A/C'})`}
+            </div>
           </div>
-          <span className="text-xl font-extrabold text-emerald-900">{money(item.net_pay)}</span>
+
+          <div className="text-center sm:text-right shrink-0">
+            <div className="text-2xl sm:text-3xl font-black text-emerald-900 tracking-tight font-mono">
+              {money(netPay)}
+            </div>
+            <span className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-widest block mt-0.5">
+              Net Take-Home Pay
+            </span>
+          </div>
         </div>
 
-        {/* Signatures */}
-        <div className="pt-8 grid grid-cols-2 text-center text-xs text-gray-500">
-          <div>
-            <div className="border-t border-gray-300 w-36 mx-auto pt-1 font-semibold text-gray-700">Employee Signature</div>
+        {/* Employer Statutory Contributions Memo (Non-Deductible) */}
+        <div className="my-4 p-3 bg-gray-50 rounded-lg border border-gray-200 text-[11px]">
+          <div className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+            <span>Employer Statutory Compliance Contributions (Non-Deductible from Salary)</span>
+            <span className="font-mono font-bold text-gray-700">Total Monthly CTC: {money(totalCtc)}</span>
           </div>
-          <div>
-            <div className="border-t border-gray-300 w-36 mx-auto pt-1 font-semibold text-gray-700">Authorized Signatory</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-gray-600">
+            <div className="space-y-0.5">
+              <div className="flex justify-between">
+                <span>Employer PF Contribution (12%):</span>
+                <strong className="font-mono text-gray-900">{money(pfEmployer)}</strong>
+              </div>
+              <div className="text-[10px] text-gray-500 pl-2">
+                <span>• EPS (Pension 8.33%): {money(pfEps)}</span> · <span>EPF (Provident 3.67%): {money(pfEpf)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              <div className="flex justify-between">
+                <span>Employer ESI Contribution (3.25%):</span>
+                <strong className="font-mono text-gray-900">{money(esiEmployer)}</strong>
+              </div>
+              <div className="text-[10px] text-gray-500 pl-2">
+                <span>• Total Combined ESI Remittance (4.0%): {money(esiEmployee + esiEmployer)}</span>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Official Signatures & Declaration */}
+        <div className="pt-10 pb-4 grid grid-cols-3 text-center text-xs text-gray-600 border-t border-gray-200 mt-6">
+          <div className="space-y-8">
+            <div className="h-8"></div>
+            <div className="border-t border-gray-400 w-36 mx-auto pt-1 font-bold text-gray-800 text-[11px]">
+              Employee Signature
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            <div className="h-8"></div>
+            <div className="border-t border-gray-400 w-36 mx-auto pt-1 font-bold text-gray-800 text-[11px]">
+              HR &amp; Payroll Officer
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            <div className="h-8 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest border border-dashed border-gray-300 px-2 py-0.5 rounded">
+                Hospital Seal
+              </span>
+            </div>
+            <div className="border-t border-gray-400 w-44 mx-auto pt-1 font-bold text-[#1e3a8a] text-[11px]">
+              Authorized Signatory<br />
+              <span className="text-[9px] font-normal text-gray-500">For NEHA HOSPITALS</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Disclaimer */}
+        <div className="pt-3 border-t border-gray-100 text-[9px] text-gray-400 text-center space-y-0.5 leading-tight">
+          <p>This is a computer-generated salary payslip authenticated by Neha Hospital Management System.</p>
+          <p>Confidential Document · Questions or discrepancies should be reported to the HR &amp; Accounts department within 7 business days.</p>
+        </div>
+
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 node_modules
 *.xls
 *.xlsx
-
+Sql/confedential/
+Backend/scripts/
