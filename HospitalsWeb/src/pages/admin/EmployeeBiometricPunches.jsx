@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import PageHeader from '../../components/PageHeader';
+import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
 import {
   BoltIcon,
   PrintIcon,
@@ -55,7 +56,7 @@ const formatTime12 = (timeStr) => {
   return `${h}:${m}${s} ${ampm}`;
 };
 
-export default function EmployeeBiometricPunches() {
+export default function EmployeeBiometricPunches({ embedded = false }) {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedDept, setSelectedDept] = useState('');
@@ -75,6 +76,7 @@ export default function EmployeeBiometricPunches() {
   // Loading & Sync states
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showHistoricalModal, setShowHistoricalModal] = useState(false);
   const [bannerMsg, setBannerMsg] = useState(null);
   const [bannerTone, setBannerTone] = useState('success');
 
@@ -225,13 +227,22 @@ export default function EmployeeBiometricPunches() {
         }
       `}</style>
 
-      <PageHeader
-        category="Staff & Salary"
-        title="Employee Biometric Logs"
-        subtitle="Inspect individual employee raw biometric device punches, timestamps, terminals, and shift matching."
-        className="no-print"
-        actions={
-          <>
+      {embedded ? (
+        <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 no-print">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Employee Biometric Logs</h3>
+            <p className="text-xs text-gray-500">Inspect individual employee raw biometric device punches, timestamps, and terminal logs.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowHistoricalModal(true)}
+              disabled={isSyncing || isLoading}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              title="Sync old/historical punches while leaving existing records intact"
+            >
+              <ClockIcon className="w-4 h-4 text-white" />
+              <span>Sync Old / Historical Punches</span>
+            </button>
             <button
               onClick={handleSyncAll}
               disabled={isSyncing || isLoading}
@@ -243,7 +254,7 @@ export default function EmployeeBiometricPunches() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  Syncing eSSL…
+                  <span>Syncing eSSL…</span>
                 </>
               ) : (
                 <span className="flex items-center gap-1.5">
@@ -259,9 +270,56 @@ export default function EmployeeBiometricPunches() {
               <PrintIcon className="w-4 h-4 text-white" />
               <span>Print Punch Report</span>
             </button>
-          </>
-        }
-      />
+          </div>
+        </div>
+      ) : (
+        <PageHeader
+          category="Staff & Salary"
+          title="Employee Biometric Logs"
+          subtitle="Inspect individual employee raw biometric device punches, timestamps, terminals, and shift matching."
+          className="no-print"
+          actions={
+            <>
+              <button
+                onClick={() => setShowHistoricalModal(true)}
+                disabled={isSyncing || isLoading}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                title="Sync old/historical punches while leaving existing records intact"
+              >
+                <ClockIcon className="w-4 h-4 text-white" />
+                <span>Sync Old / Historical Punches</span>
+              </button>
+              <button
+                onClick={handleSyncAll}
+                disabled={isSyncing || isLoading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSyncing ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Syncing eSSL…</span>
+                  </>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <BoltIcon className="w-4 h-4 text-white" />
+                    <span>Sync Biometric Devices</span>
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handlePrint}
+                className="bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <PrintIcon className="w-4 h-4 text-white" />
+                <span>Print Punch Report</span>
+              </button>
+            </>
+          }
+        />
+      )}
 
       {/* Notification Banner */}
       {bannerMsg && (
@@ -702,6 +760,17 @@ export default function EmployeeBiometricPunches() {
           </div>
         )}
       </div>
+
+      {/* Sync Old / Historical Biometric Punches Modal */}
+      <SyncHistoricalPunchesModal
+        isOpen={showHistoricalModal}
+        onClose={() => setShowHistoricalModal(false)}
+        onSuccess={(msg) => {
+          flash(msg);
+          if (viewMode === 'timeline') loadTimeline();
+          else loadRawTable();
+        }}
+      />
     </div>
   );
 }

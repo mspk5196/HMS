@@ -18,6 +18,57 @@ class DeviceManager {
     this.devices = new Map();
     this.deviceMetrics = new Map();
     this.loadDevices();
+    // Auto-sync devices from central Backend on startup and every 60s
+    this.syncDevicesFromBackend().catch(() => {});
+    this._deviceSyncTimer = setInterval(() => {
+      this.syncDevicesFromBackend().catch(() => {});
+    }, 60000);
+  }
+
+  /**
+   * Dynamically synchronizes configured devices from the central Neha Hospital backend.
+   * Ensures new devices added via Web UI ('Biometric Devices & Sync' page) are automatically connected.
+   */
+  async syncDevicesFromBackend() {
+    if (!config.mainBackendUrl) return;
+    try {
+      const url = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/devices`;
+      const headers = {};
+      if (config.mainBackendApiKey) {
+        headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+        headers['x-api-key'] = config.mainBackendApiKey;
+      }
+      const resp = await axios.get(url, { headers, timeout: 5000 });
+      const data = resp.data?.data || resp.data?.devices || (Array.isArray(resp.data) ? resp.data : []);
+      if (Array.isArray(data) && data.length > 0) {
+        let changed = false;
+        for (const item of data) {
+          const devId = String(item.id || item.device_id || `dev-${item.ip_address || item.ip}`);
+          const ip = item.ip_address || item.ip;
+          if (!ip) continue;
+          const existing = this.devices.get(devId);
+          const devObj = {
+            id: devId,
+            name: item.name || existing?.name || `Biometric Device (${ip})`,
+            ip: ip,
+            port: Number(item.port || item.port_number || existing?.port || 4370),
+            commKey: String(item.comm_key ?? item.commKey ?? existing?.commKey ?? '0'),
+            location: item.location || existing?.location || 'Hospital Gate',
+            enabled: item.is_active !== 0 && item.auto_sync_enabled !== 0 && item.enabled !== false,
+            createdAt: item.created_at || existing?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          this.devices.set(devId, devObj);
+          changed = true;
+        }
+        if (changed) {
+          this.saveDevices();
+          console.log(`[DeviceManager] Synced ${this.devices.size} device(s) from central backend.`);
+        }
+      }
+    } catch (err) {
+      // Backend may be booting or unreachable
+    }
   }
 
   loadDevices() {
@@ -65,7 +116,17 @@ class DeviceManager {
   }
 
   getDevice(id) {
-    return this.devices.get(String(id)) || null;
+    if (!id) return Array.from(this.devices.values())[0] || null;
+    const strId = String(id).trim();
+    if (this.devices.has(strId)) return this.devices.get(strId);
+    if (this.devices.has(`dev-${strId}`)) return this.devices.get(`dev-${strId}`);
+
+    for (const d of this.devices.values()) {
+      if (String(d.id) === strId || String(d.id) === `dev-${strId}` || d.ip === strId || d.name?.toLowerCase() === strId.toLowerCase()) {
+        return d;
+      }
+    }
+    return Array.from(this.devices.values())[0] || null;
   }
 
   addDevice(data) {
@@ -241,6 +302,7 @@ class DeviceManager {
    * Syncs all enabled devices in sequence.
    */
   async syncAllDevices() {
+    await this.syncDevicesFromBackend().catch(() => {});
     const enabledDevices = Array.from(this.devices.values()).filter((d) => d.enabled !== false);
     const results = [];
     const allPunches = [];

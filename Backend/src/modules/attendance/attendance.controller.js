@@ -273,14 +273,52 @@ const testDevice = asyncHandler(async (req, res) => {
 /** POST /api/attendance/devices/:id/sync — download punches from device now */
 const syncDevice = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const result = await esslSvc.syncBiometricDevice(Number(id), svc);
-  return res.json(success(result, `Synced ${result.newPunchesInserted} new punches from ${result.deviceName}`));
+  const { fromDate, toDate } = req.body || {};
+  const result = await esslSvc.syncBiometricDevice(Number(id), svc, { fromDate, toDate });
+  return res.json(
+    success(
+      result,
+      `Synced ${result.newPunchesInserted} new punches from ${result.deviceName} (${result.existingPunchesPreserved || 0} existing records left unchanged).`
+    )
+  );
 });
 
 /** POST /api/attendance/devices/sync-all — sync all active devices */
 const syncAllDevices = asyncHandler(async (req, res) => {
-  const results = await esslSvc.syncAllActiveDevices(svc);
-  return res.json(success(results, 'All active biometric devices synced.'));
+  const { fromDate, toDate, includeAll } = req.body || {};
+  const results = await esslSvc.syncAllActiveDevices(svc, { fromDate, toDate, includeAll });
+  const totalNew = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.newPunchesInserted || 0), 0) : 0;
+  const totalPreserved = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.existingPunchesPreserved || 0), 0) : 0;
+  return res.json(
+    success(
+      results,
+      `Biometric sync complete! ${totalNew} new punches registered (${totalPreserved} existing records preserved).`
+    )
+  );
+});
+
+/** POST /api/attendance/devices/sync-historical — dedicated historical sync with date filtering */
+const syncHistoricalPunches = asyncHandler(async (req, res) => {
+  const { deviceId, fromDate, toDate } = req.body || {};
+  if (deviceId && deviceId !== 'all') {
+    const result = await esslSvc.syncBiometricDevice(Number(deviceId), svc, { fromDate, toDate });
+    return res.json(
+      success(
+        result,
+        `Historical sync complete: ${result.newPunchesInserted} new punches added, ${result.existingPunchesPreserved || 0} existing punches left untouched.`
+      )
+    );
+  }
+
+  const results = await esslSvc.syncAllActiveDevices(svc, { fromDate, toDate, includeAll: true });
+  const totalNew = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.newPunchesInserted || 0), 0) : 0;
+  const totalPreserved = Array.isArray(results) ? results.reduce((sum, r) => sum + (r.existingPunchesPreserved || 0), 0) : 0;
+  return res.json(
+    success(
+      results,
+      `Historical sync complete across all devices: ${totalNew} new punches added (${totalPreserved} existing punches preserved).`
+    )
+  );
 });
 
 /** GET /api/attendance/enrolled-users — list enrolled staff from biometric machines */
@@ -379,6 +417,7 @@ module.exports = {
   testDevice,
   syncDevice,
   syncAllDevices,
+  syncHistoricalPunches,
   listEnrolledUsers,
   upsertEnrolledUsers,
   syncDeviceUsers,

@@ -3,6 +3,7 @@ import { apiFetch } from '../../util/api';
 import PageHeader from '../../components/PageHeader';
 import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 import BulkPunchesImportModal, { downloadPunchesExcelTemplate } from './BulkPunchesImportModal';
+import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
 import {
   DownloadIcon,
   UploadIcon,
@@ -161,7 +162,7 @@ export default function Attendance() {
         <DailyLog departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'punches' && (
-        <EmployeeBiometricPunches />
+        <EmployeeBiometricPunches embedded={true} />
       )}
       {tab === 'devices' && (
         <BiometricDevices onError={(e) => fail(e)} onSuccess={flash} />
@@ -240,7 +241,9 @@ function DailyLog({ departments, onError, onSuccess }) {
         method: 'POST',
         body: JSON.stringify({ date }),
       });
-      onSuccess(`Processed ${res.data.processed} punch record(s) for ${date}${res.data.skipped ? `, ${res.data.skipped} skipped (no valid punch)` : ''}.`);
+      const processedCount = res?.processed ?? res?.data?.processed ?? 0;
+      const skippedCount = res?.skipped ?? res?.data?.skipped ?? 0;
+      onSuccess(`Processed ${processedCount} punch record(s) for ${date}${skippedCount ? `, ${skippedCount} skipped (no valid punch)` : ''}.`);
       await load();
     } catch (err) {
       onError(err, 'Failed to process attendance.');
@@ -928,6 +931,7 @@ function BiometricDevices({ onError, onSuccess }) {
   const [testingId, setTestingId] = useState(null);
   const [testResult, setTestResult] = useState({});
   const [showModal, setShowModal] = useState(false);
+  const [showHistoricalModal, setShowHistoricalModal] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
   const [form, setForm] = useState({
     name: '',
@@ -1257,6 +1261,15 @@ function BiometricDevices({ onError, onSuccess }) {
         </div>
         <div className="flex items-center gap-2.5">
           <button
+            onClick={() => setShowHistoricalModal(true)}
+            disabled={isLoading}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+            title="Sync old/historical punches while leaving existing records intact"
+          >
+            <ClockIcon className="w-4 h-4 text-white" />
+            <span>Sync Historical Punches</span>
+          </button>
+          <button
             onClick={handleSyncAll}
             disabled={isSyncingAll || isLoading}
             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -1464,6 +1477,16 @@ function BiometricDevices({ onError, onSuccess }) {
                         <span>Pull Staff</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    onClick={() => setShowHistoricalModal(true)}
+                    disabled={isTestingThis || isSyncingThis || fetchingUsersId === dev.id}
+                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-semibold py-2 px-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    title="Download old / historical attendance logs from this machine"
+                  >
+                    <ClockIcon className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Sync History</span>
                   </button>
 
                   <button
@@ -2148,6 +2171,16 @@ function BiometricDevices({ onError, onSuccess }) {
           </div>
         </div>
       )}
+
+      {/* Sync Old / Historical Biometric Punches Modal */}
+      <SyncHistoricalPunchesModal
+        isOpen={showHistoricalModal}
+        onClose={() => setShowHistoricalModal(false)}
+        onSuccess={(msg) => {
+          onSuccess(msg);
+          loadDevices();
+        }}
+      />
     </div>
   );
 }

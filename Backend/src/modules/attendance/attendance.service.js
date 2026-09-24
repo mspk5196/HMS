@@ -347,7 +347,7 @@ const processDailyAttendance = async (date) => {
   await q.linkOrphanPunches();
 
   const defaultBuffer = await getDefaultBufferMinutes();
-  const punches = await q.getUnprocessedPunches(date, date);
+  const punches = await q.getPunchesForDate(date, date);
   if (!punches.length) return { processed: 0, skipped: 0, date };
 
   const byEmployee = {};

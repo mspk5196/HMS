@@ -45,8 +45,18 @@ export async function apiFetch(endpoint, options = {}) {
   const { withMeta = false, _retried = false, ...fetchOptions } = options;
   const token = localStorage.getItem('token');
   const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+
+  // Strip body on GET / HEAD requests
+  if (method === 'GET' || method === 'HEAD') {
+    delete fetchOptions.body;
+  } else if (fetchOptions.body && typeof fetchOptions.body === 'object' && !isFormData) {
+    // Automatically serialize JS objects into JSON strings
+    fetchOptions.body = JSON.stringify(fetchOptions.body);
+  }
+
   const headers = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(isFormData || method === 'GET' || method === 'HEAD' ? {} : { 'Content-Type': 'application/json' }),
     ...fetchOptions.headers,
   };
 
@@ -56,6 +66,7 @@ export async function apiFetch(endpoint, options = {}) {
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...fetchOptions,
+    method,
     headers,
   });
 

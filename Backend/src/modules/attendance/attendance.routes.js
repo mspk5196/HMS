@@ -49,6 +49,7 @@ router.patch('/corrections/:id/review', ctrl.reviewCorrection);
 router.get('/devices', ctrl.listDevices);
 router.post('/devices', ctrl.createDevice);
 router.post('/devices/sync-all', ctrl.syncAllDevices);
+router.post('/devices/sync-historical', ctrl.syncHistoricalPunches);
 router.post('/devices/sync-all-users', ctrl.syncAllDeviceUsers);
 router.put('/devices/:id', ctrl.updateDevice);
 router.delete('/devices/:id', ctrl.deleteDevice);

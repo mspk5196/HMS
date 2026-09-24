@@ -5,3 +5,4 @@ Sql/confedential/
 Backend/scripts/
 BiometricConnector/.env
 BiometricConnector/devices.json
+*.zip

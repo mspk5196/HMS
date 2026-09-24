@@ -83,6 +83,19 @@ const getUnprocessedPunches = async (fromDate, toDate) => {
   return rows;
 };
 
+/** Fetch all raw punches for a given date range (including already processed). */
+const getPunchesForDate = async (fromDate, toDate) => {
+  const [rows] = await db.execute(
+    `SELECT arp.*, e.full_name, e.designation_id, e.department_id
+     FROM attendance_raw_punches arp
+     JOIN employees e ON e.id = arp.employee_id
+     WHERE DATE(arp.punch_time) BETWEEN ? AND ?
+     ORDER BY arp.employee_id, arp.punch_time`,
+    [fromDate, toDate]
+  );
+  return rows;
+};
+
 /** Punches whose employee_code matches no employee — surfaced to the admin. */
 const getUnmatchedPunches = async (fromDate, toDate) => {
   const [rows] = await db.execute(
@@ -1141,6 +1154,7 @@ module.exports = {
   resolveEmployeeCodes,
   linkOrphanPunches,
   getUnprocessedPunches,
+  getPunchesForDate,
   getUnmatchedPunches,
   listRawPunches,
   getEmployeeBiometricTimeline,
