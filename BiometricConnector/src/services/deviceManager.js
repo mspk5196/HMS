@@ -13,6 +13,16 @@ const { EsslDevice } = require('../drivers/essl.driver');
 
 const STORAGE_FILE = path.resolve(__dirname, '..', '..', 'devices.json');
 
+/**
+ * Normalizes the backend endpoint URL so both 'https://neha.tylo.co.in' and 'https://neha.tylo.co.in/api' work perfectly.
+ */
+function getBackendApiUrl(endpoint) {
+  if (!config.mainBackendUrl) return null;
+  const base = config.mainBackendUrl.trim().replace(/\/+$/, '').replace(/\/api$/, '');
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${base}/api${cleanEndpoint.replace(/^\/api/, '')}`;
+}
+
 class DeviceManager {
   constructor() {
     this.devices = new Map();
@@ -30,9 +40,9 @@ class DeviceManager {
    * Ensures new devices added via Web UI ('Biometric Devices & Sync' page) are automatically connected.
    */
   async syncDevicesFromBackend() {
-    if (!config.mainBackendUrl) return;
+    const url = getBackendApiUrl('/attendance/devices');
+    if (!url) return;
     try {
-      const url = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/devices`;
       const headers = {};
       if (config.mainBackendApiKey) {
         headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
@@ -250,7 +260,8 @@ class DeviceManager {
   async forwardPunchesToBackend(punches) {
     if (!punches || punches.length === 0) return { inserted: 0, message: 'No punches to forward' };
 
-    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/punches/import`;
+    const targetUrl = getBackendApiUrl('/attendance/punches/import');
+    if (!targetUrl) return { inserted: 0, message: 'MAIN_BACKEND_URL not configured' };
     const headers = {
       'Content-Type': 'application/json',
     };
@@ -380,7 +391,8 @@ class DeviceManager {
   async forwardUsersToBackend(users) {
     if (!users || users.length === 0) return { upserted: 0, message: 'No users to forward' };
 
-    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/enrolled-users`;
+    const targetUrl = getBackendApiUrl('/attendance/enrolled-users');
+    if (!targetUrl) return { upserted: 0, message: 'MAIN_BACKEND_URL not configured' };
     const headers = { 'Content-Type': 'application/json' };
     if (config.mainBackendApiKey) {
       headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
@@ -475,7 +487,8 @@ class DeviceManager {
    * Directly register single staff member from Windows machine to backend.
    */
   async registerStaffDirectly(staffData) {
-    const targetUrl = `${config.mainBackendUrl.replace(/\/+$/, '')}/api/attendance/enrolled-users/register`;
+    const targetUrl = getBackendApiUrl('/attendance/enrolled-users/register');
+    if (!targetUrl) throw new Error('MAIN_BACKEND_URL not configured');
     const headers = { 'Content-Type': 'application/json' };
     if (config.mainBackendApiKey) {
       headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
