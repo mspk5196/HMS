@@ -101,6 +101,12 @@ const XMarkIcon = ({ className = 'w-4 h-4', ...props }) => (
   </svg>
 );
 
+const SearchIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+  </svg>
+);
+
 const DAY_LABELS = ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'];
 
 /** Timezone-safe local date string (YYYY-MM-DD) for India (IST). */
@@ -141,6 +147,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
   const [deptFilter, setDeptFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [grid, setGrid] = useState(null);
   // Key: `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM', buffer_minutes: 10, is_night_shift: bool }
@@ -394,6 +401,22 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     }
     return coverage;
   }, [grid, draft]);
+
+  /**
+   * Filtered employee list based on search term
+   */
+  const displayedEmployees = useMemo(() => {
+    if (!grid?.employees) return [];
+    if (!searchQuery.trim()) return grid.employees;
+    const q = searchQuery.toLowerCase().trim();
+    return grid.employees.filter((emp) => {
+      const name = String(emp.full_name || '').toLowerCase();
+      const code = String(emp.employee_code || '').toLowerCase();
+      const role = String(emp.role_name || '').toLowerCase();
+      const phone = String(emp.phone || emp.mobile || '').toLowerCase();
+      return name.includes(q) || code.includes(q) || role.includes(q) || phone.includes(q);
+    });
+  }, [grid?.employees, searchQuery]);
 
   /**
    * Save duty roster — sends ONLY active and future days (d >= today)
@@ -664,6 +687,17 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                 ))}
               </select>
             </div>
+
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                placeholder="Search staff / ID…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 pr-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-44"
+              />
+              <SearchIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -794,7 +828,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
 
               {/* Table Rows */}
               <tbody className="divide-y divide-gray-100">
-                {grid.employees.map((emp) => {
+                {displayedEmployees.map((emp) => {
                   const stats = employeeShiftStats[emp.employee_id] || {
                     dayCount: 0,
                     nightCount: 0,

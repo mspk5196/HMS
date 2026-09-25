@@ -19,6 +19,9 @@
 const router = require('express').Router();
 const ctrl = require('./attendance.controller');
 
+// Attendance register & matrix summary (daily / weekly / monthly)
+router.get('/register', ctrl.getAttendanceRegister);
+
 // Daily summaries — the two-segment param route must come after the static
 // multi-segment routes below, so it is registered last.
 router.get('/', ctrl.listSummaries);
@@ -69,6 +72,12 @@ router.post('/enrolled-users/:id/link', ctrl.linkEnrolledUser);
 // Buffer pool
 router.get('/buffer', ctrl.getBufferSummary);
 router.get('/buffer/employee/:id', ctrl.getEmployeeBuffer);
+
+// Late Attendance Fines (manual buffer overage fines)
+router.get('/late-fines/candidates', ctrl.getLateFineCandidates);
+router.post('/late-fines/apply', ctrl.applyLateFines);
+router.patch('/late-fines/:id/cancel', ctrl.cancelLateFine);
+router.patch('/late-fines/:id/waive', ctrl.waiveLateFine);
 
 // Registered last so it cannot shadow any static route above.
 router.get('/:employeeId/:date', ctrl.getSummary);

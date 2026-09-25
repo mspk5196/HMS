@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import PageHeader from '../../components/PageHeader';
+import EmployeePicker from '../../components/EmployeePicker';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const currentYear = () => new Date().getFullYear();
@@ -29,47 +30,6 @@ function Banner({ msg, tone }) {
     ? 'bg-rose-50 border-red-200 text-rose-700'
     : 'bg-emerald-50 border-emerald-200 text-emerald-700';
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
-}
-
-/** Numeric employee-id field that resolves and shows the matching name. */
-function EmployeePicker({ value, onChange, label = 'Employee ID' }) {
-  const [name, setName] = useState('');
-  const [checking, setChecking] = useState(false);
-
-  useEffect(() => {
-    if (!value) { setName(''); return; }
-    let cancelled = false;
-    setChecking(true);
-    const t = setTimeout(async () => {
-      try {
-        const emp = await apiFetch(`/hr/employees/${value}`);
-        if (!cancelled) setName(`${emp.full_name} (${emp.employee_code})`);
-      } catch {
-        if (!cancelled) setName('Not found');
-      } finally {
-        if (!cancelled) setChecking(false);
-      }
-    }, 350);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [value]);
-
-  return (
-    <div className="space-y-1">
-      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</label>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="e.g. 94"
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
-      />
-      {value && (
-        <p className={`text-[10px] ${name === 'Not found' ? 'text-rose-500' : 'text-gray-400'}`}>
-          {checking ? 'checking…' : name}
-        </p>
-      )}
-    </div>
-  );
 }
 
 export default function Leave() {

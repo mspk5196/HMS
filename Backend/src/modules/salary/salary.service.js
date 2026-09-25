@@ -163,8 +163,8 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmou
   const lopAmount = round2(dayRate * Number(agg.days_lop || 0));
   const earnedGross = Math.max(0, round2(earnedSalary + nightComponent + extraDayPay + unusedWeekOffPay));
 
-  const shiftMinutes = cfg.STANDARD_SHIFT_MINUTES || 480;
-  const bufferLateDeduction = round2((agg.buffer_excess_minutes / shiftMinutes) * dayRate);
+  // Late attendance deductions are strictly manually assigned via the Late Attendance Fines module (no automatic deductions)
+  const bufferLateDeduction = 0;
 
   // --- PF CALCULATION (Dynamic from payroll_config) ---
   // PF on Earned Basic+DA (70%), capped at statutory ceiling (15,000)

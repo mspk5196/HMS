@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import PageHeader from '../../components/PageHeader';
 import EmployeeBiometricPunches from './EmployeeBiometricPunches';
+import AttendanceRegister from './AttendanceRegister';
+import LateAttendanceFines from './LateAttendanceFines';
+import EmployeePicker from '../../components/EmployeePicker';
 import BulkPunchesImportModal, { downloadPunchesExcelTemplate } from './BulkPunchesImportModal';
 import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
 import {
@@ -46,9 +49,23 @@ const STATUS_STYLE = {
 
 const fmtTime = (v) => {
   if (!v) return '—';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const str = String(v).trim();
+  const timePart = str.includes('T')
+    ? str.split('T')[1]?.replace(/Z$/, '')
+    : str.includes(' ')
+    ? str.split(' ')[1]
+    : str;
+
+  const parts = timePart.split(':');
+  if (parts.length >= 2) {
+    let h = parseInt(parts[0], 10);
+    const m = parts[1];
+    const s = parts[2] ? `:${parts[2].slice(0, 2)}` : '';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m}${s} ${ampm}`;
+  }
+  return str;
 };
 
 const fmtMinutes = (m) => {
@@ -62,7 +79,7 @@ const fmtMinutes = (m) => {
 /** Tiny pill-tab bar shared by every sub-view on this page. */
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm w-fit">
+    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm w-fit flex-wrap">
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -87,7 +104,7 @@ function Banner({ msg, tone }) {
 }
 
 export default function Attendance() {
-  const [tab, setTab] = useState('daily'); // 'daily' | 'corrections' | 'buffer' | 'windows'
+  const [tab, setTab] = useState('daily'); // 'daily' | 'register' | 'late_fines' | 'punches' | 'devices' | 'corrections' | 'buffer' | 'windows'
   const [departments, setDepartments] = useState([]);
   const [staffRoles, setStaffRoles] = useState([]);
   const [showPunchesModal, setShowPunchesModal] = useState(false);
@@ -114,52 +131,62 @@ export default function Attendance() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        category="Staff & Salary"
-        title="Attendance"
-        subtitle="Daily punches, corrections, the monthly late-buffer pool, and biometric window overrides."
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={downloadPunchesExcelTemplate}
-              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Download blank biometric punches Excel template"
-            >
-              <DownloadIcon className="w-4 h-4 text-gray-500" />
-              <span>Punches Template</span>
-            </button>
+      <div className="no-print print:hidden space-y-6">
+        <PageHeader
+          category="Staff & Salary"
+          title="Attendance"
+          subtitle="Daily punches, present/absent matrix register, late fines, corrections, and biometric device sync."
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={downloadPunchesExcelTemplate}
+                className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Download blank biometric punches Excel template"
+              >
+                <DownloadIcon className="w-4 h-4 text-gray-500" />
+                <span>Punches Template</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setShowPunchesModal(true)}
-              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <UploadIcon className="w-4 h-4 text-white" />
-              <span>Bulk Upload Punches</span>
-            </button>
-          </>
-        }
-      />
+              <button
+                type="button"
+                onClick={() => setShowPunchesModal(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <UploadIcon className="w-4 h-4 text-white" />
+                <span>Bulk Upload Punches</span>
+              </button>
+            </>
+          }
+        />
 
-      <Banner msg={successMsg} tone="success" />
-      <Banner msg={errorMsg} tone="error" />
+        <Banner msg={successMsg} tone="success" />
+        <Banner msg={errorMsg} tone="error" />
 
-      <TabBar
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { value: 'daily', label: 'Daily Log' },
-          { value: 'punches', label: 'Employee Punch Logs' },
-          { value: 'devices', label: 'Biometric Devices & Sync' },
-          { value: 'corrections', label: 'Corrections' },
-          { value: 'buffer', label: 'Buffer Pool' },
-          { value: 'windows', label: 'Biometric Windows' },
-        ]}
-      />
+        <TabBar
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { value: 'daily', label: 'Daily Log' },
+            { value: 'register', label: 'Attendance Register & Summary' },
+            { value: 'late_fines', label: 'Late Attendance Fines' },
+            { value: 'punches', label: 'Employee Punch Logs' },
+            { value: 'devices', label: 'Biometric Devices & Sync' },
+            { value: 'corrections', label: 'Corrections' },
+            { value: 'buffer', label: 'Buffer Pool' },
+            { value: 'windows', label: 'Biometric Windows' },
+          ]}
+        />
+      </div>
 
       {tab === 'daily' && (
         <DailyLog departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+      )}
+      {tab === 'register' && (
+        <AttendanceRegister departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+      )}
+      {tab === 'late_fines' && (
+        <LateAttendanceFines departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'punches' && (
         <EmployeeBiometricPunches embedded={true} />
@@ -193,20 +220,41 @@ export default function Attendance() {
 function DailyLog({ departments, onError, onSuccess }) {
   const [date, setDate] = useState(today());
   const [deptFilter, setDeptFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [markingId, setMarkingId] = useState(null);
-  const [markStatus, setMarkStatus] = useState('present');
+  
+  // Row manual edit state
+  const [markingRow, setMarkingRow] = useState(null); // { employee_id, full_name, status, in_time, out_time }
   const [isSaving, setIsSaving] = useState(false);
+
+  // New manual attendance modal state
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    employee_id: '',
+    status: 'present',
+    in_time: '08:00',
+    out_time: '18:00',
+  });
 
   const load = useCallback(async () => {
     try {
       setIsLoading(true);
-      const params = new URLSearchParams({ date, limit: '200' });
+      const params = new URLSearchParams({
+        date,
+        page: String(page),
+        limit: String(pageSize),
+      });
       if (deptFilter) params.set('departmentId', deptFilter);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      if (statusFilter) params.set('status', statusFilter);
+
       const { data, meta: m } = await apiFetch(`/attendance?${params.toString()}`, { withMeta: true });
       setRows(Array.isArray(data) ? data : []);
       setMeta(m || { total: 0 });
@@ -216,7 +264,7 @@ function DailyLog({ departments, onError, onSuccess }) {
     } finally {
       setIsLoading(false);
     }
-  }, [date, deptFilter]);
+  }, [date, deptFilter, searchTerm, statusFilter, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -252,17 +300,35 @@ function DailyLog({ departments, onError, onSuccess }) {
     }
   };
 
-  const startMark = (employeeId) => { setMarkingId(employeeId); setMarkStatus('present'); };
+  const startMarkRow = (r) => {
+    const rawIn = r.first_punch_in ? (r.first_punch_in.includes(' ') ? r.first_punch_in.split(' ')[1].slice(0, 5) : r.first_punch_in.slice(11, 16)) : '08:00';
+    const rawOut = r.last_punch_out ? (r.last_punch_out.includes(' ') ? r.last_punch_out.split(' ')[1].slice(0, 5) : r.last_punch_out.slice(11, 16)) : '18:00';
 
-  const saveMark = async (employeeId) => {
+    setMarkingRow({
+      employee_id: r.employee_id,
+      full_name: r.full_name,
+      status: r.status || 'present',
+      in_time: rawIn,
+      out_time: rawOut,
+    });
+  };
+
+  const saveMarkRow = async () => {
+    if (!markingRow) return;
     try {
       setIsSaving(true);
       await apiFetch('/attendance/mark', {
         method: 'POST',
-        body: JSON.stringify({ employee_id: employeeId, date, status: markStatus }),
+        body: JSON.stringify({
+          employee_id: markingRow.employee_id,
+          date,
+          status: markingRow.status,
+          in_time: markingRow.in_time ? `${date} ${markingRow.in_time}:00` : null,
+          out_time: markingRow.out_time ? `${date} ${markingRow.out_time}:00` : null,
+        }),
       });
-      onSuccess('Attendance marked manually.');
-      setMarkingId(null);
+      onSuccess(`Attendance for ${markingRow.full_name} marked as ${markingRow.status} (credited as present for shift).`);
+      setMarkingRow(null);
       await load();
     } catch (err) {
       onError(err, 'Failed to mark attendance.');
@@ -271,85 +337,240 @@ function DailyLog({ departments, onError, onSuccess }) {
     }
   };
 
+  const handleSaveNewManual = async (e) => {
+    e.preventDefault();
+    if (!manualForm.employee_id) {
+      onError(null, 'Please select an employee.');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await apiFetch('/attendance/mark', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id: Number(manualForm.employee_id),
+          date,
+          status: manualForm.status,
+          in_time: manualForm.in_time ? `${date} ${manualForm.in_time}:00` : null,
+          out_time: manualForm.out_time ? `${date} ${manualForm.out_time}:00` : null,
+        }),
+      });
+      onSuccess(`Manual attendance saved for ${date}. Employee is credited as present for the shift.`);
+      setShowManualModal(false);
+      setManualForm({ employee_id: '', status: 'present', in_time: '08:00', out_time: '18:00' });
+      await load();
+    } catch (err) {
+      onError(err, 'Failed to mark attendance.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Quick summary stats calculation from loaded rows
+  const presentCount = rows.filter((r) => r.status === 'present').length;
+  const lateCount = rows.filter((r) => r.status === 'late_present' || Number(r.late_minutes) > 0).length;
+  const absentCount = rows.filter((r) => r.status === 'absent').length;
+  const leaveCount = rows.filter((r) => r.status === 'on_leave' || r.status === 'lop').length;
+  const totalPages = Math.max(1, Math.ceil((meta.total || 0) / pageSize));
+
   return (
     <div className="space-y-4">
-      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Date</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dept</span>
-          <select
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-        </div>
-        <div className="sm:ml-auto flex items-center gap-2.5">
-          <button
-            onClick={handleSyncBiometric}
-            disabled={isSyncing || isProcessing}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
-            title="Connect to local eSSL biometric device and download latest punches"
-          >
-            {isSyncing ? (
-              <>
-                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                </svg>
-                Syncing…
-              </>
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <BoltIcon className="w-4 h-4 text-white" />
-                <span>Sync Biometric</span>
-              </span>
+      {/* Top Controls & Filter Bar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Date Picker */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Date</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => { setDate(e.target.value); setPage(1); }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            {/* Department Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dept</span>
+              <select
+                value={deptFilter}
+                onChange={(e) => { setDeptFilter(e.target.value); setPage(1); }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">All departments</option>
+                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">All Statuses</option>
+                <option value="present">Present</option>
+                <option value="late_present">Late Present</option>
+                <option value="absent">Absent</option>
+                <option value="on_leave">On Leave</option>
+                <option value="lop">LOP</option>
+                <option value="week_off">Week Off</option>
+                <option value="holiday">Holiday</option>
+                <option value="missed_punch">Missed Punch</option>
+              </select>
+            </div>
+
+            {/* Employee Search */}
+            <div className="relative min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Search staff name or code…"
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
+              />
+              <SearchIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+            </div>
+
+            {/* Rows Per Page */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                title="Max rows per page"
+              >
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={200}>200 rows</option>
+                <option value={500}>All (500)</option>
+              </select>
+            </div>
+
+            {(deptFilter || statusFilter || searchTerm) && (
+              <button
+                type="button"
+                onClick={() => { setDeptFilter(''); setStatusFilter(''); setSearchTerm(''); setPage(1); }}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer"
+              >
+                Clear Filters
+              </button>
             )}
-          </button>
-          <button
-            onClick={handleProcess}
-            disabled={isProcessing || isSyncing}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
-            title="Read raw biometric punches for this date and compute the daily summary"
-          >
-            {isProcessing ? 'Processing…' : 'Process Punches'}
-          </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setShowManualModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+              title="Manually mark attendance (Present / In / Out) for any staff member"
+            >
+              <PlusIcon className="w-4 h-4 text-white" />
+              <span>Mark Present / Attendance</span>
+            </button>
+            <button
+              onClick={handleSyncBiometric}
+              disabled={isSyncing || isProcessing}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              title="Connect to local eSSL biometric device and download latest punches"
+            >
+              {isSyncing ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  Syncing…
+                </>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <BoltIcon className="w-4 h-4 text-white" />
+                  <span>Sync Biometric</span>
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleProcess}
+              disabled={isProcessing || isSyncing}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
+              title="Read raw biometric punches for this date and compute the daily summary"
+            >
+              {isProcessing ? 'Processing…' : 'Process Punches'}
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Summary Badges */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 text-xs">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Day Overview:</span>
+          <span className="bg-gray-100 text-gray-700 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+            Total: {meta.total || rows.length}
+          </span>
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+            Present: {presentCount}
+          </span>
+          <span className="bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+            Late: {lateCount}
+          </span>
+          <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+            Absent: {absentCount}
+          </span>
+          <span className="bg-blue-50 text-blue-700 border border-blue-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+            Leaves/LOP: {leaveCount}
+          </span>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-gray-900">Daily Summary</h2>
-          <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-            {meta.total} record{meta.total === 1 ? '' : 's'}
-          </span>
+        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-sm font-bold text-gray-900">Daily Attendance Summary</h2>
+            <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+              {meta.total || rows.length} record{(meta.total || rows.length) === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="text-[11px] font-medium text-gray-400">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="px-2 py-1 border border-gray-200 rounded-md text-xs font-semibold text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500 (All)</option>
+            </select>
+          </div>
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
+          <div className="p-8 text-center text-xs text-gray-400">Loading daily attendance records…</div>
         ) : rows.length === 0 ? (
           <div className="p-8 text-center text-xs text-gray-500">
-            No attendance summary for this date yet. Import punches, then click "Process Punches".
+            No attendance summary for this date and filter criteria. Import punches, then click "Process Punches" or click "+ Mark Present / Attendance".
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[900px]">
+            <table className="w-full text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-2.5">Employee</th>
                   <th className="text-left px-3 py-2.5">Shift</th>
-                  <th className="text-center px-3 py-2.5">In</th>
-                  <th className="text-center px-3 py-2.5">Out</th>
+                  <th className="text-center px-3 py-2.5">First In</th>
+                  <th className="text-center px-3 py-2.5">Last Out</th>
                   <th className="text-center px-3 py-2.5">Worked</th>
                   <th className="text-center px-3 py-2.5">Break</th>
                   <th className="text-center px-3 py-2.5">Late</th>
@@ -358,73 +579,262 @@ function DailyLog({ departments, onError, onSuccess }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2.5">
-                      <div className="font-bold text-gray-900">{r.full_name}</div>
-                      <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.shift_name || '—'}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{fmtTime(r.first_punch_in)}</td>
-                    <td className="px-3 py-2.5 text-center font-semibold text-gray-800">{fmtTime(r.last_punch_out)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{fmtMinutes(r.worked_minutes)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-500">{fmtMinutes(r.break_minutes)}</td>
-                    <td className={`px-3 py-2.5 text-center font-semibold ${Number(r.late_minutes) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                      {fmtMinutes(r.late_minutes)}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                          {r.status}
-                        </span>
-                        {!!r.is_missed_punch && (
-                          <span className="text-[9px] font-semibold text-rose-500">missed punch</span>
+                {rows.map((r) => {
+                  const isEditingThis = markingRow && markingRow.employee_id === r.employee_id;
+
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50/60">
+                      <td className="px-4 py-2.5">
+                        <div className="font-bold text-gray-900">{r.full_name}</div>
+                        <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">{r.shift_name || '—'}</td>
+
+                      {/* In Time */}
+                      <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
+                        {isEditingThis ? (
+                          <input
+                            type="time"
+                            value={markingRow.in_time}
+                            onChange={(e) => setMarkingRow((m) => ({ ...m, in_time: e.target.value }))}
+                            className="px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
+                          />
+                        ) : (
+                          fmtTime(r.first_punch_in)
                         )}
-                        {!!r.is_manually_marked && (
-                          <span className="text-[9px] font-semibold text-blue-500">manual</span>
+                      </td>
+
+                      {/* Out Time */}
+                      <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
+                        {isEditingThis ? (
+                          <input
+                            type="time"
+                            value={markingRow.out_time}
+                            onChange={(e) => setMarkingRow((m) => ({ ...m, out_time: e.target.value }))}
+                            className="px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
+                          />
+                        ) : (
+                          fmtTime(r.last_punch_out)
                         )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {markingId === r.employee_id ? (
-                        <div className="flex items-center gap-1 justify-center">
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center text-gray-700">{fmtMinutes(r.worked_minutes)}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-500">{fmtMinutes(r.break_minutes)}</td>
+                      <td className={`px-3 py-2.5 text-center font-semibold ${Number(r.late_minutes) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        {fmtMinutes(r.late_minutes)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3 py-2.5 text-center">
+                        {isEditingThis ? (
                           <select
-                            value={markStatus}
-                            onChange={(e) => setMarkStatus(e.target.value)}
+                            value={markingRow.status}
+                            onChange={(e) => setMarkingRow((m) => ({ ...m, status: e.target.value }))}
                             className="px-2 py-1 border border-gray-200 rounded text-[10px] font-semibold bg-white"
                           >
-                            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            {STATUS_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
                           </select>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                              {r.status}
+                            </span>
+                            {!!r.is_missed_punch && (
+                              <span className="text-[9px] font-semibold text-rose-500">missed punch</span>
+                            )}
+                            {!!r.is_manually_marked && (
+                              <span className="text-[9px] font-semibold text-blue-500">manual</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Action */}
+                      <td className="px-3 py-2.5 text-center">
+                        {isEditingThis ? (
+                          <div className="flex items-center gap-1.5 justify-center">
+                            <button
+                              onClick={saveMarkRow}
+                              disabled={isSaving}
+                              className="text-[10px] font-bold text-emerald-600 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setMarkingRow(null)}
+                              className="text-[10px] font-bold text-gray-400 hover:underline cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => saveMark(r.employee_id)}
-                            disabled={isSaving}
-                            className="text-[10px] font-bold text-emerald-600 hover:underline cursor-pointer disabled:opacity-50"
+                            onClick={() => startMarkRow(r)}
+                            className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
                           >
-                            Save
+                            Mark manually
                           </button>
-                          <button
-                            onClick={() => setMarkingId(null)}
-                            className="text-[10px] font-bold text-gray-400 hover:underline cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startMark(r.employee_id)}
-                          className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
-                        >
-                          Mark manually
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
+
+        {/* Pagination Footer */}
+        {meta.total > 0 && (
+          <div className="no-print px-4 py-3 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-gray-50/50">
+            <div className="text-gray-500 font-medium">
+              Showing <span className="font-bold text-gray-900">{(page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-bold text-gray-900">{Math.min(page * pageSize, meta.total)}</span> of{' '}
+              <span className="font-bold text-gray-900">{meta.total}</span> records
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || isLoading}
+                onClick={() => setPage(1)}
+                className="px-2.5 py-1 border border-gray-200 bg-white rounded-lg text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+                title="First Page"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                disabled={page <= 1 || isLoading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1 border border-gray-200 bg-white rounded-lg text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Previous
+              </button>
+              <span className="px-2 font-bold text-gray-800">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages || isLoading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1 border border-gray-200 bg-white rounded-lg text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages || isLoading}
+                onClick={() => setPage(totalPages)}
+                className="px-2.5 py-1 border border-gray-200 bg-white rounded-lg text-gray-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+                title="Last Page"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Manual Mark Modal (for ANY staff member) */}
+      {showManualModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveNewManual} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-gray-900">Mark Attendance Manually</h3>
+                <p className="text-xs text-gray-500">Date: {new Date(date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Searchable Employee Picker */}
+              <EmployeePicker
+                value={manualForm.employee_id}
+                onChange={(v) => setManualForm((f) => ({ ...f, employee_id: v }))}
+                label="Staff Member (Search name/phone/emp ID)"
+                required={true}
+              />
+
+              {/* Status Select */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Attendance Status</label>
+                <select
+                  value={manualForm.status}
+                  onChange={(e) => setManualForm((f) => ({ ...f, status: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* In and Out Times */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">In Time</label>
+                  <input
+                    type="time"
+                    value={manualForm.in_time}
+                    onChange={(e) => setManualForm((f) => ({ ...f, in_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Out Time</label>
+                  <input
+                    type="time"
+                    value={manualForm.out_time}
+                    onChange={(e) => setManualForm((f) => ({ ...f, out_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-xl text-[11px] text-blue-800 space-y-1">
+                <div className="font-bold flex items-center gap-1">
+                  <CheckIcon className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Full Shift Attendance Credited</span>
+                </div>
+                <p className="text-blue-700/80">
+                  When marking Present, the employee is considered fully present in their shift for worked hours and salary calculation. In/Out times are saved for records.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowManualModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving || !manualForm.employee_id}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-bold px-5 py-2 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Saving…' : 'Save Attendance'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -535,13 +945,11 @@ function Corrections({ onError, onSuccess }) {
       {showForm && (
         <form onSubmit={submit} className="bg-white p-5 rounded-xl border border-gray-200/80 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Employee ID</label>
-            <input
-              type="number"
+            <EmployeePicker
               value={form.employee_id}
-              onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
-              placeholder="e.g. 94"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
+              onChange={(v) => setForm((f) => ({ ...f, employee_id: v }))}
+              label="Staff Member (Search name/phone/emp ID)"
+              required={true}
             />
           </div>
           <div className="space-y-1">

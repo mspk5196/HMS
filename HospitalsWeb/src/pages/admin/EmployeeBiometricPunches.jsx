@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
 import PageHeader from '../../components/PageHeader';
+import EmployeePicker from '../../components/EmployeePicker';
 import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
 import {
   BoltIcon,
@@ -182,11 +183,6 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
     window.print();
   };
 
-  // Filter employee dropdown by selected department
-  const filteredEmployees = selectedDept
-    ? employees.filter((e) => String(e.department_id) === String(selectedDept))
-    : employees;
-
   // Compute metrics for the selected employee's period
   const totalPunches = timelineData?.punches?.length || 0;
   const summaries = timelineData?.summaries || [];
@@ -203,32 +199,23 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
     });
   }
 
-  // Combine dates from summaries & punches (descending)
+  const totalWorkedMinutes = summaries.reduce((acc, s) => acc + Number(s.worked_minutes || 0), 0);
+  const totalWorkedHours = (totalWorkedMinutes / 60).toFixed(1);
+
+  // Combine dates from summaries & punches (descending for screen, ascending for print)
   const allDates = Array.from(
     new Set([...summaries.map((s) => s.attendance_date.slice(0, 10)), ...Object.keys(punchesByDate)])
   ).sort((a, b) => b.localeCompare(a));
+  const printDates = [...allDates].sort((a, b) => a.localeCompare(b));
 
   return (
-    <div className="space-y-6">
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #printable-punch-report, #printable-punch-report * { visibility: visible; }
-          #printable-punch-report {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 20px;
-          }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
-      {embedded ? (
-        <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 no-print">
+    <div>
+      {/* ═══════════════════════════════════════════════════════════════
+          SCREEN VIEW (Interactive UI - Hidden when printing)
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="space-y-6 print:hidden">
+        {embedded ? (
+          <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-bold text-gray-900">Employee Biometric Logs</h3>
             <p className="text-xs text-gray-500">Inspect individual employee raw biometric device punches, timestamps, and terminal logs.</p>
@@ -356,20 +343,16 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
             </select>
           </div>
 
-          {/* Employee Selector */}
+          {/* Employee Selector with Search */}
           <div className="space-y-1 sm:col-span-1 lg:col-span-2">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Select Staff Member</label>
-            <select
+            <EmployeePicker
+              label="Select Staff Member"
               value={selectedEmpId}
-              onChange={(e) => setSelectedEmpId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-bold text-blue-900 bg-white"
-            >
-              {filteredEmployees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  [{e.employee_code || `EMP-${e.id}`}] {e.full_name} · {e.department_name || 'Staff'} ({e.designation_name || 'Member'})
-                </option>
-              ))}
-            </select>
+              onChange={(empId) => setSelectedEmpId(empId)}
+              departmentId={selectedDept}
+              employees={employees}
+              placeholder="Search staff by name, phone, or emp ID…"
+            />
           </div>
 
           {/* View Mode Toggle */}
@@ -771,6 +754,193 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
           else loadRawTable();
         }}
       />
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          OFFICIAL PRINT DOCUMENT (Rendered ONLY in window.print())
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="hidden print:block w-full text-black bg-white font-sans text-[8pt] leading-tight">
+        {/* Hospital Official Letterhead */}
+        <div className="border-b-2 border-black pb-2 mb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-extrabold uppercase tracking-wide text-black m-0 leading-none">
+                NEHA HOSPITALS
+              </h1>
+              <div className="text-[8pt] text-gray-800 font-semibold mt-1">
+                Multi-Speciality Hospital &amp; Research Centre · Sathyamangalam, Tamil Nadu - 638401
+              </div>
+              <div className="text-[7pt] text-gray-600">
+                Ph: +91 4295 226000 | Email: hr@nehahospitals.com | Web: www.nehahospital.com
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="border border-black px-3 py-1 text-center rounded bg-gray-50 inline-block">
+                <span className="block text-[7pt] uppercase font-bold text-gray-700 tracking-wider">Official Biometric Record</span>
+                <span className="block text-[9pt] font-extrabold text-black uppercase">Staff Punch Log Report</span>
+              </div>
+              <div className="text-[7pt] text-gray-600 mt-1">
+                Printed: <strong className="text-black font-bold">{new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Employee Profile & Shift Details Box */}
+        {timelineData?.employee && (
+          <div className="border border-gray-400 rounded px-3 py-2 mb-2.5 bg-gray-50/60">
+            <div className="grid grid-cols-2 gap-4 pb-1.5 border-b border-gray-300">
+              <div>
+                <div className="text-[10pt] font-extrabold text-black flex items-center gap-2">
+                  <span>{timelineData.employee.full_name}</span>
+                  <span className="font-mono text-[8pt] font-bold bg-gray-200 px-1.5 py-0.5 rounded border border-gray-400">
+                    [{timelineData.employee.employee_code || `EMP-${timelineData.employee.id}`}]
+                  </span>
+                </div>
+                <div className="text-[7.5pt] text-gray-700 mt-0.5">
+                  <strong>Department:</strong> {timelineData.employee.department_name || 'General'} | <strong>Role:</strong> {timelineData.employee.designation_name || 'Staff'}
+                </div>
+              </div>
+              <div className="text-right text-[7.5pt] text-gray-800">
+                <div>
+                  <strong>Assigned Shift:</strong> {timelineData.employee.shift_name || 'Standard'} ({formatTime12(timelineData.employee.shift_start)} – {formatTime12(timelineData.employee.shift_end)})
+                </div>
+                <div className="text-gray-600">
+                  <strong>Report Period:</strong> {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick KPIs Summary Bar */}
+            <div className="grid grid-cols-4 gap-2 pt-1.5 text-center text-[7.5pt]">
+              <div className="border-r border-gray-300 pr-1">
+                <span className="text-[6.5pt] text-gray-500 uppercase font-semibold block">Total Punches</span>
+                <strong className="text-[9.5pt] font-extrabold text-black">{totalPunches}</strong>
+              </div>
+              <div className="border-r border-gray-300 pr-1">
+                <span className="text-[6.5pt] text-gray-500 uppercase font-semibold block">Days Present</span>
+                <strong className="text-[9.5pt] font-extrabold text-black">{presentDays} days</strong>
+              </div>
+              <div className="border-r border-gray-300 pr-1">
+                <span className="text-[6.5pt] text-gray-500 uppercase font-semibold block">Late Arrivals</span>
+                <strong className="text-[9.5pt] font-extrabold text-black">{lateDays}</strong>
+              </div>
+              <div>
+                <span className="text-[6.5pt] text-gray-500 uppercase font-semibold block">Total Worked Hours</span>
+                <strong className="text-[9.5pt] font-extrabold text-black">{totalWorkedHours} hrs</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Chronological Daily Punches Table */}
+        <table className="w-full border-collapse border border-black text-[7pt] mb-3">
+          <thead>
+            <tr className="bg-gray-200 border-b border-black text-[6.5pt] uppercase font-bold text-black text-center">
+              <th className="border border-black px-1.5 py-1 w-[24px]">#</th>
+              <th className="border border-black px-2 py-1 w-[80px] text-left">Date &amp; Day</th>
+              <th className="border border-black px-2 py-1 w-[70px] text-center">Status</th>
+              <th className="border border-black px-2 py-1 w-[70px] text-center">Machine IN</th>
+              <th className="border border-black px-2 py-1 w-[70px] text-center">Machine OUT</th>
+              <th className="border border-black px-2 py-1 w-[55px] text-center">Worked</th>
+              <th className="border border-black px-2 py-1 w-[50px] text-center">Late</th>
+              <th className="border border-black px-2 py-1 text-left">All Raw Biometric Machine Punches</th>
+            </tr>
+          </thead>
+          <tbody>
+            {printDates.map((dateStr, idx) => {
+              const dayPunches = punchesByDate[dateStr] || [];
+              const summary = summaries.find((s) => s.attendance_date.slice(0, 10) === dateStr);
+              const dateObj = new Date(dateStr);
+              const dayName = dateObj.toLocaleDateString('en-IN', { weekday: 'short' });
+              const dateFormatted = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+              const isSun = dateObj.getDay() === 0;
+
+              return (
+                <tr key={dateStr} className={`border-b border-gray-400 break-inside-avoid ${isSun ? 'bg-gray-50' : ''}`}>
+                  <td className="border border-black px-1.5 py-1 text-center text-gray-700 font-medium">
+                    {idx + 1}
+                  </td>
+                  <td className="border border-black px-2 py-1 font-bold text-black whitespace-nowrap">
+                    {dateFormatted} ({dayName})
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center uppercase font-bold">
+                    {summary?.status === 'present' ? (
+                      <span className="text-emerald-900">Present</span>
+                    ) : summary?.status === 'late_present' ? (
+                      <span className="text-amber-900">Late Present</span>
+                    ) : summary?.status === 'absent' ? (
+                      <span className="text-rose-900">Absent</span>
+                    ) : summary?.status === 'on_leave' || summary?.status === 'lop' ? (
+                      <span className="text-blue-900">Leave</span>
+                    ) : summary?.status === 'week_off' ? (
+                      <span className="text-gray-600">Week Off</span>
+                    ) : (
+                      <span className="text-gray-500">—</span>
+                    )}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center font-mono font-bold text-black">
+                    {formatTime12(summary?.in_time)}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center font-mono font-bold text-black">
+                    {formatTime12(summary?.out_time)}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center font-bold text-black">
+                    {summary?.worked_minutes > 0 ? `${(Number(summary.worked_minutes) / 60).toFixed(1)}h` : '—'}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-center font-semibold text-amber-900">
+                    {summary?.late_minutes > 0 ? `${summary.late_minutes}m` : '—'}
+                  </td>
+                  <td className="border border-black px-2 py-1 text-left text-[6.5pt]">
+                    {dayPunches.length === 0 ? (
+                      <span className="text-gray-400 italic">No physical punch logged</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {dayPunches.map((p, pIdx) => {
+                          const timeStr = formatTime12(p.punch_time.slice(11, 19));
+                          return (
+                            <span key={pIdx} className="border border-gray-400 px-1 py-0.2 rounded bg-gray-100 font-mono font-semibold">
+                              {timeStr} <span className="text-gray-500 text-[6pt]">({p.device_id || 'eSSL'})</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Verification & Signatures Block */}
+        <div className="pt-2 border-t-2 border-black grid grid-cols-3 gap-6 text-center text-[7.5pt] break-inside-avoid">
+          <div>
+            <div className="h-8"></div>
+            <div className="border-t border-black pt-1">
+              <strong className="block text-black font-bold uppercase">PREPARED BY</strong>
+              <span className="text-[6.5pt] text-gray-600 block">HR / Attendance In-Charge</span>
+              <span className="text-[6pt] text-gray-500 block">Signature &amp; Date</span>
+            </div>
+          </div>
+          <div>
+            <div className="h-8"></div>
+            <div className="border-t border-black pt-1">
+              <strong className="block text-black font-bold uppercase">VERIFIED BY</strong>
+              <span className="text-[6.5pt] text-gray-600 block">HR Manager / Accounts</span>
+              <span className="text-[6pt] text-gray-500 block">Signature &amp; Date</span>
+            </div>
+          </div>
+          <div>
+            <div className="h-8"></div>
+            <div className="border-t border-black pt-1">
+              <strong className="block text-black font-bold uppercase">EMPLOYEE ACKNOWLEDGEMENT</strong>
+              <span className="text-[6.5pt] text-gray-600 block">Staff Member Signature</span>
+              <span className="text-[6pt] text-gray-500 block">Signature &amp; Date</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

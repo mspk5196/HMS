@@ -14,7 +14,7 @@ const { success, created, paginated, fail } = require('../../utils/response');
 
 /** GET /api/attendance?date=YYYY-MM-DD  OR  ?fromDate=&toDate= */
 const listSummaries = asyncHandler(async (req, res) => {
-  let { date, fromDate, toDate, employeeId, departmentId, page = 1, limit = 50 } = req.query;
+  let { date, fromDate, toDate, employeeId, departmentId, search, status, page = 1, limit = 50 } = req.query;
   // Allow shorthand: ?date=YYYY-MM-DD  (single day)
   if (date && !fromDate) { fromDate = date; toDate = date; }
   if (!fromDate || !toDate) {
@@ -24,9 +24,43 @@ const listSummaries = asyncHandler(async (req, res) => {
     fromDate, toDate,
     employeeId: employeeId ? Number(employeeId) : null,
     departmentId: departmentId ? Number(departmentId) : null,
+    search: search || null,
+    status: status || null,
     page: Number(page), limit: Number(limit),
   });
   return res.json(paginated(result.rows, result.total, page, limit));
+});
+
+/** GET /api/attendance/register?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD */
+const getAttendanceRegister = asyncHandler(async (req, res) => {
+  let { fromDate, toDate, month, year, departmentId, search, status } = req.query;
+  
+  if (month && year && (!fromDate || !toDate)) {
+    const m = Number(month);
+    const y = Number(year);
+    const lastDay = new Date(y, m, 0).getDate();
+    fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  if (!fromDate || !toDate) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const lastDay = new Date(y, m, 0).getDate();
+    fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  const result = await svc.getAttendanceRegister({
+    fromDate,
+    toDate,
+    departmentId: departmentId ? Number(departmentId) : null,
+    search: search || null,
+    status: status || null,
+  });
+
+  return res.json(success(result));
 });
 
 /** GET /api/attendance/:employeeId/:date */
@@ -112,15 +146,22 @@ const getEmployeeTimeline = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/attendance/mark
- * Body: { employee_id, date, status }
+ * Body: { employee_id, date, status, in_time, out_time }
  */
 const manualMark = asyncHandler(async (req, res) => {
-  const { employee_id, date, status } = req.body;
+  const { employee_id, date, status, in_time, out_time } = req.body;
   if (!employee_id || !date || !status) {
     return res.status(400).json(fail('employee_id, date and status are required'));
   }
-  const markedBy = req.user?.id ?? null; // Set by auth middleware when ready
-  await svc.markAttendanceManually(Number(employee_id), date, status, markedBy);
+  const markedBy = req.user?.id ?? null;
+  await svc.markAttendanceManually(
+    Number(employee_id),
+    date,
+    status,
+    markedBy,
+    in_time || null,
+    out_time || null
+  );
   return res.json(success(null, 'Attendance marked manually'));
 });
 
@@ -393,8 +434,71 @@ const linkEnrolledUser = asyncHandler(async (req, res) => {
   return res.json(success(result, result.message || 'Updated biometric employee mapping.'));
 });
 
+/* ─── LATE ATTENDANCE FINES ─── */
+
+/** GET /api/attendance/late-fines/candidates?month=&year=&departmentId=&search=&filterMode= */
+const getLateFineCandidates = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const month = Number(req.query.month || now.getMonth() + 1);
+  const year = Number(req.query.year || now.getFullYear());
+  const departmentId = req.query.departmentId ? Number(req.query.departmentId) : null;
+  const search = req.query.search || null;
+  const filterMode = req.query.filterMode || 'exceeded'; // 'exceeded' | 'all_late'
+
+  const result = await svc.getLateFineCandidates({
+    month,
+    year,
+    departmentId,
+    search,
+    filterMode,
+  });
+
+  return res.json(success(result));
+});
+
+/** POST /api/attendance/late-fines/apply */
+const applyLateFines = asyncHandler(async (req, res) => {
+  const { month, year, fines, fine_date } = req.body;
+  const createdBy = req.user?.id ?? null;
+
+  if (!month || !year || !Array.isArray(fines) || fines.length === 0) {
+    return res.status(400).json(fail('month, year, and a non-empty fines array are required'));
+  }
+
+  const result = await svc.applyLateFines({
+    month,
+    year,
+    fines,
+    fineDate: fine_date,
+    createdBy,
+  });
+
+  return res.status(201).json(
+    success(result, `Successfully applied fines to ${result.applied_count} employee(s) totalling ₹${result.total_amount}.`)
+  );
+});
+
+/** PATCH /api/attendance/late-fines/:id/cancel */
+const cancelLateFine = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const cancelledBy = req.user?.id ?? null;
+  await svc.cancelLateFine(Number(id), { reason, cancelledBy });
+  return res.json(success(null, 'Late attendance fine cancelled.'));
+});
+
+/** PATCH /api/attendance/late-fines/:id/waive */
+const waiveLateFine = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const waivedBy = req.user?.id ?? null;
+  await svc.waiveLateFine(Number(id), { reason, waivedBy });
+  return res.json(success(null, 'Late attendance fine waived.'));
+});
+
 module.exports = {
   listSummaries,
+  getAttendanceRegister,
   getSummary,
   processDay,
   importPunches,
@@ -426,5 +530,9 @@ module.exports = {
   getNextEnrollCode,
   registerEnrolledUser,
   linkEnrolledUser,
+  getLateFineCandidates,
+  applyLateFines,
+  cancelLateFine,
+  waiveLateFine,
 };
 

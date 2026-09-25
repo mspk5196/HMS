@@ -331,17 +331,109 @@ const getDailySummary = async (employeeId, date) => {
   return rows[0] ?? null;
 };
 
-/** List daily summaries for a date range, optionally filtered by employee. */
-const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, page = 1, limit = 50 }) => {
-  const offset = (page - 1) * limit;
-  const filters = [];
-  const params = [];
+/** List daily summaries for a date range, optionally filtered by employee, department, search, and status. */
+/** List daily summaries for a date range, optionally filtered by employee, department, search, and status. */
+const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, search, status, page = 1, limit = 50 }) => {
+  const isSingleDay = fromDate === toDate;
+  const isAll = Number(limit) === -1 || Number(limit) >= 1000;
+  const lim = isAll ? 5000 : Math.max(1, Number(limit) || 50);
+  const offset = isAll ? 0 : (Math.max(1, Number(page) || 1) - 1) * lim;
 
+  // If viewing a single date (Daily Log view), start from employees to include all staff
+  if (isSingleDay) {
+    const filters = ["e.status = 'active'"];
+    const params = [fromDate]; // For ON ads.attendance_date = ?
+
+    if (employeeId) {
+      filters.push('e.id = ?');
+      params.push(employeeId);
+    }
+    if (departmentId) {
+      filters.push('e.department_id = ?');
+      params.push(departmentId);
+    }
+    if (search && String(search).trim()) {
+      filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+      params.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+    }
+    if (status && status !== 'all') {
+      if (status === 'missed_punch') {
+        filters.push('ads.is_missed_punch = 1');
+      } else if (status === 'absent') {
+        filters.push("(ads.status = 'absent' OR ads.status IS NULL)");
+      } else {
+        filters.push('ads.status = ?');
+        params.push(status);
+      }
+    }
+
+    const where = filters.join(' AND ');
+
+    const [rows] = await db.query(
+      `SELECT
+         COALESCE(ads.id, NULL) AS id,
+         e.id AS employee_id,
+         ? AS attendance_date,
+         ads.shift_id,
+         COALESCE(ads.status, 'absent') AS status,
+         ads.first_in_time AS first_punch_in,
+         ads.last_out_time AS last_punch_out,
+         ads.first_in_time,
+         ads.last_out_time,
+         COALESCE(ads.worked_minutes, 0) AS worked_minutes,
+         COALESCE(ads.late_minutes, 0) AS late_minutes,
+         COALESCE(ads.early_leave_minutes, 0) AS early_leave_minutes,
+         COALESCE(ads.is_missed_punch, 0) AS is_missed_punch,
+         ads.marked_by,
+         e.full_name,
+         e.employee_code,
+         d.name AS department_name,
+         COALESCE(s.name, e.shift_category, 'General Duty') AS shift_name
+       FROM employees e
+       LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       LEFT JOIN departments d ON d.id = e.department_id
+       LEFT JOIN shifts s ON s.id = ads.shift_id
+       WHERE ${where}
+       ORDER BY
+         (CASE WHEN ads.first_in_time IS NOT NULL OR ads.status IN ('present', 'late_present') THEN 0 ELSE 1 END),
+         COALESCE(ads.last_out_time, ads.first_in_time) DESC,
+         ads.first_in_time DESC,
+         d.name ASC,
+         e.full_name ASC
+       LIMIT ? OFFSET ?`,
+      [fromDate, fromDate, ...params.slice(1), lim, offset]
+    );
+
+    const [[{ total }]] = await db.execute(
+      `SELECT COUNT(*) AS total
+       FROM employees e
+       LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       WHERE ${where}`,
+      [fromDate, ...params.slice(1)]
+    );
+
+    return { rows, total };
+  }
+
+  // Multi-day range query:
+  const filters = [];
+  const params = [fromDate, toDate];
   filters.push('ads.attendance_date BETWEEN ? AND ?');
-  params.push(fromDate, toDate);
 
   if (employeeId) { filters.push('ads.employee_id = ?'); params.push(employeeId); }
   if (departmentId) { filters.push('e.department_id = ?'); params.push(departmentId); }
+  if (search && String(search).trim()) {
+    filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+    params.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+  }
+  if (status && status !== 'all') {
+    if (status === 'missed_punch') {
+      filters.push('ads.is_missed_punch = 1');
+    } else {
+      filters.push('ads.status = ?');
+      params.push(status);
+    }
+  }
 
   const where = filters.join(' AND ');
 
@@ -352,9 +444,9 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN shifts s ON s.id = ads.shift_id
      WHERE ${where}
-     ORDER BY ads.attendance_date DESC, e.full_name
+     ORDER BY ads.attendance_date DESC, COALESCE(ads.last_out_time, ads.first_in_time) DESC, ads.first_in_time DESC, e.full_name ASC
      LIMIT ? OFFSET ?`,
-    [...params, limit, offset]
+    [...params, lim, offset]
   );
 
   const [[{ total }]] = await db.execute(
@@ -366,6 +458,158 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
   );
 
   return { rows, total };
+};
+
+/** Get comprehensive attendance register & matrix (daily/weekly/monthly) */
+const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, status }) => {
+  const empFilters = ["e.status = 'active'"];
+  const empParams = [];
+
+  if (departmentId) {
+    empFilters.push('e.department_id = ?');
+    empParams.push(departmentId);
+  }
+  if (search && String(search).trim()) {
+    empFilters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+    empParams.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+  }
+
+  const empWhere = empFilters.join(' AND ');
+
+  const [employees] = await db.query(
+    `SELECT e.id, e.employee_code, e.full_name, e.department_id, e.designation_id, e.shift_category,
+            d.name AS department_name, sr.name AS designation_name,
+            e.custom_shift_start, e.custom_shift_end
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE ${empWhere}
+     ORDER BY d.name ASC, e.full_name ASC`,
+    empParams
+  );
+
+  const sumFilters = ['ads.attendance_date BETWEEN ? AND ?'];
+  const sumParams = [fromDate, toDate];
+  if (departmentId) {
+    sumFilters.push('e.department_id = ?');
+    sumParams.push(departmentId);
+  }
+  const sumWhere = sumFilters.join(' AND ');
+
+  const [summaries] = await db.query(
+    `SELECT ads.employee_id, ads.attendance_date, ads.status, ads.first_in_time, ads.last_out_time,
+            ads.worked_minutes, ads.late_minutes, ads.early_leave_minutes, ads.is_missed_punch, ads.is_manually_marked,
+            s.name AS shift_name
+     FROM attendance_daily_summary ads
+     JOIN employees e ON e.id = ads.employee_id
+     LEFT JOIN shifts s ON s.id = ads.shift_id
+     WHERE ${sumWhere}
+     ORDER BY ads.attendance_date ASC`,
+    sumParams
+  );
+
+  // Group summaries by employee_id
+  const summaryMap = new Map();
+  for (const row of summaries) {
+    if (!summaryMap.has(row.employee_id)) {
+      summaryMap.set(row.employee_id, {});
+    }
+    const dStr = String(row.attendance_date).slice(0, 10);
+    summaryMap.get(row.employee_id)[dStr] = row;
+  }
+
+  // Build matrix results
+  let overallPresent = 0;
+  let overallLate = 0;
+  let overallAbsent = 0;
+  let overallLeaves = 0;
+  let overallWorkedMinutes = 0;
+
+  const resultRows = [];
+
+  for (const emp of employees) {
+    const dayMap = summaryMap.get(emp.id) || {};
+    let pCount = 0;
+    let lCount = 0;
+    let aCount = 0;
+    let leaveCount = 0;
+    let lopCount = 0;
+    let woCount = 0;
+    let hdCount = 0;
+    let mpCount = 0;
+    let totalMins = 0;
+
+    for (const dStr of Object.keys(dayMap)) {
+      const rec = dayMap[dStr];
+      if (rec.status === 'present') pCount++;
+      else if (rec.status === 'late_present') { pCount++; lCount++; }
+      else if (rec.status === 'absent') aCount++;
+      else if (rec.status === 'on_leave') leaveCount++;
+      else if (rec.status === 'lop') lopCount++;
+      else if (rec.status === 'week_off') woCount++;
+      else if (rec.status === 'holiday') hdCount++;
+
+      if (rec.is_missed_punch) mpCount++;
+      totalMins += (Number(rec.worked_minutes) || 0);
+    }
+
+    // Apply status filter if requested
+    if (status && status !== 'all') {
+      if (status === 'present' && pCount === 0) continue;
+      if (status === 'absent' && aCount === 0) continue;
+      if (status === 'late_present' && lCount === 0) continue;
+      if (status === 'on_leave' && (leaveCount === 0 && lopCount === 0)) continue;
+      if (status === 'missed_punch' && mpCount === 0) continue;
+    }
+
+    overallPresent += pCount;
+    overallLate += lCount;
+    overallAbsent += aCount;
+    overallLeaves += (leaveCount + lopCount);
+    overallWorkedMinutes += totalMins;
+
+    resultRows.push({
+      employee_id: emp.id,
+      employee_code: emp.employee_code,
+      full_name: emp.full_name,
+      department_name: emp.department_name,
+      designation_name: emp.designation_name,
+      shift_category: emp.shift_category,
+      days: dayMap,
+      metrics: {
+        present_days: pCount,
+        late_days: lCount,
+        absent_days: aCount,
+        leave_days: leaveCount,
+        lop_days: lopCount,
+        week_off_days: woCount,
+        holiday_days: hdCount,
+        missed_punch_days: mpCount,
+        total_worked_minutes: totalMins,
+        total_worked_hours: (totalMins / 60).toFixed(1),
+        attendance_percentage: (pCount + aCount + leaveCount > 0) 
+          ? Math.round((pCount / (pCount + aCount + leaveCount)) * 100) 
+          : 0
+      }
+    });
+  }
+
+  return {
+    fromDate,
+    toDate,
+    totalEmployees: resultRows.length,
+    overallMetrics: {
+      total_present_days: overallPresent,
+      total_late_days: overallLate,
+      total_absent_days: overallAbsent,
+      total_leave_days: overallLeaves,
+      total_worked_hours: (overallWorkedMinutes / 60).toFixed(1),
+      avg_attendance_percentage: resultRows.length > 0 
+        ? Math.round(resultRows.reduce((s, r) => s + r.metrics.attendance_percentage, 0) / resultRows.length)
+        : 0
+    },
+    rows: resultRows
+  };
 };
 
 /** Upsert a processed daily summary row. */
@@ -431,18 +675,37 @@ const markLeaveDays = async (employeeId, dates, status) => {
   }
 };
 
-/** Admin manually marks an employee present/absent for a date. */
-const adminMarkAttendance = async (employeeId, date, status, markedBy) => {
+/** Admin manually marks an employee present/absent for a date with optional in/out times. */
+const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = null, outTime = null) => {
+  const fullIn = inTime ? (inTime.includes(' ') ? inTime : `${date} ${inTime.length === 5 ? inTime + ':00' : inTime}`) : null;
+  const fullOut = outTime ? (outTime.includes(' ') ? outTime : `${date} ${outTime.length === 5 ? outTime + ':00' : outTime}`) : null;
+  const isPresent = status === 'present';
+
   await db.execute(
     `INSERT INTO attendance_daily_summary
-       (employee_id, attendance_date, status, is_manually_marked, manually_marked_by, manually_marked_at)
-     VALUES (?, ?, ?, 1, ?, NOW())
+       (employee_id, attendance_date, status, first_in_time, last_out_time,
+        worked_minutes, late_minutes, is_missed_punch, is_manually_marked, manually_marked_by, manually_marked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, NOW())
      ON DUPLICATE KEY UPDATE
        status = VALUES(status),
+       first_in_time = IF(VALUES(first_in_time) IS NOT NULL, VALUES(first_in_time), first_in_time),
+       last_out_time = IF(VALUES(last_out_time) IS NOT NULL, VALUES(last_out_time), last_out_time),
+       worked_minutes = IF(VALUES(status) = 'present', GREATEST(COALESCE(worked_minutes, 0), 480), worked_minutes),
+       late_minutes = IF(VALUES(status) = 'present', 0, late_minutes),
+       is_missed_punch = IF(VALUES(status) = 'present', 0, is_missed_punch),
        is_manually_marked = 1,
        manually_marked_by = VALUES(manually_marked_by),
        manually_marked_at = NOW()`,
-    [employeeId, date, status, markedBy]
+    [
+      employeeId,
+      date,
+      status,
+      fullIn,
+      fullOut,
+      isPresent ? 480 : 0,
+      isPresent ? 0 : 0,
+      markedBy ?? null,
+    ]
   );
 };
 
@@ -1149,6 +1412,199 @@ const linkBiometricUser = async (id, employeeId) => {
   };
 };
 
+/* ─────────────────────────────────────────────
+   LATE ATTENDANCE FINES (Manual buffer overage fine assignment)
+───────────────────────────────────────────── */
+
+/** Ensure Late Attendance Fine type exists in fine_types table */
+const ensureLateFineType = async () => {
+  const [rows] = await db.query(
+    "SELECT id FROM fine_types WHERE name = 'Late Attendance Fine' LIMIT 1"
+  );
+  if (rows.length) return rows[0].id;
+
+  const [res] = await db.query(
+    `INSERT INTO fine_types (name, default_amount, trigger_rule, calculation_basis, description, is_active)
+     VALUES ('Late Attendance Fine', 100.00, 'manual', 'flat', 'Fine levied for late biometric attendance exceeding monthly buffer', 1)`
+  );
+  return res.insertId;
+};
+
+/** Get employees eligible/candidates for late attendance fines for a given month and year */
+const getLateFineCandidates = async ({ month, year, departmentId, search, filterMode = 'exceeded' }) => {
+  const m = Number(month);
+  const y = Number(year);
+  const lastDay = new Date(y, m, 0).getDate();
+  const fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+  const toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const empFilters = ["e.status = 'active'"];
+  const empParams = [m, y];
+
+  if (departmentId) {
+    empFilters.push('e.department_id = ?');
+    empParams.push(departmentId);
+  }
+  if (search && String(search).trim()) {
+    empFilters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+    empParams.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+  }
+
+  const [employees] = await db.query(
+    `SELECT e.id, e.employee_code, e.full_name, e.department_id, d.name AS department_name,
+            e.shift_category, e.custom_shift_start, e.custom_shift_end,
+            eab.buffer_allocated_minutes, eab.buffer_used_minutes, eab.buffer_remaining_minutes
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN employee_attendance_buffers eab 
+            ON eab.employee_id = e.id AND eab.period_month = ? AND eab.period_year = ?
+     WHERE ${empFilters.join(' AND ')}
+     ORDER BY e.full_name ASC`,
+    empParams
+  );
+
+  const [lateRows] = await db.query(
+    `SELECT ads.employee_id, DATE_FORMAT(ads.attendance_date, '%Y-%m-%d') AS attendance_date,
+            ads.late_minutes, ads.first_in_time, ads.last_out_time, ads.status
+     FROM attendance_daily_summary ads
+     WHERE ads.attendance_date BETWEEN ? AND ?
+       AND (ads.late_minutes > 0 OR ads.status = 'late_present')
+     ORDER BY ads.attendance_date ASC`,
+    [fromDate, toDate]
+  );
+
+  const [fines] = await db.query(
+    `SELECT f.id, f.employee_id, f.amount, f.fine_date, f.reason, f.status, f.created_at, u.username AS created_by_name
+     FROM fines f
+     LEFT JOIN users u ON u.id = f.created_by
+     WHERE f.assigned_month = ? AND f.assigned_year = ? AND f.status != 'cancelled'
+     ORDER BY f.created_at DESC`,
+    [m, y]
+  );
+
+  const lateMap = {};
+  for (const r of lateRows) {
+    if (!lateMap[r.employee_id]) lateMap[r.employee_id] = [];
+    lateMap[r.employee_id].push(r);
+  }
+
+  const finesMap = {};
+  for (const f of fines) {
+    if (!finesMap[f.employee_id]) finesMap[f.employee_id] = [];
+    finesMap[f.employee_id].push(f);
+  }
+
+  let candidates = [];
+  for (const emp of employees) {
+    const lates = lateMap[emp.id] || [];
+    const empFines = finesMap[emp.id] || [];
+    const allocated = Number(emp.buffer_allocated_minutes ?? 60);
+    const used = Number(emp.buffer_used_minutes ?? 0);
+    const remaining = Number(emp.buffer_remaining_minutes ?? Math.max(0, allocated - used));
+    const totalLateMinutes = lates.reduce((acc, l) => acc + Number(l.late_minutes || 0), 0);
+    const excessMinutes = Math.max(0, used - allocated);
+    const isExceeded = remaining <= 0 || used >= allocated;
+
+    // Filter out if no late punches at all
+    if (lates.length === 0) continue;
+
+    // Check filterMode
+    if (filterMode === 'exceeded' && !isExceeded) continue;
+
+    const activeFines = empFines.filter((f) => f.status === 'active' || f.status === 'deducted');
+    const hasActiveFine = activeFines.length > 0;
+    const activeFineAmount = activeFines.reduce((s, f) => s + Number(f.amount || 0), 0);
+
+    candidates.push({
+      employee_id: emp.id,
+      employee_code: emp.employee_code,
+      full_name: emp.full_name,
+      department_name: emp.department_name || 'General',
+      shift_category: emp.shift_category,
+      buffer_allocated_minutes: allocated,
+      buffer_used_minutes: used,
+      buffer_remaining_minutes: remaining,
+      buffer_excess_minutes: excessMinutes,
+      total_late_minutes: totalLateMinutes,
+      total_late_days: lates.length,
+      is_buffer_exceeded: isExceeded,
+      late_dates: lates,
+      existing_fines: empFines,
+      has_active_fine: hasActiveFine,
+      active_fine_amount: activeFineAmount,
+    });
+  }
+
+  return {
+    candidates,
+    total_candidates: candidates.length,
+    month: m,
+    year: y,
+    period_from: fromDate,
+    period_to: toDate,
+  };
+};
+
+/** Bulk apply late attendance fines to selected employees */
+const applyLateFines = async ({ month, year, fines, fineDate, createdBy }) => {
+  if (!Array.isArray(fines) || fines.length === 0) {
+    throw new Error('No employee fine selections provided.');
+  }
+
+  const fineTypeId = await ensureLateFineType();
+  const m = Number(month);
+  const y = Number(year);
+  const defaultDate = fineDate || `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  const createdIds = [];
+  let totalAmount = 0;
+
+  for (const item of fines) {
+    const empId = Number(item.employee_id);
+    const amt = Number(item.amount || 0);
+    if (!empId || amt <= 0) continue;
+
+    const reason = String(item.reason || `Late Attendance Fine - ${m}/${y} (${item.late_days || 1} late day(s))`).trim();
+    const dateToUse = item.fine_date || defaultDate;
+
+    const [res] = await db.execute(
+      `INSERT INTO fines (employee_id, fine_type_id, amount, fine_date, reason, created_by,
+         is_auto_generated, assigned_month, assigned_year, status)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'active')`,
+      [empId, fineTypeId, amt, dateToUse, reason, createdBy ?? null, m, y]
+    );
+
+    createdIds.push(res.insertId);
+    totalAmount += amt;
+  }
+
+  return {
+    applied_count: createdIds.length,
+    total_amount: totalAmount,
+    fine_ids: createdIds,
+  };
+};
+
+/** Cancel a fine */
+const cancelLateFine = async (fineId, { reason, cancelledBy }) => {
+  await db.execute(
+    `UPDATE fines SET status = 'cancelled', waived_by = ?, waived_at = NOW(), waiver_reason = ?
+     WHERE id = ?`,
+    [cancelledBy ?? null, reason || 'Cancelled by admin', fineId]
+  );
+  return { success: true };
+};
+
+/** Waive a fine */
+const waiveLateFine = async (fineId, { reason, waivedBy }) => {
+  await db.execute(
+    `UPDATE fines SET status = 'waived', waived_by = ?, waived_at = NOW(), waiver_reason = ?
+     WHERE id = ?`,
+    [waivedBy ?? null, reason || 'Waived by admin', fineId]
+  );
+  return { success: true };
+};
+
 module.exports = {
   bulkInsertPunches,
   resolveEmployeeCodes,
@@ -1164,6 +1620,7 @@ module.exports = {
   createBiometricWindow,
   getDailySummary,
   listDailySummaries,
+  getAttendanceRegister,
   upsertDailySummary,
   markLeaveDays,
   adminMarkAttendance,
@@ -1191,5 +1648,9 @@ module.exports = {
   getNextBiometricEnrollCode,
   registerSingleBiometricUser,
   linkBiometricUser,
+  getLateFineCandidates,
+  applyLateFines,
+  cancelLateFine,
+  waiveLateFine,
 };
 

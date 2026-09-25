@@ -33,8 +33,18 @@ const timeToMinutes = (t) => {
   return h * 60 + m;
 };
 
-/** A Date → minutes since midnight, in the server's local zone. */
+/** A Date or 'YYYY-MM-DD HH:MM:SS' string → minutes since midnight without timezone shifts */
 const dateToMinutes = (d) => {
+  if (!d) return null;
+  const timeStr = String(d).includes('T')
+    ? String(d).split('T')[1]?.replace(/Z$/, '')
+    : String(d).includes(' ')
+    ? String(d).split(' ')[1]
+    : String(d);
+  const parts = timeStr.split(':');
+  if (parts.length >= 2) {
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  }
   const dt = new Date(d);
   return dt.getHours() * 60 + dt.getMinutes();
 };
@@ -42,7 +52,24 @@ const dateToMinutes = (d) => {
 const toISODate = (d) =>
   d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
 
-const minutesBetween = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
+const minutesBetween = (a, b) => {
+  if (!a || !b) return 0;
+  const strA = String(a).replace(' ', 'T');
+  const strB = String(b).replace(' ', 'T');
+  const msA = new Date(strA).getTime();
+  const msB = new Date(strB).getTime();
+  if (!isNaN(msA) && !isNaN(msB)) {
+    return Math.max(0, Math.round((msB - msA) / 60000));
+  }
+  const minA = dateToMinutes(a);
+  const minB = dateToMinutes(b);
+  if (minA !== null && minB !== null) {
+    let diff = minB - minA;
+    if (diff < 0) diff += 1440;
+    return Math.max(0, diff);
+  }
+  return 0;
+};
 
 /**
  * Is `minute` inside [start, end]? Handles windows that wrap past midnight,
@@ -366,17 +393,28 @@ const processDailyAttendance = async (date) => {
     const shift = await getShiftForDate(employeeId, date);
     const override = await q.getBiometricWindow(date, employee.designation_id ?? null);
 
-    empPunches.sort((a, b) => new Date(a.punch_time) - new Date(b.punch_time));
+    empPunches.sort((a, b) => new Date(String(a.punch_time).replace(' ', 'T')) - new Date(String(b.punch_time).replace(' ', 'T')));
     const { ins, outs } = classifyPunches(empPunches, shift, override);
 
-    if (!ins.length && !outs.length) {
-      // Every punch fell outside the accepted windows.
+    let firstIn = ins.length ? ins[0].punch_time : null;
+    let lastOut = outs.length ? outs[outs.length - 1].punch_time : null;
+
+    // Fallback: If no punch fell into strict windows, or if employee has punches
+    if (!firstIn && empPunches.length > 0) {
+      firstIn = empPunches[0].punch_time;
+    }
+    if (!lastOut && empPunches.length > 1) {
+      const lastP = empPunches[empPunches.length - 1];
+      if (lastP.punch_time !== firstIn && minutesBetween(firstIn, lastP.punch_time) >= 10) {
+        lastOut = lastP.punch_time;
+      }
+    }
+
+    if (!firstIn && !lastOut) {
       skipped++;
       continue;
     }
 
-    const firstIn = ins.length ? ins[0].punch_time : null;
-    const lastOut = outs.length ? outs[outs.length - 1].punch_time : null;
     const isMissedPunch = !firstIn || !lastOut;
 
     // Lateness is measured against the shift start, after the daily grace.
@@ -441,6 +479,42 @@ const processDailyAttendance = async (date) => {
     }
 
     processed++;
+  }
+
+  // Also record active employees who have no biometric punches on this date
+  try {
+    const [activeEmployees] = await db.query(
+      "SELECT id, department_id, designation_id FROM employees WHERE status = 'active'"
+    );
+
+    for (const emp of activeEmployees) {
+      if (!byEmployee[emp.id]) {
+        const existing = await q.getDailySummary(emp.id, date);
+        // If already recorded (e.g. manually marked present, on_leave, etc.), preserve it
+        if (!existing) {
+          const shift = await getShiftForDate(emp.id, date);
+          const status = shift?.is_week_off ? 'week_off' : 'absent';
+          await q.upsertDailySummary({
+            employee_id: emp.id,
+            attendance_date: date,
+            shift_id: shift?.shift_id ?? null,
+            status,
+            first_punch_in: null,
+            last_punch_out: null,
+            worked_minutes: 0,
+            break_minutes: 0,
+            late_minutes: 0,
+            early_leave_minutes: 0,
+            is_missed_punch: 0,
+            biometric_window_extended: false,
+            overtime_minutes: 0,
+          });
+          processed++;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[processDailyAttendance] Warning processing non-punch staff:', err.message);
   }
 
   await db.execute(
@@ -541,13 +615,13 @@ const importPunches = async (rows) => {
    ADMIN ACTIONS
 ───────────────────────────────────────────── */
 
-const markAttendanceManually = async (employeeId, date, status, markedBy) => {
+const markAttendanceManually = async (employeeId, date, status, markedBy, inTime = null, outTime = null) => {
   // Must match the attendance_daily_summary.status enum exactly.
   const validStatuses = ['present', 'late_present', 'absent', 'on_leave', 'lop', 'week_off', 'holiday'];
   if (!validStatuses.includes(status)) {
     throw new AppError(`Invalid status. Allowed: ${validStatuses.join(', ')}`, 400);
   }
-  await q.adminMarkAttendance(employeeId, date, status, markedBy);
+  await q.adminMarkAttendance(employeeId, date, status, markedBy, inTime, outTime);
 };
 
 const submitCorrectionRequest = async (data) => {
@@ -674,9 +748,14 @@ module.exports = {
   getShiftForDate,
   classifyPunches,
   listDailySummaries: q.listDailySummaries,
+  getAttendanceRegister: q.getAttendanceRegister,
   getDailySummary: q.getDailySummary,
   listBiometricWindows: q.listBiometricWindows,
   listCorrectionRequests: q.listCorrectionRequests,
   getBufferSummary: q.getBufferSummary,
   getUnmatchedPunches: q.getUnmatchedPunches,
+  getLateFineCandidates: q.getLateFineCandidates,
+  applyLateFines: q.applyLateFines,
+  cancelLateFine: q.cancelLateFine,
+  waiveLateFine: q.waiveLateFine,
 };
