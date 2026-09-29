@@ -162,7 +162,7 @@ const DEFAULT_SHIFT = buildResolvedShift({
  *      - general: individually configured per employee (custom_shift_start/end + custom_buffer_minutes)
  *   4. Hard fallback 08:00–18:00
  */
-const getShiftForDate = async (employeeId, date) => {
+const getShiftForDate = async (employeeId, date, dayPunches = []) => {
   // Priority 1 — single-day override
   const [overrideRows] = await db.execute(
     `SELECT start_time, end_time FROM employee_shift_overrides
@@ -235,12 +235,40 @@ const getShiftForDate = async (employeeId, date) => {
         [isNight ? 1 : 0]
       );
       const configured = shiftRows[0];
-      const start = configured?.start_time || (isNight ? '18:00:00' : '08:00:00');
-      const end = configured?.end_time || (isNight ? '08:00:00' : '18:00:00');
+      const start = configured?.start_time || (isNight ? '20:00:00' : '08:30:00');
+      const end = configured?.end_time || (isNight ? '08:00:00' : '18:30:00');
       const grace = configured?.grace_period_minutes ?? 10;
       return buildResolvedShift({
         shift_id: configured?.id ?? null,
         shift_name: configured?.name || (isNight ? 'Night Shift' : 'Day Shift'),
+        start_time: start,
+        end_time: end,
+        is_night_shift: isNight ? 1 : 0,
+        grace_period_minutes: grace,
+      });
+    }
+
+    // Day & Night (Duty Roster): Automatically infers Day vs Night based on punches if no manual roster entry
+    if (emp.shift_category === 'day_and_night') {
+      let isNight = false;
+      if (Array.isArray(dayPunches) && dayPunches.length > 0) {
+        const firstP = String(dayPunches[0].punch_time || '');
+        const timePart = firstP.includes(' ') ? firstP.split(' ')[1] : firstP.slice(11, 16);
+        if (timePart >= '17:00:00' || (timePart && timePart < '06:30:00')) {
+          isNight = true;
+        }
+      }
+      const [shiftRows] = await db.execute(
+        `SELECT id, name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
+        [isNight ? 1 : 0]
+      );
+      const configured = shiftRows[0];
+      const start = configured?.start_time || (isNight ? '20:00:00' : '08:30:00');
+      const end = configured?.end_time || (isNight ? '08:00:00' : '18:30:00');
+      const grace = configured?.grace_period_minutes ?? 10;
+      return buildResolvedShift({
+        shift_id: configured?.id ?? null,
+        shift_name: configured?.name || (isNight ? 'Duty Roster (Night)' : 'Duty Roster (Day)'),
         start_time: start,
         end_time: end,
         is_night_shift: isNight ? 1 : 0,
@@ -280,8 +308,8 @@ const getShiftForDate = async (employeeId, date) => {
   // Priority 4 — hard fallback
   return buildResolvedShift({
     shift_name: 'Default (unrostered)',
-    start_time: '08:00:00',
-    end_time: '18:00:00',
+    start_time: '08:30:00',
+    end_time: '18:30:00',
     is_night_shift: 0,
     grace_period_minutes: 10,
   });
@@ -390,7 +418,7 @@ const processDailyAttendance = async (date) => {
     const employeeId = Number(empId);
     const { employee, punches: empPunches } = byEmployee[empId];
 
-    const shift = await getShiftForDate(employeeId, date);
+    const shift = await getShiftForDate(employeeId, date, empPunches);
     const override = await q.getBiometricWindow(date, employee.designation_id ?? null);
 
     empPunches.sort((a, b) => new Date(String(a.punch_time).replace(' ', 'T')) - new Date(String(b.punch_time).replace(' ', 'T')));

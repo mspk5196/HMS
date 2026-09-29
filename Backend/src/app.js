@@ -45,9 +45,13 @@ app.use(express.json());
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Log requests
+// Log HTTP requests without logging request body, query parameters, or sensitive payload data
 app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.url}`, req.body);
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${req.method}] ${req.originalUrl || req.url} - ${res.statusCode} (${duration}ms)`);
+  });
   next();
 });
 

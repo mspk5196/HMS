@@ -294,9 +294,6 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
         : (formData.shiftCategory === 'night'
           ? shiftConfigs.night.end
           : (formData.shiftCategory === 'general' ? formData.customShiftEnd : null)),
-      customBufferMinutes: formData.shiftCategory === 'general'
-        ? (formData.bufferMinutes !== '' && formData.bufferMinutes !== undefined ? Number(formData.bufferMinutes) : 10)
-        : null,
       salary_type: 'monthly',
       basicSalary: calculatedBasic,
       perDaySalary: calculatedPerDay,
@@ -678,32 +675,9 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
                     {errors.customShiftEnd && <p className="text-[11px] text-red-500">{errors.customShiftEnd}</p>}
                   </div>
 
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                      Buffer Mins (Grace Period)
-                    </label>
-                    <div className="relative max-w-xs">
-                      <input
-                        type="number"
-                        min="0"
-                        max="60"
-                        value={formData.bufferMinutes ?? 10}
-                        onChange={(e) => handleChange('bufferMinutes', e.target.value)}
-                        placeholder="10"
-                        className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 pointer-events-none">
-                        mins
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-400">
-                      Allowed arrival grace period in minutes before lateness applies.
-                    </p>
-                  </div>
-
                   <div className="md:col-span-2">
                     <p className="text-[11px] text-gray-400">
-                      General shift hours and grace buffer are unique to each employee.
+                      General shift hours are custom to this employee. Monthly buffer limits are governed hospital-wide in Shift Timings.
                     </p>
                   </div>
                 </>

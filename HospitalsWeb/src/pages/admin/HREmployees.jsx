@@ -852,17 +852,6 @@ export default function HREmployees() {
                                 value={form.custom_shift_end}
                                 onChange={(v) => setForm((f) => ({ ...f, custom_shift_end: v }))}
                               />
-                              <div className="sm:col-span-2">
-                                <Input
-                                  type="number"
-                                  label="Buffer Mins (Grace Period)"
-                                  value={form.custom_buffer_minutes ?? 10}
-                                  onChange={(v) => setForm((f) => ({ ...f, custom_buffer_minutes: v }))}
-                                  min="0"
-                                  max="60"
-                                  hint="Allowed arrival grace period in minutes before lateness applies"
-                                />
-                              </div>
                             </>
                           )}
                         </div>
@@ -1683,17 +1672,17 @@ function ShiftOverridesSection({ employeeId, employeeName, onSuccess, onError })
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setForm((f) => ({ ...f, start_time: '09:00', end_time: '17:00' }))}
+              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs.day.start, end_time: shiftConfigs.day.end }))}
               className="px-2 py-1 text-[10px] font-semibold bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded cursor-pointer"
             >
-              Preset: Day (09:00–17:00)
+              Preset: Day ({shiftConfigs.day.start}–{shiftConfigs.day.end})
             </button>
             <button
               type="button"
-              onClick={() => setForm((f) => ({ ...f, start_time: '20:00', end_time: '08:00' }))}
+              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs.night.start, end_time: shiftConfigs.night.end }))}
               className="px-2 py-1 text-[10px] font-semibold bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded cursor-pointer"
             >
-              Preset: Night (20:00–08:00)
+              Preset: Night ({shiftConfigs.night.start}–{shiftConfigs.night.end})
             </button>
           </div>
 

@@ -716,19 +716,47 @@ const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = 
    LATE-BUFFER POOL
 ───────────────────────────────────────────── */
 
+/** Helper to get monthly buffer minutes configured for a shift category */
+const getShiftCategoryBuffer = async (shiftCategory) => {
+  try {
+    if (shiftCategory === 'night') {
+      const [rows] = await db.query("SELECT buffer_minutes FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1");
+      if (rows.length && rows[0].buffer_minutes != null) return Number(rows[0].buffer_minutes);
+      return 30;
+    }
+    if (shiftCategory === 'day') {
+      const [rows] = await db.query("SELECT buffer_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1");
+      if (rows.length && rows[0].buffer_minutes != null) return Number(rows[0].buffer_minutes);
+      return 30;
+    }
+    if (shiftCategory === 'day_and_night') {
+      const [rows] = await db.query("SELECT config_value FROM system_config WHERE config_key = 'BUFFER_POOL_DAY_AND_NIGHT' LIMIT 1");
+      if (rows.length && rows[0].config_value != null) return Number(rows[0].config_value);
+      return 30;
+    }
+    if (shiftCategory === 'general') {
+      const [rows] = await db.query("SELECT config_value FROM system_config WHERE config_key = 'BUFFER_POOL_GENERAL' LIMIT 1");
+      if (rows.length && rows[0].config_value != null) return Number(rows[0].config_value);
+      return 30;
+    }
+    const [rows] = await db.query("SELECT buffer_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1");
+    if (rows.length && rows[0].buffer_minutes != null) return Number(rows[0].buffer_minutes);
+  } catch (err) {
+    // Fallback in case table/columns don't exist yet
+  }
+  return 30;
+};
+
 /** Get or create the buffer record for an employee + period.
- *  Reads the allocation from the employee's role (staff_roles.monthly_buffer_minutes).
- *  Falls back to defaultMinutes if no role found. */
+ *  Reads the allocation from the employee's shift category.
+ *  Falls back to defaultMinutes if not found. */
 const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) => {
-  // Fetch the role-based allocation
-  const [roleRows] = await db.execute(
-    `SELECT COALESCE(sr.monthly_buffer_minutes, ?) AS alloc
-     FROM employees e
-     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
-     WHERE e.id = ?`,
-    [defaultMinutes, employeeId]
+  const [empRows] = await db.execute(
+    `SELECT e.shift_category FROM employees e WHERE e.id = ?`,
+    [employeeId]
   );
-  const allocMinutes = roleRows[0]?.alloc ?? defaultMinutes;
+  const shiftCat = empRows[0]?.shift_category || 'day';
+  const allocMinutes = await getShiftCategoryBuffer(shiftCat);
 
   await db.execute(
     // buffer_remaining_minutes is a generated column — never write to it.
@@ -745,18 +773,18 @@ const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) =
   return rows[0];
 };
 
-/** Get full buffer status for one employee in a period, including role allocation. */
+/** Get full buffer status for one employee in a period, including shift category allocation. */
 const getEmployeeBufferWithRole = async (employeeId, month, year) => {
-  // Ensure buffer row exists
-  const [roleRows] = await db.execute(
-    `SELECT COALESCE(sr.monthly_buffer_minutes, 30) AS alloc, sr.name AS role_name
+  const [empRows] = await db.execute(
+    `SELECT e.shift_category, sr.name AS role_name
      FROM employees e
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      WHERE e.id = ?`,
     [employeeId]
   );
-  const allocMinutes = roleRows[0]?.alloc ?? 30;
-  const roleName = roleRows[0]?.role_name ?? 'Unknown';
+  const shiftCat = empRows[0]?.shift_category || 'day';
+  const roleName = empRows[0]?.role_name ?? 'Unknown';
+  const allocMinutes = await getShiftCategoryBuffer(shiftCat);
 
   await db.execute(
     // buffer_remaining_minutes is a generated column — never write to it.
@@ -772,7 +800,7 @@ const getEmployeeBufferWithRole = async (employeeId, month, year) => {
      WHERE eab.employee_id = ? AND eab.period_month = ? AND eab.period_year = ?`,
     [employeeId, month, year]
   );
-  return { ...rows[0], role_name: roleName, role_allocated_minutes: allocMinutes };
+  return { ...rows[0], role_name: roleName, role_allocated_minutes: allocMinutes, shift_category: shiftCat };
 };
 
 /** Deduct lateMinutes from the pool. buffer_remaining_minutes is generated. */
@@ -1455,10 +1483,12 @@ const getLateFineCandidates = async ({ month, year, departmentId, search, filter
 
   const [employees] = await db.query(
     `SELECT e.id, e.employee_code, e.full_name, e.department_id, d.name AS department_name,
+            sr.name AS designation_name, sr.is_doctor,
             e.shift_category, e.custom_shift_start, e.custom_shift_end,
             eab.buffer_allocated_minutes, eab.buffer_used_minutes, eab.buffer_remaining_minutes
      FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      LEFT JOIN employee_attendance_buffers eab 
             ON eab.employee_id = e.id AND eab.period_month = ? AND eab.period_year = ?
      WHERE ${empFilters.join(' AND ')}
@@ -1501,7 +1531,8 @@ const getLateFineCandidates = async ({ month, year, departmentId, search, filter
   for (const emp of employees) {
     const lates = lateMap[emp.id] || [];
     const empFines = finesMap[emp.id] || [];
-    const allocated = Number(emp.buffer_allocated_minutes ?? 60);
+    const defaultShiftAlloc = await getShiftCategoryBuffer(emp.shift_category);
+    const allocated = Number(emp.buffer_allocated_minutes ?? defaultShiftAlloc);
     const used = Number(emp.buffer_used_minutes ?? 0);
     const remaining = Number(emp.buffer_remaining_minutes ?? Math.max(0, allocated - used));
     const totalLateMinutes = lates.reduce((acc, l) => acc + Number(l.late_minutes || 0), 0);
@@ -1523,6 +1554,8 @@ const getLateFineCandidates = async ({ month, year, departmentId, search, filter
       employee_code: emp.employee_code,
       full_name: emp.full_name,
       department_name: emp.department_name || 'General',
+      designation_name: emp.designation_name || '',
+      is_doctor: emp.is_doctor ? 1 : 0,
       shift_category: emp.shift_category,
       buffer_allocated_minutes: allocated,
       buffer_used_minutes: used,

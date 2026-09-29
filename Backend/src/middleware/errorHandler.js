@@ -19,7 +19,7 @@ const errorHandler = (err, req, res, next) => {
     return res.status(400).json(fail('Reference not found — a linked record does not exist.'));
   }
 
-  console.error('[UNHANDLED ERROR]', err);
+  console.error(`[UNHANDLED ERROR] [${req.method}] ${req.originalUrl || req.url}:`, err);
   return res.status(500).json(fail(`Internal server error: ${err.message}`));
 };
 

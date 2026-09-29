@@ -361,7 +361,40 @@ const listRoles = async () => {
 /* ─── SHIFTS ─── */
 const listShifts = async () => {
   const [rows] = await db.execute(`SELECT * FROM shifts ORDER BY name`);
-  return rows;
+  
+  // Fetch system-wide buffer configs for Day & Night (Duty Roster) and General (Custom) shifts
+  const [cfgRows] = await db.execute(
+    `SELECT config_key, config_value FROM system_config 
+     WHERE config_key IN ('BUFFER_POOL_DAY_AND_NIGHT', 'BUFFER_POOL_GENERAL', 'DEFAULT_BUFFER_MINUTES')`
+  );
+  const cfgMap = {};
+  for (const c of cfgRows) {
+    cfgMap[c.config_key] = c.config_value;
+  }
+
+  const d = rows.find((s) => !s.is_night_shift);
+  const n = rows.find((s) => s.is_night_shift);
+
+  const bufferConfigs = {
+    day: {
+      monthly_buffer_minutes: d?.buffer_minutes ?? 30,
+      grace_period_minutes: d?.grace_period_minutes ?? 10,
+    },
+    night: {
+      monthly_buffer_minutes: n?.buffer_minutes ?? 30,
+      grace_period_minutes: n?.grace_period_minutes ?? 10,
+    },
+    day_and_night: {
+      monthly_buffer_minutes: cfgMap['BUFFER_POOL_DAY_AND_NIGHT'] ? Number(cfgMap['BUFFER_POOL_DAY_AND_NIGHT']) : 30,
+      grace_period_minutes: 10,
+    },
+    general: {
+      monthly_buffer_minutes: cfgMap['BUFFER_POOL_GENERAL'] ? Number(cfgMap['BUFFER_POOL_GENERAL']) : 30,
+      grace_period_minutes: 10,
+    },
+  };
+
+  return { shifts: rows, bufferConfigs };
 };
 
 const createShift = async (data) => {
@@ -379,7 +412,7 @@ const createShift = async (data) => {
 
 const updateShift = async (id, data) => {
   const allowed = [
-    'name', 'start_time', 'end_time', 'is_night_shift', 'grace_period_minutes', 
+    'name', 'start_time', 'end_time', 'is_night_shift', 'grace_period_minutes', 'buffer_minutes',
     'biometric_in_start', 'biometric_in_end', 'biometric_out_start', 'biometric_out_end', 'is_active'
   ];
   const fields = [];
@@ -407,41 +440,70 @@ const updateShiftTimings = async (data) => {
       }
     }
   } else {
+    // 1. Day Shift
     if (data.dayShift) {
-      const { start_time, end_time, grace_period_minutes } = data.dayShift;
-      const [rows] = await db.execute(`SELECT id, start_time, end_time FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
+      const { start_time, end_time, grace_period_minutes, monthly_buffer_minutes } = data.dayShift;
+      const [rows] = await db.execute(`SELECT id, start_time, end_time, grace_period_minutes, buffer_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
       if (rows.length) {
         const sTime = start_time || rows[0].start_time;
         const eTime = end_time || rows[0].end_time;
+        const grace = grace_period_minutes !== undefined ? Number(grace_period_minutes) : rows[0].grace_period_minutes;
+        const buffer = monthly_buffer_minutes !== undefined ? Number(monthly_buffer_minutes) : rows[0].buffer_minutes;
         await db.execute(
           `UPDATE shifts 
-           SET start_time = ?, end_time = ?, grace_period_minutes = COALESCE(?, grace_period_minutes),
+           SET start_time = ?, end_time = ?, grace_period_minutes = ?, buffer_minutes = ?,
                biometric_in_start = SUBTIME(?, '01:00:00'),
                biometric_in_end = ?,
                biometric_out_start = ?,
                biometric_out_end = ADDTIME(?, '01:00:00')
            WHERE id = ?`,
-          [sTime, eTime, grace_period_minutes !== undefined ? Number(grace_period_minutes) : null, sTime, sTime, eTime, eTime, rows[0].id]
+          [sTime, eTime, grace, buffer, sTime, sTime, eTime, eTime, rows[0].id]
         );
       }
     }
+
+    // 2. Night Shift
     if (data.nightShift) {
-      const { start_time, end_time, grace_period_minutes } = data.nightShift;
-      const [rows] = await db.execute(`SELECT id, start_time, end_time FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
+      const { start_time, end_time, grace_period_minutes, monthly_buffer_minutes } = data.nightShift;
+      const [rows] = await db.execute(`SELECT id, start_time, end_time, grace_period_minutes, buffer_minutes FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
       if (rows.length) {
         const sTime = start_time || rows[0].start_time;
         const eTime = end_time || rows[0].end_time;
+        const grace = grace_period_minutes !== undefined ? Number(grace_period_minutes) : rows[0].grace_period_minutes;
+        const buffer = monthly_buffer_minutes !== undefined ? Number(monthly_buffer_minutes) : rows[0].buffer_minutes;
         await db.execute(
           `UPDATE shifts 
-           SET start_time = ?, end_time = ?, grace_period_minutes = COALESCE(?, grace_period_minutes),
+           SET start_time = ?, end_time = ?, grace_period_minutes = ?, buffer_minutes = ?,
                biometric_in_start = SUBTIME(?, '01:00:00'),
                biometric_in_end = ?,
                biometric_out_start = ?,
                biometric_out_end = ADDTIME(?, '01:00:00')
            WHERE id = ?`,
-          [sTime, eTime, grace_period_minutes !== undefined ? Number(grace_period_minutes) : null, sTime, sTime, eTime, eTime, rows[0].id]
+          [sTime, eTime, grace, buffer, sTime, sTime, eTime, eTime, rows[0].id]
         );
       }
+    }
+
+    // 3. Day & Night Shift (Duty Roster) Monthly Buffer Limit
+    if (data.dayAndNightShift && data.dayAndNightShift.monthly_buffer_minutes !== undefined) {
+      const bufVal = String(Number(data.dayAndNightShift.monthly_buffer_minutes) || 30);
+      await db.execute(
+        `INSERT INTO system_config (config_key, config_value, config_group, value_type, description)
+         VALUES ('BUFFER_POOL_DAY_AND_NIGHT', ?, 'attendance', 'integer', 'Monthly late buffer pool for Day & Night rotational staff')
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = NOW()`,
+        [bufVal]
+      );
+    }
+
+    // 4. General / Custom Shift Monthly Buffer Limit
+    if (data.generalShift && data.generalShift.monthly_buffer_minutes !== undefined) {
+      const bufVal = String(Number(data.generalShift.monthly_buffer_minutes) || 30);
+      await db.execute(
+        `INSERT INTO system_config (config_key, config_value, config_group, value_type, description)
+         VALUES ('BUFFER_POOL_GENERAL', ?, 'attendance', 'integer', 'Monthly late buffer pool for General/custom shift staff')
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = NOW()`,
+        [bufVal]
+      );
     }
   }
   return listShifts();

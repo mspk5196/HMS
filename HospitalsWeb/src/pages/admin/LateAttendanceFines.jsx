@@ -48,6 +48,7 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('exceeded'); // 'exceeded' | 'all_late'
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'fined'
+  const [staffTypeFilter, setStaffTypeFilter] = useState('all'); // 'all' | 'doctors' | 'staff'
 
   // Data states
   const [candidates, setCandidates] = useState([]);
@@ -62,6 +63,20 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
   // Modals
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Helper to check if a candidate is a doctor
+  const isCandidateDoctor = useCallback((c) => {
+    return Boolean(
+      c.is_doctor === 1 ||
+      c.is_doctor === true ||
+      c.department_name?.toLowerCase().includes('medical') ||
+      c.designation_name?.toLowerCase().includes('doctor') ||
+      c.designation_name?.toLowerCase().includes('consultant') ||
+      c.designation_name?.toLowerCase().includes('surgeon') ||
+      c.full_name?.toLowerCase().startsWith('dr.') ||
+      c.full_name?.toLowerCase().startsWith('dr ')
+    );
+  }, []);
 
   // 1. Fetch Candidates
   const loadCandidates = useCallback(async () => {
@@ -121,14 +136,18 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
     });
   };
 
-  // Filter candidates locally for fine status
+  // Filter candidates locally for staff type and fine status
   const filteredCandidates = useMemo(() => {
     return candidates.filter((c) => {
+      const isDoc = isCandidateDoctor(c);
+      if (staffTypeFilter === 'doctors' && !isDoc) return false;
+      if (staffTypeFilter === 'staff' && isDoc) return false;
+
       if (statusFilter === 'pending' && c.has_active_fine) return false;
       if (statusFilter === 'fined' && !c.has_active_fine) return false;
       return true;
     });
-  }, [candidates, statusFilter]);
+  }, [candidates, staffTypeFilter, statusFilter, isCandidateDoctor]);
 
   // Selection handlers
   const handleToggleSelect = (empId) => {
@@ -284,7 +303,7 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
 
       {/* Top Filter & Period Selection Bar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {/* Month Selector */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Period Month</label>
@@ -329,6 +348,20 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
             </select>
           </div>
 
+          {/* Staff Type (Doctor Filter) */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Staff Type</label>
+            <select
+              value={staffTypeFilter}
+              onChange={(e) => setStaffTypeFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white"
+            >
+              <option value="all">All Staff</option>
+              <option value="doctors">Doctors Only (Medical)</option>
+              <option value="staff">Non-Doctors / Staff Only</option>
+            </select>
+          </div>
+
           {/* Buffer Condition Mode */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Buffer Condition</label>
@@ -337,7 +370,7 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
               onChange={(e) => setFilterMode(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white"
             >
-              <option value="exceeded">Buffer Limit Crossed Only</option>
+              <option value="exceeded">Buffer Limit Crossed</option>
               <option value="all_late">All Late Attendees</option>
             </select>
           </div>
@@ -522,14 +555,19 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
 
                       {/* Staff Member */}
                       <td className="px-4 py-3">
-                        <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                        <div className="font-bold text-gray-900 flex items-center gap-1.5 flex-wrap">
                           <span>{c.full_name}</span>
                           <span className="text-[10px] font-mono font-normal text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
                             {c.employee_code}
                           </span>
+                          {isCandidateDoctor(c) && (
+                            <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200 flex items-center gap-0.5">
+                              🩺 Doctor
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-gray-400 mt-0.5">
-                          {c.department_name} · <span className="capitalize">{c.shift_category?.replace(/_/g, ' ') || 'General'}</span>
+                          {c.department_name}{c.designation_name ? ` · ${c.designation_name}` : ''} · <span className="capitalize">{c.shift_category?.replace(/_/g, ' ') || 'General'}</span>
                         </div>
                       </td>
 
