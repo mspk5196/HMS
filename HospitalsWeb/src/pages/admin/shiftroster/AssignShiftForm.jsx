@@ -442,11 +442,11 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
             &nbsp;·&nbsp;
             Punch OUT accepted <strong>{endTime} → {effectiveLatestOut || '—'}</strong>
             <div className="text-blue-700/80 font-normal mt-1">
-              Arriving within the {gracePeriodMinutes || 0}-minute grace period is not late. Beyond that, the lateness draws from the monthly buffer pool.
+              Lateness is absorbed against the category's monthly buffer limit.
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 Earliest Punch-In
@@ -471,24 +471,6 @@ export default function AssignShiftForm({ departments = [], initialData = null, 
                 className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
               />
               <p className="text-[11px] text-gray-400">Defaults to 2 hours after the shift ends.</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                Daily Grace Period (minutes)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={gracePeriodMinutes}
-                onChange={(e) => setGracePeriodMinutes(e.target.value)}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors ${
-                  errors.gracePeriodMinutes ? 'border-red-400 bg-red-50/30' : 'border-gray-200'
-                }`}
-              />
-              {errors.gracePeriodMinutes
-                ? <p className="text-[11px] text-red-500">{errors.gracePeriodMinutes}</p>
-                : <p className="text-[11px] text-gray-400">Arriving inside this is not late at all.</p>}
             </div>
           </div>
         </div>

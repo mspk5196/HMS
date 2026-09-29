@@ -1,7 +1,7 @@
 const db = require('../../config/db');
 
 const listConfig = async () => {
-  const [rows] = await db.execute(`SELECT * FROM system_config ORDER BY config_group, config_key`);
+  const [rows] = await db.execute(`SELECT * FROM system_config ORDER BY config_key`);
   return rows;
 };
 

@@ -488,9 +488,9 @@ const updateShiftTimings = async (data) => {
     if (data.dayAndNightShift && data.dayAndNightShift.monthly_buffer_minutes !== undefined) {
       const bufVal = String(Number(data.dayAndNightShift.monthly_buffer_minutes) || 30);
       await db.execute(
-        `INSERT INTO system_config (config_key, config_value, config_group, value_type, description)
-         VALUES ('BUFFER_POOL_DAY_AND_NIGHT', ?, 'attendance', 'integer', 'Monthly late buffer pool for Day & Night rotational staff')
-         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = NOW()`,
+        `INSERT INTO system_config (config_key, config_value)
+         VALUES ('BUFFER_POOL_DAY_AND_NIGHT', ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
         [bufVal]
       );
     }
@@ -499,9 +499,9 @@ const updateShiftTimings = async (data) => {
     if (data.generalShift && data.generalShift.monthly_buffer_minutes !== undefined) {
       const bufVal = String(Number(data.generalShift.monthly_buffer_minutes) || 30);
       await db.execute(
-        `INSERT INTO system_config (config_key, config_value, config_group, value_type, description)
-         VALUES ('BUFFER_POOL_GENERAL', ?, 'attendance', 'integer', 'Monthly late buffer pool for General/custom shift staff')
-         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = NOW()`,
+        `INSERT INTO system_config (config_key, config_value)
+         VALUES ('BUFFER_POOL_GENERAL', ?)
+         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
         [bufVal]
       );
     }

@@ -241,7 +241,6 @@ export default function HREmployees() {
         : (detail.shift_category === 'night'
           ? shiftConfigs.night.end
           : (detail.custom_shift_end ? String(detail.custom_shift_end).slice(0, 5) : '17:00')),
-      custom_buffer_minutes: detail.custom_buffer_minutes ?? 10,
       aadhar_doc: null,
       pan_doc: null,
     });
@@ -257,18 +256,12 @@ export default function HREmployees() {
       if (dataToSend.shift_category === 'day') {
         dataToSend.custom_shift_start = shiftConfigs.day.start;
         dataToSend.custom_shift_end = shiftConfigs.day.end;
-        dataToSend.custom_buffer_minutes = null;
       } else if (dataToSend.shift_category === 'night') {
         dataToSend.custom_shift_start = shiftConfigs.night.start;
         dataToSend.custom_shift_end = shiftConfigs.night.end;
-        dataToSend.custom_buffer_minutes = null;
       } else if (dataToSend.shift_category === 'day_and_night') {
         dataToSend.custom_shift_start = null;
         dataToSend.custom_shift_end = null;
-        dataToSend.custom_buffer_minutes = null;
-      } else if (dataToSend.shift_category === 'general') {
-        dataToSend.custom_buffer_minutes = dataToSend.custom_buffer_minutes !== '' && dataToSend.custom_buffer_minutes !== undefined
-          ? Number(dataToSend.custom_buffer_minutes) : 10;
       }
 
       const fd = new FormData();
@@ -346,9 +339,6 @@ export default function HREmployees() {
       } else if (memberData.shiftCategory === 'general') {
         if (memberData.customShiftStart) fd.append('custom_shift_start', memberData.customShiftStart);
         if (memberData.customShiftEnd) fd.append('custom_shift_end', memberData.customShiftEnd);
-        if (memberData.customBufferMinutes !== undefined && memberData.customBufferMinutes !== null) {
-          fd.append('custom_buffer_minutes', memberData.customBufferMinutes);
-        }
       }
 
       const created = await apiFetch('/hr/employees', {
@@ -1053,8 +1043,8 @@ export default function HREmployees() {
                           }
                         />
                         <Field
-                          label="Grace Buffer"
-                          value={`${detail.custom_buffer_minutes ?? 10} minutes`}
+                          label="Monthly Buffer Pool"
+                          value="Governed by Shift Category"
                         />
                       </div>
                     </div>

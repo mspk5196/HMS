@@ -6,14 +6,12 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
   const [dayShift, setDayShift] = useState({
     start_time: '08:00',
     end_time: '18:00',
-    grace_period_minutes: 10,
     monthly_buffer_minutes: 30,
   });
 
   const [nightShift, setNightShift] = useState({
     start_time: '18:00',
     end_time: '08:00',
-    grace_period_minutes: 10,
     monthly_buffer_minutes: 30,
   });
 
@@ -44,7 +42,6 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
         setDayShift({
           start_time: String(d.start_time || '08:00').slice(0, 5),
           end_time: String(d.end_time || '18:00').slice(0, 5),
-          grace_period_minutes: d.grace_period_minutes ?? (bufferCfgs.day?.grace_period_minutes ?? 10),
           monthly_buffer_minutes: d.buffer_minutes ?? (bufferCfgs.day?.monthly_buffer_minutes ?? 30),
         });
       }
@@ -52,7 +49,6 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
         setNightShift({
           start_time: String(n.start_time || '18:00').slice(0, 5),
           end_time: String(n.end_time || '08:00').slice(0, 5),
-          grace_period_minutes: n.grace_period_minutes ?? (bufferCfgs.night?.grace_period_minutes ?? 10),
           monthly_buffer_minutes: n.buffer_minutes ?? (bufferCfgs.night?.monthly_buffer_minutes ?? 30),
         });
       }
@@ -103,13 +99,13 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
           dayShift: {
             start_time: dayShift.start_time,
             end_time: dayShift.end_time,
-            grace_period_minutes: Number(dayShift.grace_period_minutes) || 0,
+            grace_period_minutes: 0,
             monthly_buffer_minutes: Number(dayShift.monthly_buffer_minutes) || 0,
           },
           nightShift: {
             start_time: nightShift.start_time,
             end_time: nightShift.end_time,
-            grace_period_minutes: Number(nightShift.grace_period_minutes) || 0,
+            grace_period_minutes: 0,
             monthly_buffer_minutes: Number(nightShift.monthly_buffer_minutes) || 0,
           },
           dayAndNightShift: {
@@ -121,7 +117,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
         }),
       });
 
-      setSuccessMsg('Shift timings and buffer pools updated successfully!');
+      setSuccessMsg('Shift timings and monthly buffer pools updated successfully!');
       if (onSuccess) onSuccess(updated);
       setTimeout(() => {
         onClose();
@@ -143,7 +139,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
               <GearIcon className="w-4 h-4 text-blue-700" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Configure Shift Timings &amp; Buffer Pools</h2>
+              <h2 className="text-sm font-bold text-gray-900">Configure Shift Timings &amp; Monthly Buffers</h2>
               <p className="text-[11px] text-gray-500">Hospital-wide fixed hours and monthly late buffer pools for all 4 shift categories</p>
             </div>
           </div>
@@ -173,10 +169,10 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
           <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs text-blue-800 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
               <InfoIcon className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>Shift Category Governance</span>
+              <span>Monthly Buffer Governance</span>
             </div>
             <p className="text-[11px] text-blue-700 leading-relaxed">
-              Buffer pools are strictly governed at the shift level below. <strong>Daily Grace</strong> allows arrival leeway before lateness accumulates. <strong>Monthly Buffer Limit</strong> sets the total allowable late minutes absorbed each month before late fines trigger.
+              Lateness accumulates immediately past scheduled shift start times and is absorbed by each category's <strong>Monthly Buffer Limit</strong>. Once the monthly buffer pool is exhausted, subsequent lateness triggers fine deductions.
             </p>
           </div>
 
@@ -192,11 +188,11 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
                     <span>1. Day Shift</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                    Fixed Hours + Buffer
+                    Fixed Hours + Monthly Buffer
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                       Start Time <span className="text-red-500">*</span>
@@ -225,21 +221,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Daily Grace (Min)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      value={dayShift.grace_period_minutes}
-                      onChange={(e) => setDayShift((prev) => ({ ...prev, grace_period_minutes: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 transition-colors"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Monthly Buffer (Min)
+                      Monthly Buffer Limit (Min)
                     </label>
                     <input
                       type="number"
@@ -261,11 +243,11 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
                     <span>2. Night Shift</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                    Fixed Hours + Buffer
+                    Fixed Hours + Monthly Buffer
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                       Start Time <span className="text-red-500">*</span>
@@ -294,21 +276,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Daily Grace (Min)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      value={nightShift.grace_period_minutes}
-                      onChange={(e) => setNightShift((prev) => ({ ...prev, grace_period_minutes: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-colors"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                      Monthly Buffer (Min)
+                      Monthly Buffer Limit (Min)
                     </label>
                     <input
                       type="number"
@@ -336,7 +304,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                   <p className="text-[11px] text-blue-700 leading-relaxed">
-                    Staff under this category rotate between Day and Night shifts according to the duty roster. Their daily grace period uses 10 mins.
+                    Staff under this category rotate between Day and Night shifts according to the weekly duty roster. Their late arrival is absorbed by the hospital-wide monthly buffer pool configured here.
                   </p>
 
                   <div className="space-y-1">
@@ -412,3 +380,4 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../../../util/api';
 import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from './ConfigureShiftTimingModal';
@@ -143,6 +143,7 @@ const monthLabel = (iso) =>
 
 export default function WeeklyRoster({ departments = [], onBack }) {
   const today = useMemo(() => getTodayISO(), []);
+  const tableContainerRef = useRef(null);
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(today));
   const [deptFilter, setDeptFilter] = useState('');
@@ -150,7 +151,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [grid, setGrid] = useState(null);
-  // Key: `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM', buffer_minutes: 10, is_night_shift: bool }
+  // Key: `${employeeId}|${date}` -> { is_week_off: bool, start_time: 'HH:MM', end_time: 'HH:MM', is_night_shift: bool }
   const [draft, setDraft] = useState({});
   const [swapPick, setSwapPick] = useState(null); // { employeeId, date, employeeName }
   const [editingCellKey, setEditingCellKey] = useState(null);
@@ -162,7 +163,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     start_time: '09:00',
     end_time: '17:00',
     is_night_shift: false,
-    buffer_minutes: 10,
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -201,7 +201,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           is_week_off: Boolean(e.is_week_off),
           start_time: e.custom_start_time ? String(e.custom_start_time).slice(0, 5) : '',
           end_time: e.custom_end_time ? String(e.custom_end_time).slice(0, 5) : '',
-          buffer_minutes: e.buffer_minutes ?? 10,
           is_night_shift: isNight,
         };
       }
@@ -226,7 +225,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
       is_week_off: false,
       start_time: '',
       end_time: '',
-      buffer_minutes: 10,
       is_night_shift: false,
     };
 
@@ -241,7 +239,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         is_week_off: false,
         start_time: '',
         end_time: '',
-        buffer_minutes: 10,
         is_night_shift: false,
       };
       return {
@@ -249,6 +246,28 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         [`${employeeId}|${date}`]: { ...current, ...updates },
       };
     });
+  };
+
+  /** Smooth horizontal scroll shortcuts */
+  const scrollTable = (direction) => {
+    if (!tableContainerRef.current) return;
+    const scrollAmount = 450;
+    tableContainerRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
+
+  const scrollToDay = (dayIndex) => {
+    if (!tableContainerRef.current) return;
+    if (dayIndex === 0) {
+      tableContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+    } else if (dayIndex === 'end') {
+      tableContainerRef.current.scrollTo({ left: tableContainerRef.current.scrollWidth, behavior: 'smooth' });
+    } else {
+      const targetLeft = dayIndex * 170;
+      tableContainerRef.current.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    }
   };
 
   /**
@@ -272,7 +291,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           is_week_off: false,
           start_time: batchForm.start_time,
           end_time: batchForm.end_time,
-          buffer_minutes: Number(batchForm.buffer_minutes) || 10,
           is_night_shift: Boolean(batchForm.is_night_shift),
         };
         count++;
@@ -299,7 +317,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           is_week_off: true,
           start_time: '',
           end_time: '',
-          buffer_minutes: 10,
           is_night_shift: false,
         };
         count++;
@@ -327,7 +344,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           is_week_off: false,
           start_time: '',
           end_time: '',
-          buffer_minutes: 10,
           is_night_shift: false,
         };
         count++;
@@ -449,10 +465,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
               is_week_off: false,
               custom_start_time: c.start_time.length === 5 ? `${c.start_time}:00` : c.start_time,
               custom_end_time: c.end_time.length === 5 ? `${c.end_time}:00` : c.end_time,
-              buffer_minutes:
-                c.buffer_minutes !== '' && c.buffer_minutes !== undefined
-                  ? Number(c.buffer_minutes)
-                  : 10,
               is_night_shift: Boolean(c.is_night_shift),
             });
           }
@@ -508,8 +520,8 @@ export default function WeeklyRoster({ departments = [], onBack }) {
 
     setDraft((prev) => ({
       ...prev,
-      [keyA]: prev[keyB] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10, is_night_shift: false },
-      [keyB]: prev[keyA] || { is_week_off: false, start_time: '', end_time: '', buffer_minutes: 10, is_night_shift: false },
+      [keyA]: prev[keyB] || { is_week_off: false, start_time: '', end_time: '', is_night_shift: false },
+      [keyB]: prev[keyA] || { is_week_off: false, start_time: '', end_time: '', is_night_shift: false },
     }));
 
     flash(`Swapped duty between ${swapPick.employeeName} and ${employeeName} for ${monthLabel(date)}. Click "Save Duty Roster" to commit.`);
@@ -521,7 +533,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
   const editableDaysCount = grid ? grid.days.filter((d) => d >= today).length : 0;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       {/* Toast Alerts */}
       {successMsg && (
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center gap-2 animate-fadeIn">
@@ -578,7 +590,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
               type="button"
               onClick={() => setShowTimingModal(true)}
               className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
-              title="Configure hospital-wide standard shift hours"
+              title="Configure hospital-wide standard shift hours and monthly buffer limits"
             >
               <GearIcon className="w-3.5 h-3.5 text-gray-500" />
               <span>Configure Shift Timings</span>
@@ -701,7 +713,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           </div>
         </div>
 
-        {/* Legend & Instructions Strip */}
+        {/* Legend Strip */}
         <div className="pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-2.5 text-[11px]">
             <span className="font-bold text-gray-400 uppercase tracking-wider text-[10px] mr-1">
@@ -723,7 +735,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
 
           <div className="text-[11px] text-gray-500 flex items-center gap-1">
             <InformationCircleIcon className="w-3.5 h-3.5 text-blue-500" />
-            <span>Enter exact start &amp; end time for each duty, and select Day or Night shift. Continuous shifts permitted.</span>
+            <span>Set start &amp; end times freely. Lateness is governed by the monthly buffer limit.</span>
           </div>
         </div>
 
@@ -750,7 +762,83 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         )}
       </div>
 
-      {/* Grid Content */}
+      {/* Day Quick Navigation & Horizontal Scroll Controls Bar */}
+      {grid && grid.employees.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-2.5 px-4 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 bg-white/10 px-2 py-0.5 rounded-md">
+              ⚡ Quick Day Jump
+            </span>
+            <span className="text-white/70 text-[11px] hidden sm:inline">
+              Jump instantly to configure any day without scrolling:
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => scrollToDay(0)}
+              className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/30 text-white font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-2xs border border-white/20"
+              title="Jump to Start of Week (Wednesday)"
+            >
+              <span>⏮️ Start (Wed)</span>
+            </button>
+
+            {/* Individual Day Buttons */}
+            {grid.days.map((d, idx) => {
+              const isToday = d === today;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => scrollToDay(idx)}
+                  className={`px-2 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer border ${
+                    isToday
+                      ? 'bg-amber-400 text-gray-950 border-amber-300 shadow-xs'
+                      : 'bg-white/10 hover:bg-white/25 text-white border-white/15'
+                  }`}
+                  title={`Jump to ${DAY_LABELS[idx]} (${monthLabel(d).slice(0, 6)})`}
+                >
+                  <span>{DAY_LABELS[idx]}</span>
+                  {isToday && <span className="ml-1 text-[8px] uppercase font-black">★</span>}
+                </button>
+              );
+            })}
+
+            {/* Jump to Last Day Button (Highlights Monday/Tuesday / End of Week) */}
+            <button
+              type="button"
+              onClick={() => scrollToDay('end')}
+              className="px-3 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-extrabold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-xs border border-blue-300 ml-1"
+              title="Jump immediately to Tuesday & Summary (Last Day of Week)"
+            >
+              <span>Last Day (Tue) ⏭️</span>
+            </button>
+
+            {/* Scroll Left & Right buttons */}
+            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+              <button
+                type="button"
+                onClick={() => scrollTable('left')}
+                className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+                title="Scroll Left"
+              >
+                <ChevronLeftIcon className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollTable('right')}
+                className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+                title="Scroll Right"
+              >
+                <ChevronRightIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grid Content Container with Contained Scroll and Sticky Headers */}
       {isLoading ? (
         <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-12 text-center text-xs text-gray-400">
           <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
@@ -764,13 +852,17 @@ export default function WeeklyRoster({ departments = [], onBack }) {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px] text-xs border-collapse">
-              {/* Table Column Headers */}
-              <thead>
-                <tr className="bg-gray-50/90 border-b border-gray-200">
-                  <th className="text-left px-4 py-3.5 font-bold text-gray-700 uppercase tracking-wider text-[11px] sticky left-0 bg-gray-50/95 z-20 min-w-[230px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs overflow-hidden flex flex-col">
+          {/* Scrollable Table Viewport with fixed max-height & sticky header */}
+          <div
+            ref={tableContainerRef}
+            className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] bg-white relative scroll-smooth focus:outline-none"
+          >
+            <table className="w-full min-w-[1300px] text-xs border-collapse">
+              {/* Table Column Headers (Sticky Top) */}
+              <thead className="sticky top-0 z-30 bg-gray-50 border-b border-gray-200 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+                <tr className="bg-gray-50">
+                  <th className="text-left px-4 py-3.5 font-bold text-gray-800 uppercase tracking-wider text-[11px] sticky top-0 left-0 bg-gray-100 z-40 min-w-[240px] max-w-[240px] border-r border-gray-200 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)]">
                     Employee Details
                   </th>
 
@@ -784,10 +876,10 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                         key={d}
                         className={`px-2 py-3 text-center min-w-[155px] transition-colors border-l border-gray-200/60 ${
                           isToday
-                            ? 'bg-blue-50/70 border-b-2 border-b-blue-600'
+                            ? 'bg-blue-50/90 border-b-2 border-b-blue-600'
                             : isPast
-                            ? 'bg-slate-50/80 text-slate-500'
-                            : 'bg-gray-50/90 text-gray-700'
+                            ? 'bg-slate-100/90 text-slate-500'
+                            : 'bg-gray-50/95 text-gray-700'
                         }`}
                       >
                         <div className="flex flex-col items-center">
@@ -820,7 +912,7 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                     );
                   })}
 
-                  <th className="px-3 py-3.5 font-bold text-gray-700 uppercase tracking-wider text-[11px] text-center min-w-[125px] border-l border-gray-200/60 bg-gray-50/95">
+                  <th className="px-3 py-3.5 font-bold text-gray-700 uppercase tracking-wider text-[11px] text-center min-w-[125px] border-l border-gray-200/60 bg-gray-50/95 sticky top-0 right-0 z-30">
                     Week Summary
                   </th>
                 </tr>
@@ -839,8 +931,8 @@ export default function WeeklyRoster({ departments = [], onBack }) {
 
                   return (
                     <tr key={emp.employee_id} className="hover:bg-blue-50/20 transition-colors group">
-                      {/* Employee Info & Row Quick Actions */}
-                      <td className="px-4 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/90 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] align-top">
+                      {/* Employee Info & Row Quick Actions (Sticky Left Column) */}
+                      <td className="px-4 py-3.5 sticky left-0 bg-white group-hover:bg-slate-50/95 z-20 min-w-[240px] max-w-[240px] border-r border-gray-200 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] align-top">
                         <div className="font-bold text-gray-900 text-xs">{emp.full_name}</div>
                         <div className="text-[10px] text-gray-500 font-mono">
                           {emp.employee_code} · <span className="font-sans text-gray-600 font-medium">{emp.role_name || 'Staff'}</span>
@@ -857,7 +949,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                                   start_time: '09:00',
                                   end_time: '17:00',
                                   is_night_shift: false,
-                                  buffer_minutes: 10,
                                 });
                               }}
                               className="inline-flex items-center gap-1 text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md hover:bg-blue-100 cursor-pointer transition-colors shadow-2xs"
@@ -1007,11 +1098,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                                       <div className="font-mono font-bold text-[11px] text-gray-900 mt-0.5">
                                         {cell.start_time} – {cell.end_time}
                                       </div>
-                                      {cell.buffer_minutes ? (
-                                        <div className="text-[8px] font-bold text-gray-500 mt-0.5">
-                                          Grace: {cell.buffer_minutes}m
-                                        </div>
-                                      ) : null}
                                     </div>
 
                                     {/* Action Bar */}
@@ -1138,51 +1224,31 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                                       </button>
                                     </div>
 
-                                    {/* Grace buffer & Done/WO actions */}
-                                    <div className="flex items-center justify-between text-[9px] text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                                      <span title="Late arrival grace buffer">Grace:</span>
-                                      <div className="flex items-center gap-0.5">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="60"
-                                          value={cell.buffer_minutes ?? 10}
-                                          onChange={(e) =>
-                                            updateCell(emp.employee_id, d, {
-                                              buffer_minutes: e.target.value,
-                                            })
-                                          }
-                                          className="w-7 text-[9px] font-bold p-0 border border-gray-200 rounded text-center bg-white text-gray-800"
-                                          title="Grace arrival buffer in minutes"
-                                        />
-                                        <span className="text-[8px] text-gray-400">m</span>
-                                      </div>
-
-                                      <div className="flex items-center gap-1">
+                                    {/* Actions */}
+                                    <div className="flex items-center justify-between text-[9px] text-gray-600 bg-gray-50 px-1.5 py-1 rounded border border-gray-200">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_week_off: true,
+                                            start_time: '',
+                                            end_time: '',
+                                          })
+                                        }
+                                        className="text-[8px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
+                                        title="Set as Week Off"
+                                      >
+                                        🏖️ Set WO
+                                      </button>
+                                      {cell.start_time && cell.end_time && (
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            updateCell(emp.employee_id, d, {
-                                              is_week_off: true,
-                                              start_time: '',
-                                              end_time: '',
-                                            })
-                                          }
-                                          className="text-[8px] font-bold px-1 py-0.2 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
-                                          title="Set as Week Off"
+                                          onClick={() => setEditingCellKey(null)}
+                                          className="text-[10px] text-blue-700 font-bold hover:underline cursor-pointer px-1.5 py-0.5 bg-blue-50 rounded"
                                         >
-                                          WO
+                                          ✓ Done
                                         </button>
-                                        {cell.start_time && cell.end_time && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setEditingCellKey(null)}
-                                            className="text-[9px] text-blue-600 font-bold hover:underline cursor-pointer"
-                                          >
-                                            Done
-                                          </button>
-                                        )}
-                                      </div>
+                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -1358,22 +1424,6 @@ export default function WeeklyRoster({ departments = [], onBack }) {
                 </div>
               </div>
 
-              {/* Grace Buffer Minutes */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                  Arrival Grace Buffer (Minutes)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={batchForm.buffer_minutes}
-                  onChange={(e) => setBatchForm((f) => ({ ...f, buffer_minutes: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-                  placeholder="10"
-                />
-              </div>
-
               <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -1405,3 +1455,4 @@ export default function WeeklyRoster({ departments = [], onBack }) {
     </div>
   );
 }
+

@@ -388,12 +388,16 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          COALESCE(ads.is_manually_marked, 0) AS is_manually_marked,
          ads.manually_marked_by,
          ads.manually_marked_at,
+         ads.manual_marking_reason,
+         COALESCE(u_emp.full_name, u.username, 'Admin') AS marked_by_user_name,
          e.full_name,
          e.employee_code,
          d.name AS department_name,
          COALESCE(s.name, e.shift_category, 'General Duty') AS shift_name
        FROM employees e
        LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       LEFT JOIN users u ON u.id = ads.manually_marked_by
+       LEFT JOIN employees u_emp ON u_emp.id = u.employee_id
        LEFT JOIN departments d ON d.id = e.department_id
        LEFT JOIN shifts s ON s.id = ads.shift_id
        WHERE ${where}
@@ -501,10 +505,17 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
 
   const [summaries] = await db.query(
     `SELECT ads.employee_id, ads.attendance_date, ads.status, ads.first_in_time, ads.last_out_time,
-            ads.worked_minutes, ads.late_minutes, ads.early_leave_minutes, ads.is_missed_punch, ads.is_manually_marked,
+            ads.worked_minutes, ads.late_minutes, ads.early_leave_minutes, ads.is_missed_punch,
+            COALESCE(ads.is_manually_marked, 0) AS is_manually_marked,
+            ads.manually_marked_by,
+            ads.manually_marked_at,
+            ads.manual_marking_reason,
+            COALESCE(u_emp.full_name, u.username, 'Admin') AS marked_by_user_name,
             s.name AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
+     LEFT JOIN users u ON u.id = ads.manually_marked_by
+     LEFT JOIN employees u_emp ON u_emp.id = u.employee_id
      LEFT JOIN shifts s ON s.id = ads.shift_id
      WHERE ${sumWhere}
      ORDER BY ads.attendance_date ASC`,
@@ -678,8 +689,8 @@ const markLeaveDays = async (employeeId, dates, status) => {
   }
 };
 
-/** Admin manually marks an employee present/absent for a date with optional in/out times. */
-const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = null, outTime = null) => {
+/** Admin manually marks an employee present/absent for a date with optional in/out times and mandatory reason. */
+const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = null, outTime = null, reason = '') => {
   const fullIn = inTime ? (inTime.includes(' ') ? inTime : `${date} ${inTime.length === 5 ? inTime + ':00' : inTime}`) : null;
   const fullOut = outTime ? (outTime.includes(' ') ? outTime : `${date} ${outTime.length === 5 ? outTime + ':00' : outTime}`) : null;
   const isPresent = status === 'present';
@@ -687,8 +698,8 @@ const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = 
   await db.execute(
     `INSERT INTO attendance_daily_summary
        (employee_id, attendance_date, status, first_in_time, last_out_time,
-        worked_minutes, late_minutes, is_missed_punch, is_manually_marked, manually_marked_by, manually_marked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, NOW())
+        worked_minutes, late_minutes, is_missed_punch, is_manually_marked, manually_marked_by, manually_marked_at, manual_marking_reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, NOW(), ?)
      ON DUPLICATE KEY UPDATE
        status = VALUES(status),
        first_in_time = IF(VALUES(first_in_time) IS NOT NULL, VALUES(first_in_time), first_in_time),
@@ -698,7 +709,8 @@ const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = 
        is_missed_punch = IF(VALUES(status) = 'present', 0, is_missed_punch),
        is_manually_marked = 1,
        manually_marked_by = VALUES(manually_marked_by),
-       manually_marked_at = NOW()`,
+       manually_marked_at = NOW(),
+       manual_marking_reason = VALUES(manual_marking_reason)`,
     [
       employeeId,
       date,
@@ -708,8 +720,29 @@ const adminMarkAttendance = async (employeeId, date, status, markedBy, inTime = 
       isPresent ? 480 : 0,
       isPresent ? 0 : 0,
       markedBy ?? null,
+      reason || null,
     ]
   );
+
+  // Insert into attendance_manual_logs audit table
+  try {
+    await db.execute(
+      `INSERT INTO attendance_manual_logs
+         (employee_id, attendance_date, status, first_in_time, last_out_time, reason, marked_by, marked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        employeeId,
+        date,
+        status,
+        fullIn,
+        fullOut,
+        reason || 'Manual attendance marking',
+        markedBy ?? null,
+      ]
+    );
+  } catch (err) {
+    console.error('Failed to write to attendance_manual_logs:', err.message);
+  }
 };
 
 /* ─────────────────────────────────────────────
@@ -760,9 +793,11 @@ const getOrCreateBuffer = async (employeeId, month, year, defaultMinutes = 30) =
 
   await db.execute(
     // buffer_remaining_minutes is a generated column — never write to it.
-    `INSERT IGNORE INTO employee_attendance_buffers
+    `INSERT INTO employee_attendance_buffers
        (employee_id, period_month, period_year, buffer_allocated_minutes, buffer_used_minutes)
-     VALUES (?, ?, ?, ?, 0)`,
+     VALUES (?, ?, ?, ?, 0)
+     ON DUPLICATE KEY UPDATE
+       buffer_allocated_minutes = VALUES(buffer_allocated_minutes)`,
     [employeeId, month, year, allocMinutes]
   );
   const [rows] = await db.execute(
@@ -788,9 +823,11 @@ const getEmployeeBufferWithRole = async (employeeId, month, year) => {
 
   await db.execute(
     // buffer_remaining_minutes is a generated column — never write to it.
-    `INSERT IGNORE INTO employee_attendance_buffers
+    `INSERT INTO employee_attendance_buffers
        (employee_id, period_month, period_year, buffer_allocated_minutes, buffer_used_minutes)
-     VALUES (?, ?, ?, ?, 0)`,
+     VALUES (?, ?, ?, ?, 0)
+     ON DUPLICATE KEY UPDATE
+       buffer_allocated_minutes = VALUES(buffer_allocated_minutes)`,
     [employeeId, month, year, allocMinutes]
   );
   const [rows] = await db.execute(
@@ -823,25 +860,87 @@ const logBufferDeduction = async ({ employee_id, attendance_date, late_minutes_d
   );
 };
 
-/** Get buffer summary for all employees in a given month. */
+/** Get buffer summary for all active employees in a given month. */
 const getBufferSummary = async (month, year, departmentId = null) => {
-  const params = [month, year];
+  const m = Number(month);
+  const y = Number(year);
+
+  // 1. Fetch current global shift buffer allocations
+  const [dayRows] = await db.query("SELECT buffer_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1");
+  const [nightRows] = await db.query("SELECT buffer_minutes FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1");
+  const [cfgRows] = await db.query("SELECT config_key, config_value FROM system_config WHERE config_key IN ('BUFFER_POOL_DAY_AND_NIGHT', 'BUFFER_POOL_GENERAL', 'DEFAULT_BUFFER_MINUTES')");
+  
+  const cfgMap = {};
+  for (const c of cfgRows) cfgMap[c.config_key] = c.config_value;
+
+  const dayAlloc = (dayRows.length && dayRows[0].buffer_minutes != null) ? Number(dayRows[0].buffer_minutes) : 30;
+  const nightAlloc = (nightRows.length && nightRows[0].buffer_minutes != null) ? Number(nightRows[0].buffer_minutes) : 30;
+  const dayNightAlloc = cfgMap['BUFFER_POOL_DAY_AND_NIGHT'] ? Number(cfgMap['BUFFER_POOL_DAY_AND_NIGHT']) : 30;
+  const generalAlloc = cfgMap['BUFFER_POOL_GENERAL'] ? Number(cfgMap['BUFFER_POOL_GENERAL']) : 30;
+
+  const shiftAllocMap = {
+    day: dayAlloc,
+    night: nightAlloc,
+    day_and_night: dayNightAlloc,
+    general: generalAlloc,
+  };
+
+  // 2. Fetch all active employees
+  const params = [m, y];
   let deptFilter = '';
   if (departmentId) {
     deptFilter = 'AND e.department_id = ?';
     params.push(departmentId);
   }
-  const [rows] = await db.execute(
-    `SELECT eab.*, e.full_name, e.employee_code, d.name AS department_name
-     FROM employee_attendance_buffers eab
-     JOIN employees e ON e.id = eab.employee_id
+
+  const [rows] = await db.query(
+    `SELECT 
+       e.id AS employee_id,
+       e.full_name,
+       e.employee_code,
+       e.shift_category,
+       e.department_id,
+       d.name AS department_name,
+       sr.name AS designation_name,
+       eab.id AS buffer_id,
+       eab.buffer_allocated_minutes,
+       eab.buffer_used_minutes
+     FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
-     WHERE eab.period_month = ? AND eab.period_year = ?
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     LEFT JOIN employee_attendance_buffers eab 
+       ON eab.employee_id = e.id AND eab.period_month = ? AND eab.period_year = ?
+     WHERE e.status = 'active'
        ${deptFilter}
-     ORDER BY e.full_name`,
+     ORDER BY d.name ASC, e.full_name ASC`,
     params
   );
-  return rows;
+
+  return rows.map((r) => {
+    const shiftCat = r.shift_category || 'day';
+    const categoryAlloc = shiftAllocMap[shiftCat] ?? 30;
+    const allocated = Number(r.buffer_allocated_minutes ?? categoryAlloc);
+    const used = Number(r.buffer_used_minutes ?? 0);
+    const remaining = Math.max(0, allocated - used);
+    const excess = Math.max(0, used - allocated);
+
+    return {
+      id: r.buffer_id || `emp-${r.employee_id}`,
+      employee_id: r.employee_id,
+      full_name: r.full_name,
+      employee_code: r.employee_code,
+      department_id: r.department_id,
+      department_name: r.department_name,
+      designation_name: r.designation_name,
+      shift_category: shiftCat,
+      period_month: m,
+      period_year: y,
+      buffer_allocated_minutes: allocated,
+      buffer_used_minutes: used,
+      buffer_remaining_minutes: remaining,
+      buffer_excess_minutes: excess,
+    };
+  });
 };
 
 /* ─────────────────────────────────────────────
@@ -1660,6 +1759,7 @@ module.exports = {
   upsertDailySummary,
   markLeaveDays,
   adminMarkAttendance,
+  getShiftCategoryBuffer,
   getOrCreateBuffer,
   getEmployeeBufferWithRole,
   deductFromBuffer,

@@ -75,12 +75,34 @@ const getSummary = asyncHandler(async (req, res) => {
    PROCESSING ENGINE
 ───────────────────────────────────────────── */
 
-/** POST /api/attendance/process  { date: 'YYYY-MM-DD' } */
+/** POST /api/attendance/process  { date?: 'YYYY-MM-DD', fromDate?: 'YYYY-MM-DD', toDate?: 'YYYY-MM-DD', month?: number, year?: number } */
 const processDay = asyncHandler(async (req, res) => {
-  const { date } = req.body;
-  if (!date) return res.status(400).json(fail('date is required (YYYY-MM-DD)'));
-  const result = await svc.processDailyAttendance(date);
-  return res.json(success(result, `Processed attendance for ${date}`));
+  let { date, fromDate, toDate, month, year } = req.body;
+
+  if (month && year && (!fromDate || !toDate)) {
+    const m = Number(month);
+    const y = Number(year);
+    const lastDay = new Date(y, m, 0).getDate();
+    fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  if (fromDate && toDate) {
+    const result = await svc.processAttendanceRange(fromDate, toDate);
+    return res.json(
+      success(
+        result,
+        `Processed ${result.processed} attendance records across ${result.datesProcessed} day(s) (${fromDate} to ${toDate})`
+      )
+    );
+  }
+
+  if (date) {
+    const result = await svc.processDailyAttendance(date);
+    return res.json(success(result, `Processed attendance for ${date}`));
+  }
+
+  return res.status(400).json(fail('Please provide date (YYYY-MM-DD), or fromDate + toDate, or month + year'));
 });
 
 /* ─────────────────────────────────────────────
@@ -146,12 +168,15 @@ const getEmployeeTimeline = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/attendance/mark
- * Body: { employee_id, date, status, in_time, out_time }
+ * Body: { employee_id, date, status, in_time, out_time, reason }
  */
 const manualMark = asyncHandler(async (req, res) => {
-  const { employee_id, date, status, in_time, out_time } = req.body;
+  const { employee_id, date, status, in_time, out_time, reason } = req.body;
   if (!employee_id || !date || !status) {
     return res.status(400).json(fail('employee_id, date and status are required'));
+  }
+  if (!reason || !String(reason).trim()) {
+    return res.status(400).json(fail('Reason for manual attendance marking is mandatory'));
   }
   const markedBy = req.user?.id ?? null;
   await svc.markAttendanceManually(
@@ -160,7 +185,8 @@ const manualMark = asyncHandler(async (req, res) => {
     status,
     markedBy,
     in_time || null,
-    out_time || null
+    out_time || null,
+    String(reason).trim()
   );
   return res.json(success(null, 'Attendance marked manually'));
 });

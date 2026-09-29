@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../util/api';
+import EmployeePicker from '../../components/EmployeePicker';
 import {
   SearchIcon,
   DownloadIcon,
@@ -11,7 +12,18 @@ import {
   BuildingOfficeIcon,
   UsersIcon,
   SyncIcon,
+  PlusIcon,
 } from '../../components/Icons';
+
+const STATUS_OPTIONS = [
+  { value: 'present', label: 'Present (Full Day)' },
+  { value: 'late_present', label: 'Late Present' },
+  { value: 'absent', label: 'Absent' },
+  { value: 'on_leave', label: 'On Leave (Approved)' },
+  { value: 'lop', label: 'Loss of Pay (LOP)' },
+  { value: 'week_off', label: 'Week Off' },
+  { value: 'holiday', label: 'Holiday' },
+];
 
 const fmtTime12 = (v) => {
   if (!v) return '—';
@@ -71,7 +83,87 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
   // Data & State
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null); // for popup drawer details
+  const [isProcessingPunches, setIsProcessingPunches] = useState(false);
+  const [markingModal, setMarkingModal] = useState(null); // { employee_id, employee_name, employee_code, department_name, shift_category, date, status, in_time, out_time, reason, is_manually_marked, manually_marked_by, manually_marked_at, manual_marking_reason, marked_by_user_name, existingRecord }
+  const [isSavingManual, setIsSavingManual] = useState(false);
+
+  /** Open Manual Attendance Marking Modal for any cell */
+  const openMarkModalForCell = (emp, date, dayRec) => {
+    let defaultIn = '';
+    let defaultOut = '';
+    if (dayRec?.first_in_time) {
+      const s = String(dayRec.first_in_time).trim();
+      defaultIn = s.includes('T') ? s.split('T')[1].slice(0, 5) : s.includes(' ') ? s.split(' ')[1].slice(0, 5) : s.slice(0, 5);
+    }
+    if (dayRec?.last_out_time) {
+      const s = String(dayRec.last_out_time).trim();
+      defaultOut = s.includes('T') ? s.split('T')[1].slice(0, 5) : s.includes(' ') ? s.split(' ')[1].slice(0, 5) : s.slice(0, 5);
+    }
+
+    const st = dayRec?.status || 'present';
+    if (!defaultIn && (st === 'present' || st === 'late_present')) defaultIn = '08:00';
+    if (!defaultOut && (st === 'present' || st === 'late_present')) defaultOut = '18:00';
+
+    setMarkingModal({
+      employee_id: emp.employee_id,
+      employee_name: emp.full_name,
+      employee_code: emp.employee_code,
+      department_name: emp.department_name,
+      shift_category: emp.shift_category,
+      date,
+      status: st,
+      in_time: defaultIn,
+      out_time: defaultOut,
+      reason: dayRec?.manual_marking_reason || '',
+      is_manually_marked: dayRec?.is_manually_marked || 0,
+      manually_marked_by: dayRec?.manually_marked_by || null,
+      manually_marked_at: dayRec?.manually_marked_at || null,
+      manual_marking_reason: dayRec?.manual_marking_reason || '',
+      marked_by_user_name: dayRec?.marked_by_user_name || '',
+      existingRecord: dayRec || null,
+    });
+  };
+
+  /** Save Manual Attendance */
+  const handleSaveManual = async (e) => {
+    if (e) e.preventDefault();
+    if (!markingModal?.employee_id) {
+      if (onError) onError(null, 'Please select a staff member.');
+      return;
+    }
+    if (!markingModal?.date) {
+      if (onError) onError(null, 'Please select an attendance date.');
+      return;
+    }
+    if (!markingModal?.reason || !markingModal.reason.trim()) {
+      if (onError) onError(null, 'Reason for manual attendance marking is mandatory.');
+      return;
+    }
+
+    try {
+      setIsSavingManual(true);
+      await apiFetch('/attendance/mark', {
+        method: 'POST',
+        body: JSON.stringify({
+          employee_id: Number(markingModal.employee_id),
+          date: markingModal.date,
+          status: markingModal.status,
+          in_time: markingModal.in_time ? `${markingModal.date} ${markingModal.in_time.length === 5 ? markingModal.in_time + ':00' : markingModal.in_time}` : null,
+          out_time: markingModal.out_time ? `${markingModal.date} ${markingModal.out_time.length === 5 ? markingModal.out_time + ':00' : markingModal.out_time}` : null,
+          reason: markingModal.reason.trim(),
+        }),
+      });
+      if (onSuccess) {
+        onSuccess(`Manual attendance saved successfully for ${markingModal.employee_name || 'Staff'} on ${markingModal.date}!`);
+      }
+      setMarkingModal(null);
+      await loadRegister();
+    } catch (err) {
+      if (onError) onError(err, 'Failed to save manual attendance.');
+    } finally {
+      setIsSavingManual(false);
+    }
+  };
 
   // Handle period selector changes
   useEffect(() => {
@@ -119,6 +211,30 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
     }, 250);
     return () => clearTimeout(timer);
   }, [loadRegister]);
+
+  /** Process biometric punches across the selected month, week, or custom date range */
+  const handleProcessPunches = async () => {
+    if (!fromDate || !toDate) return;
+    try {
+      setIsProcessingPunches(true);
+      const res = await apiFetch('/attendance/process', {
+        method: 'POST',
+        body: JSON.stringify({ fromDate, toDate }),
+      });
+      const processedCount = res?.data?.processed ?? res?.processed ?? 0;
+      const datesCount = res?.data?.datesProcessed ?? res?.datesProcessed ?? 0;
+      if (onSuccess) {
+        onSuccess(
+          `Successfully processed punches across ${datesCount} day(s) (${fromDate} to ${toDate})! ${processedCount} daily summaries generated/updated.`
+        );
+      }
+      await loadRegister();
+    } catch (err) {
+      if (onError) onError(err, 'Failed to process biometric punches.');
+    } finally {
+      setIsProcessingPunches(false);
+    }
+  };
 
   // List of calendar days in range
   const dateColumns = useMemo(() => {
@@ -240,6 +356,57 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleProcessPunches}
+              disabled={isLoading || isProcessingPunches}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              title={`Read biometric punches and generate/update daily attendance summaries for ${
+                viewType === 'monthly'
+                  ? `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][selectedMonth - 1]} ${selectedYear}`
+                  : viewType === 'weekly'
+                  ? 'this week'
+                  : 'the selected date range'
+              } (${fromDate} to ${toDate})`}
+            >
+              {isProcessingPunches ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  <span>Processing Punches…</span>
+                </>
+              ) : (
+                <>
+                  <SyncIcon className="w-3.5 h-3.5 text-white" />
+                  <span>
+                    Process Punches ({viewType === 'monthly' ? 'Month' : viewType === 'weekly' ? 'Week' : 'Custom Range'})
+                  </span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMarkingModal({
+                employee_id: '',
+                employee_name: '',
+                employee_code: '',
+                department_name: '',
+                shift_category: '',
+                date: fromDate || new Date().toISOString().slice(0, 10),
+                status: 'present',
+                in_time: '08:00',
+                out_time: '18:00',
+                reason: '',
+                is_manually_marked: 0,
+              })}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Mark attendance manually for any staff member"
+            >
+              <PlusIcon className="w-3.5 h-3.5 text-white" />
+              <span>Mark Attendance</span>
+            </button>
             <button
               type="button"
               onClick={handleExportCSV}
@@ -481,8 +648,13 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
                       const dayRec = r.days[d];
                       if (!dayRec) {
                         return (
-                          <td key={d} className="px-0.5 py-1 text-center border-r border-gray-100 text-gray-300">
-                            <span className="text-[10px] font-normal text-gray-300">·</span>
+                          <td
+                            key={d}
+                            onClick={() => openMarkModalForCell(r, d, null)}
+                            className="px-0.5 py-1 text-center border-r border-gray-100 text-gray-300 hover:bg-blue-100/60 cursor-pointer group transition-colors"
+                            title={`Click to mark attendance for ${r.full_name} on ${d}`}
+                          >
+                            <span className="text-[10px] font-normal text-gray-300 group-hover:text-blue-600 group-hover:font-bold transition-all">·</span>
                           </td>
                         );
                       }
@@ -508,19 +680,29 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
 
                       const inTimeStr = fmtTime12(dayRec.first_in_time);
                       const outTimeStr = fmtTime12(dayRec.last_out_time);
-                      const tooltip = `${r.full_name} (${d})\nStatus: ${dayRec.status}\nIn: ${inTimeStr}\nOut: ${outTimeStr}\nWorked: ${(Number(dayRec.worked_minutes || 0) / 60).toFixed(1)}h`;
+                      const isManual = !!dayRec.is_manually_marked;
+                      let tooltip = `${r.full_name} (${d})\nStatus: ${dayRec.status}\nIn: ${inTimeStr}\nOut: ${outTimeStr}\nWorked: ${(Number(dayRec.worked_minutes || 0) / 60).toFixed(1)}h`;
+                      if (isManual) {
+                        tooltip += `\n[MANUALLY MARKED by ${dayRec.marked_by_user_name || 'Admin'}${dayRec.manually_marked_at ? ' on ' + new Date(dayRec.manually_marked_at).toLocaleDateString('en-IN') : ''}]\nReason: ${dayRec.manual_marking_reason || 'N/A'}`;
+                      }
 
                       return (
                         <td
                           key={d}
-                          className="px-0.5 py-1 text-center border-r border-gray-100"
+                          className="px-0.5 py-1 text-center border-r border-gray-100 relative"
                           title={tooltip}
                         >
                           <span
-                            onClick={() => setSelectedEmployee({ emp: r, date: d, record: dayRec })}
-                            className={`inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-extrabold cursor-pointer transition-transform hover:scale-110 shadow-2xs ${bg}`}
+                            onClick={() => openMarkModalForCell(r, d, dayRec)}
+                            className={`relative inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-extrabold cursor-pointer transition-transform hover:scale-110 shadow-2xs ${bg}`}
                           >
                             {label}
+                            {isManual && (
+                              <span
+                                className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-600 ring-1.5 ring-white"
+                                title={`Manually marked by ${dayRec.marked_by_user_name || 'Admin'}`}
+                              />
+                            )}
                           </span>
                         </td>
                       );
@@ -553,78 +735,229 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
         )}
       </div>
 
-      {/* ── Day Details Modal / Drawer ── */}
-      {selectedEmployee && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">{selectedEmployee.emp.full_name}</h3>
-                <div className="text-xs text-gray-500">
-                  {selectedEmployee.emp.employee_code} · {selectedEmployee.emp.department_name}
+      {/* ── Attendance Details & Manual Marking Modal ── */}
+      {markingModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <form
+            onSubmit={handleSaveManual}
+            className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8"
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 to-blue-50/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                  <CalendarIcon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-gray-900">
+                    {markingModal.existingRecord ? 'Edit Attendance (Manual Override)' : 'Mark Attendance Manually'}
+                  </h3>
+                  <div className="text-xs text-gray-500">
+                    {markingModal.date ? new Date(markingModal.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Select Date'}
+                  </div>
                 </div>
               </div>
               <button
-                onClick={() => setSelectedEmployee(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+                type="button"
+                onClick={() => setMarkingModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
               >
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <span className="text-xs font-semibold text-gray-600">Date</span>
-                <span className="text-xs font-bold text-gray-900">{selectedEmployee.date}</span>
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+              {/* Staff Member Picker / Info */}
+              {markingModal.employee_id && markingModal.employee_name ? (
+                <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-gray-900 text-sm">{markingModal.employee_name}</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">
+                      Code: <span className="font-mono font-semibold text-gray-700">{markingModal.employee_code}</span> · Dept: <span className="font-semibold text-gray-700">{markingModal.department_name || 'General'}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 uppercase tracking-wider">
+                    {markingModal.shift_category || 'Staff'}
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <EmployeePicker
+                    value={markingModal.employee_id}
+                    onChange={(id, emp) => {
+                      setMarkingModal((m) => ({
+                        ...m,
+                        employee_id: id,
+                        employee_name: emp?.full_name || '',
+                        employee_code: emp?.employee_code || '',
+                        department_name: emp?.department_name || '',
+                        shift_category: emp?.shift_category || '',
+                      }));
+                    }}
+                    label="Select Staff Member"
+                    required={true}
+                  />
+                </div>
+              )}
+
+              {/* Date Input if not pre-locked or allowing adjustment */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                    Attendance Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={markingModal.date}
+                    onChange={(e) => setMarkingModal((m) => ({ ...m, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    required
+                  />
+                </div>
+
+                {/* Status Selection */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                    Status <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={markingModal.status}
+                    onChange={(e) => setMarkingModal((m) => ({ ...m, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    {STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
+              {/* Existing Biometric punches strip if available */}
+              {markingModal.existingRecord && (markingModal.existingRecord.first_in_time || markingModal.existingRecord.last_out_time) && (
+                <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100/80">
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">
+                    Recorded Biometric Punches
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white p-1.5 rounded-lg border border-blue-100">
+                      <span className="block text-[9px] text-gray-400">First In</span>
+                      <strong className="text-xs text-gray-800 font-mono">{fmtTime12(markingModal.existingRecord.first_in_time)}</strong>
+                    </div>
+                    <div className="bg-white p-1.5 rounded-lg border border-blue-100">
+                      <span className="block text-[9px] text-gray-400">Last Out</span>
+                      <strong className="text-xs text-gray-800 font-mono">{fmtTime12(markingModal.existingRecord.last_out_time)}</strong>
+                    </div>
+                    <div className="bg-white p-1.5 rounded-lg border border-blue-100">
+                      <span className="block text-[9px] text-gray-400">Worked</span>
+                      <strong className="text-xs text-blue-700">{(Number(markingModal.existingRecord.worked_minutes || 0) / 60).toFixed(1)}h</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Audit Log Banner if previously marked manually */}
+              {!!markingModal.is_manually_marked && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+                  <div className="font-bold flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                      Previously Marked Manually
+                    </span>
+                    <span className="text-[10px] text-amber-700 font-normal">
+                      by <strong className="font-bold">{markingModal.marked_by_user_name || 'Admin'}</strong>
+                      {markingModal.manually_marked_at && ` on ${new Date(markingModal.manually_marked_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}`}
+                    </span>
+                  </div>
+                  {markingModal.manual_marking_reason && (
+                    <div className="text-[11px] text-amber-800/90 italic bg-amber-100/50 p-2 rounded-lg mt-1">
+                      "{markingModal.manual_marking_reason}"
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* In and Out Times */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/30">
-                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Punch In</div>
-                  <div className="text-sm font-extrabold text-gray-900 mt-0.5">
-                    {fmtTime12(selectedEmployee.record.first_in_time)}
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                    In Time {markingModal.status === 'present' || markingModal.status === 'late_present' ? '(Optional)' : ''}
+                  </label>
+                  <input
+                    type="time"
+                    value={markingModal.in_time}
+                    onChange={(e) => setMarkingModal((m) => ({ ...m, in_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
                 </div>
-                <div className="p-3 rounded-xl border border-blue-100 bg-blue-50/30">
-                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Punch Out</div>
-                  <div className="text-sm font-extrabold text-gray-900 mt-0.5">
-                    {fmtTime12(selectedEmployee.record.last_out_time)}
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                    Out Time {markingModal.status === 'present' || markingModal.status === 'late_present' ? '(Optional)' : ''}
+                  </label>
+                  <input
+                    type="time"
+                    value={markingModal.out_time}
+                    onChange={(e) => setMarkingModal((m) => ({ ...m, out_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Status</div>
-                  <div className="text-xs font-bold text-gray-900 mt-0.5 uppercase">
-                    {selectedEmployee.record.status}
-                  </div>
+              {/* Mandatory Reason for Manual Marking */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider block">
+                    Reason for Manual Marking <span className="text-rose-500 font-extrabold">* (Mandatory)</span>
+                  </label>
+                  <span className="text-[10px] text-gray-400">Required for audit trail</span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Worked</div>
-                  <div className="text-xs font-bold text-gray-900 mt-0.5">
-                    {(Number(selectedEmployee.record.worked_minutes || 0) / 60).toFixed(1)} hrs
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Late By</div>
-                  <div className="text-xs font-bold text-amber-600 mt-0.5">
-                    {selectedEmployee.record.late_minutes || 0} mins
-                  </div>
-                </div>
+                <textarea
+                  rows={3}
+                  value={markingModal.reason}
+                  onChange={(e) => setMarkingModal((m) => ({ ...m, reason: e.target.value }))}
+                  placeholder="Enter detailed reason (e.g., On-duty hospital work, biometric scanner failure, approved half-day permission, emergency coverage)..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                  required
+                />
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-blue-50/50 border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
+                <CheckIcon className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-blue-700/90 leading-tight">
+                  Marking attendance manually will update the staff member's worked hours and attendance status. All manual actions are recorded with your user credentials for compliance.
+                </p>
               </div>
             </div>
 
-            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2.5">
               <button
                 type="button"
-                onClick={() => setSelectedEmployee(null)}
-                className="px-4 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold cursor-pointer shadow-xs"
+                onClick={() => setMarkingModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"
               >
-                Close
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingManual || !markingModal.employee_id || !markingModal.reason?.trim()}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-bold px-5 py-2 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSavingManual ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Saving…</span>
+                  </>
+                ) : (
+                  <span>Save Attendance</span>
+                )}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
       </div>

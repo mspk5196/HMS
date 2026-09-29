@@ -445,14 +445,14 @@ const processDailyAttendance = async (date) => {
 
     const isMissedPunch = !firstIn || !lastOut;
 
-    // Lateness is measured against the shift start, after the daily grace.
+    // Lateness is measured against the shift start with no daily buffer (lateness accumulates into monthly buffer pool).
     let lateMinutes = 0;
     if (firstIn && shift.start_time) {
       let rawLate = dateToMinutes(firstIn) - timeToMinutes(shift.start_time);
       if (shift.is_night_shift && rawLate < -360) {
         rawLate += 1440;
       }
-      lateMinutes = Math.max(0, rawLate - (shift.grace_period_minutes ?? 0));
+      lateMinutes = Math.max(0, rawLate);
     }
 
     const accepted = [...ins, ...outs].sort((a, b) => new Date(a.punch_time) - new Date(b.punch_time));
@@ -555,6 +555,35 @@ const processDailyAttendance = async (date) => {
   return { processed, skipped, date };
 };
 
+const processAttendanceRange = async (fromDate, toDate) => {
+  if (!fromDate || !toDate) {
+    throw new AppError('fromDate and toDate are required', 400);
+  }
+  let totalProcessed = 0;
+  let totalSkipped = 0;
+  let datesProcessed = 0;
+
+  const current = new Date(`${fromDate}T00:00:00Z`);
+  const end = new Date(`${toDate}T00:00:00Z`);
+
+  while (current <= end) {
+    const dStr = current.toISOString().slice(0, 10);
+    const res = await processDailyAttendance(dStr);
+    totalProcessed += res?.processed || 0;
+    totalSkipped += res?.skipped || 0;
+    datesProcessed++;
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return {
+    processed: totalProcessed,
+    skipped: totalSkipped,
+    datesProcessed,
+    fromDate,
+    toDate,
+  };
+};
+
 /* ─────────────────────────────────────────────
    PUNCH IMPORT
 ───────────────────────────────────────────── */
@@ -643,13 +672,16 @@ const importPunches = async (rows) => {
    ADMIN ACTIONS
 ───────────────────────────────────────────── */
 
-const markAttendanceManually = async (employeeId, date, status, markedBy, inTime = null, outTime = null) => {
+const markAttendanceManually = async (employeeId, date, status, markedBy, inTime = null, outTime = null, reason = '') => {
   // Must match the attendance_daily_summary.status enum exactly.
   const validStatuses = ['present', 'late_present', 'absent', 'on_leave', 'lop', 'week_off', 'holiday'];
   if (!validStatuses.includes(status)) {
     throw new AppError(`Invalid status. Allowed: ${validStatuses.join(', ')}`, 400);
   }
-  await q.adminMarkAttendance(employeeId, date, status, markedBy, inTime, outTime);
+  if (!reason || !String(reason).trim()) {
+    throw new AppError('Reason for manual attendance marking is mandatory', 400);
+  }
+  await q.adminMarkAttendance(employeeId, date, status, markedBy, inTime, outTime, String(reason).trim());
 };
 
 const submitCorrectionRequest = async (data) => {
@@ -679,7 +711,7 @@ const reviewCorrectionRequest = async (requestId, decision, reviewedBy) => {
   let lateMinutes = 0;
   if (req.requested_in_time && shift.start_time) {
     const rawLate = dateToMinutes(req.requested_in_time) - timeToMinutes(shift.start_time);
-    lateMinutes = Math.max(0, rawLate - (shift.grace_period_minutes ?? 0));
+    lateMinutes = Math.max(0, rawLate);
   }
   const worked = req.requested_in_time && req.requested_out_time
     ? minutesBetween(req.requested_in_time, req.requested_out_time)
@@ -766,6 +798,7 @@ const getEmployeeBuffer = async (employeeId, month, year) =>
 
 module.exports = {
   processDailyAttendance,
+  processAttendanceRange,
   importPunches,
   markAttendanceManually,
   submitCorrectionRequest,

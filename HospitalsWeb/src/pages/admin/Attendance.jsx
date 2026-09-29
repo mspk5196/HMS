@@ -229,19 +229,6 @@ function DailyLog({ departments, onError, onSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  
-  // Row manual edit state
-  const [markingRow, setMarkingRow] = useState(null); // { employee_id, full_name, status, in_time, out_time }
-  const [isSaving, setIsSaving] = useState(false);
-
-  // New manual attendance modal state
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [manualForm, setManualForm] = useState({
-    employee_id: '',
-    status: 'present',
-    in_time: '08:00',
-    out_time: '18:00',
-  });
 
   const load = useCallback(async () => {
     try {
@@ -297,72 +284,6 @@ function DailyLog({ departments, onError, onSuccess }) {
       onError(err, 'Failed to process attendance.');
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  const startMarkRow = (r) => {
-    const rawIn = r.first_punch_in ? (r.first_punch_in.includes(' ') ? r.first_punch_in.split(' ')[1].slice(0, 5) : r.first_punch_in.slice(11, 16)) : '08:00';
-    const rawOut = r.last_punch_out ? (r.last_punch_out.includes(' ') ? r.last_punch_out.split(' ')[1].slice(0, 5) : r.last_punch_out.slice(11, 16)) : '18:00';
-
-    setMarkingRow({
-      employee_id: r.employee_id,
-      full_name: r.full_name,
-      status: r.status || 'present',
-      in_time: rawIn,
-      out_time: rawOut,
-    });
-  };
-
-  const saveMarkRow = async () => {
-    if (!markingRow) return;
-    try {
-      setIsSaving(true);
-      await apiFetch('/attendance/mark', {
-        method: 'POST',
-        body: JSON.stringify({
-          employee_id: markingRow.employee_id,
-          date,
-          status: markingRow.status,
-          in_time: markingRow.in_time ? `${date} ${markingRow.in_time}:00` : null,
-          out_time: markingRow.out_time ? `${date} ${markingRow.out_time}:00` : null,
-        }),
-      });
-      onSuccess(`Attendance for ${markingRow.full_name} marked as ${markingRow.status} (credited as present for shift).`);
-      setMarkingRow(null);
-      await load();
-    } catch (err) {
-      onError(err, 'Failed to mark attendance.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveNewManual = async (e) => {
-    e.preventDefault();
-    if (!manualForm.employee_id) {
-      onError(null, 'Please select an employee.');
-      return;
-    }
-    try {
-      setIsSaving(true);
-      await apiFetch('/attendance/mark', {
-        method: 'POST',
-        body: JSON.stringify({
-          employee_id: Number(manualForm.employee_id),
-          date,
-          status: manualForm.status,
-          in_time: manualForm.in_time ? `${date} ${manualForm.in_time}:00` : null,
-          out_time: manualForm.out_time ? `${date} ${manualForm.out_time}:00` : null,
-        }),
-      });
-      onSuccess(`Manual attendance saved for ${date}. Employee is credited as present for the shift.`);
-      setShowManualModal(false);
-      setManualForm({ employee_id: '', status: 'present', in_time: '08:00', out_time: '18:00' });
-      await load();
-    } catch (err) {
-      onError(err, 'Failed to mark attendance.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -468,14 +389,6 @@ function DailyLog({ departments, onError, onSuccess }) {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => setShowManualModal(true)}
-              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
-              title="Manually mark attendance (Present / In / Out) for any staff member"
-            >
-              <PlusIcon className="w-4 h-4 text-white" />
-              <span>Mark Present / Attendance</span>
-            </button>
-            <button
               onClick={handleSyncBiometric}
               disabled={isSyncing || isProcessing}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -560,11 +473,11 @@ function DailyLog({ departments, onError, onSuccess }) {
           <div className="p-8 text-center text-xs text-gray-400">Loading daily attendance records…</div>
         ) : rows.length === 0 ? (
           <div className="p-8 text-center text-xs text-gray-500">
-            No attendance summary for this date and filter criteria. Import punches, then click "Process Punches" or click "+ Mark Present / Attendance".
+            No attendance summary for this date and filter criteria. Import punches, then click "Process Punches" or use the Attendance Register &amp; Summary page to mark attendance.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[950px]">
+            <table className="w-full text-xs min-w-[850px]">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                   <th className="text-left px-4 py-2.5">Employee</th>
@@ -575,114 +488,54 @@ function DailyLog({ departments, onError, onSuccess }) {
                   <th className="text-center px-3 py-2.5">Break</th>
                   <th className="text-center px-3 py-2.5">Late</th>
                   <th className="text-center px-3 py-2.5">Status</th>
-                  <th className="text-center px-3 py-2.5">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => {
-                  const isEditingThis = markingRow && markingRow.employee_id === r.employee_id;
+                {rows.map((r) => (
+                  <tr key={r.id || r.employee_id} className="hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5">
+                      <div className="font-bold text-gray-900">{r.full_name}</div>
+                      <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600">{r.shift_name || '—'}</td>
 
-                  return (
-                    <tr key={r.id} className="hover:bg-gray-50/60">
-                      <td className="px-4 py-2.5">
-                        <div className="font-bold text-gray-900">{r.full_name}</div>
-                        <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-600">{r.shift_name || '—'}</td>
+                    {/* In Time */}
+                    <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
+                      {fmtTime(r.first_punch_in)}
+                    </td>
 
-                      {/* In Time */}
-                      <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
-                        {isEditingThis ? (
-                          <input
-                            type="time"
-                            value={markingRow.in_time}
-                            onChange={(e) => setMarkingRow((m) => ({ ...m, in_time: e.target.value }))}
-                            className="px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
-                          />
-                        ) : (
-                          fmtTime(r.first_punch_in)
+                    {/* Out Time */}
+                    <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
+                      {fmtTime(r.last_punch_out)}
+                    </td>
+
+                    <td className="px-3 py-2.5 text-center text-gray-700">{fmtMinutes(r.worked_minutes)}</td>
+                    <td className="px-3 py-2.5 text-center text-gray-500">{fmtMinutes(r.break_minutes)}</td>
+                    <td className={`px-3 py-2.5 text-center font-semibold ${Number(r.late_minutes) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                      {fmtMinutes(r.late_minutes)}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-3 py-2.5 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {r.status}
+                        </span>
+                        {!!r.is_missed_punch && (
+                          <span className="text-[9px] font-semibold text-rose-500">missed punch</span>
                         )}
-                      </td>
-
-                      {/* Out Time */}
-                      <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
-                        {isEditingThis ? (
-                          <input
-                            type="time"
-                            value={markingRow.out_time}
-                            onChange={(e) => setMarkingRow((m) => ({ ...m, out_time: e.target.value }))}
-                            className="px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
-                          />
-                        ) : (
-                          fmtTime(r.last_punch_out)
-                        )}
-                      </td>
-
-                      <td className="px-3 py-2.5 text-center text-gray-700">{fmtMinutes(r.worked_minutes)}</td>
-                      <td className="px-3 py-2.5 text-center text-gray-500">{fmtMinutes(r.break_minutes)}</td>
-                      <td className={`px-3 py-2.5 text-center font-semibold ${Number(r.late_minutes) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                        {fmtMinutes(r.late_minutes)}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-3 py-2.5 text-center">
-                        {isEditingThis ? (
-                          <select
-                            value={markingRow.status}
-                            onChange={(e) => setMarkingRow((m) => ({ ...m, status: e.target.value }))}
-                            className="px-2 py-1 border border-gray-200 rounded text-[10px] font-semibold bg-white"
+                        {!!r.is_manually_marked && (
+                          <span
+                            className="text-[9px] font-semibold text-blue-500 cursor-help"
+                            title={r.manual_marking_reason ? `Manual: ${r.manual_marking_reason} (by ${r.marked_by_user_name || 'Admin'})` : 'Manually marked'}
                           >
-                            {STATUS_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                              {r.status}
-                            </span>
-                            {!!r.is_missed_punch && (
-                              <span className="text-[9px] font-semibold text-rose-500">missed punch</span>
-                            )}
-                            {!!r.is_manually_marked && (
-                              <span className="text-[9px] font-semibold text-blue-500">manual</span>
-                            )}
-                          </div>
+                            manual
+                          </span>
                         )}
-                      </td>
-
-                      {/* Action */}
-                      <td className="px-3 py-2.5 text-center">
-                        {isEditingThis ? (
-                          <div className="flex items-center gap-1.5 justify-center">
-                            <button
-                              onClick={saveMarkRow}
-                              disabled={isSaving}
-                              className="text-[10px] font-bold text-emerald-600 hover:underline cursor-pointer disabled:opacity-50"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => setMarkingRow(null)}
-                              className="text-[10px] font-bold text-gray-400 hover:underline cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startMarkRow(r)}
-                            className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
-                          >
-                            Mark manually
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -739,102 +592,6 @@ function DailyLog({ departments, onError, onSuccess }) {
           </div>
         )}
       </div>
-
-      {/* Manual Mark Modal (for ANY staff member) */}
-      {showManualModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveNewManual} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div>
-                <h3 className="font-extrabold text-sm text-gray-900">Mark Attendance Manually</h3>
-                <p className="text-xs text-gray-500">Date: {new Date(date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowManualModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
-              >
-                <XIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              {/* Searchable Employee Picker */}
-              <EmployeePicker
-                value={manualForm.employee_id}
-                onChange={(v) => setManualForm((f) => ({ ...f, employee_id: v }))}
-                label="Staff Member (Search name/phone/emp ID)"
-                required={true}
-              />
-
-              {/* Status Select */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Attendance Status</label>
-                <select
-                  value={manualForm.status}
-                  onChange={(e) => setManualForm((f) => ({ ...f, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
-                >
-                  {STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* In and Out Times */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">In Time</label>
-                  <input
-                    type="time"
-                    value={manualForm.in_time}
-                    onChange={(e) => setManualForm((f) => ({ ...f, in_time: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Out Time</label>
-                  <input
-                    type="time"
-                    value={manualForm.out_time}
-                    onChange={(e) => setManualForm((f) => ({ ...f, out_time: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-blue-50 p-3 rounded-xl text-[11px] text-blue-800 space-y-1">
-                <div className="font-bold flex items-center gap-1">
-                  <CheckIcon className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Full Shift Attendance Credited</span>
-                </div>
-                <p className="text-blue-700/80">
-                  When marking Present, the employee is considered fully present in their shift for worked hours and salary calculation. In/Out times are saved for records.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setShowManualModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || !manualForm.employee_id}
-                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-bold px-5 py-2 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isSaving ? 'Saving…' : 'Save Attendance'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }
@@ -1068,6 +825,9 @@ function BufferPool({ departments, onError }) {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [deptFilter, setDeptFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -1083,76 +843,295 @@ function BufferPool({ departments, onError }) {
     } finally {
       setIsLoading(false);
     }
-  }, [month, year, deptFilter]);
+  }, [month, year, deptFilter, onError]);
 
   useEffect(() => { load(); }, [load]);
 
+  // Filter rows based on search, category, and status
+  const filteredRows = rows.filter((r) => {
+    if (categoryFilter && r.shift_category !== categoryFilter) return false;
+    
+    const remaining = Number(r.buffer_remaining_minutes ?? 0);
+    const allocated = Number(r.buffer_allocated_minutes ?? 0);
+    const used = Number(r.buffer_used_minutes ?? 0);
+    
+    if (statusFilter === 'exhausted' && remaining > 0) return false;
+    if (statusFilter === 'warning' && (remaining <= 0 || remaining > 10)) return false;
+    if (statusFilter === 'available' && remaining <= 10) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const nameMatch = (r.full_name || '').toLowerCase().includes(q);
+      const codeMatch = (r.employee_code || '').toLowerCase().includes(q);
+      const deptMatch = (r.department_name || '').toLowerCase().includes(q);
+      const desMatch = (r.designation_name || '').toLowerCase().includes(q);
+      if (!nameMatch && !codeMatch && !deptMatch && !desMatch) return false;
+    }
+    return true;
+  });
+
+  // Calculate statistics
+  const totalEmployees = rows.length;
+  const healthyCount = rows.filter((r) => Number(r.buffer_remaining_minutes ?? 0) > 10).length;
+  const warningCount = rows.filter((r) => {
+    const rem = Number(r.buffer_remaining_minutes ?? 0);
+    return rem > 0 && rem <= 10;
+  }).length;
+  const exhaustedCount = rows.filter((r) => Number(r.buffer_remaining_minutes ?? 0) <= 0).length;
+
+  const getShiftBadge = (cat) => {
+    switch (cat) {
+      case 'day':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">Day Shift</span>;
+      case 'night':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200/80">Night Shift</span>;
+      case 'day_and_night':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200/80">Day & Night (Roster)</span>;
+      case 'general':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200/80">General / Custom</span>;
+      default:
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700">Day Shift</span>;
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Period</span>
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('en-IN', { month: 'long' })}</option>
-            ))}
-          </select>
-          <input
-            type="number"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="w-20 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold"
-          />
+      {/* Overview Stat Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+            <UsersIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Total Staff</div>
+            <div className="text-lg font-bold text-gray-900">{totalEmployees}</div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dept</span>
-          <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white">
-            <option value="">All departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+            <ClockIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Buffer Healthy</div>
+            <div className="text-lg font-bold text-emerald-600">{healthyCount}</div>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
+            <BoltIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Low Balance (&le;10m)</div>
+            <div className="text-lg font-bold text-amber-600">{warningCount}</div>
+          </div>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-sm flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
+            <XIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Buffer Exhausted</div>
+            <div className="text-lg font-bold text-rose-600">{exhaustedCount}</div>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900">Monthly Late-Buffer Pool</h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">
-            Lateness beyond the shift's daily grace period draws from here. Only what exceeds the pool is chargeable in payroll.
-          </p>
+      {/* Filter and Control Bar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Period selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Period</span>
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleString('en-IN', { month: 'long' })}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="w-18 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Department Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dept</span>
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[150px]"
+            >
+              <option value="">All Departments</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+
+          {/* Shift Category Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Shift</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Shifts</option>
+              <option value="day">Day Shift</option>
+              <option value="night">Night Shift</option>
+              <option value="day_and_night">Day & Night (Roster)</option>
+              <option value="general">General / Custom</option>
+            </select>
+          </div>
+
+          {/* Balance Status Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">All Statuses</option>
+              <option value="available">Healthy (&gt;10m)</option>
+              <option value="warning">Low (&le;10m)</option>
+              <option value="exhausted">Exhausted (0m)</option>
+            </select>
+          </div>
         </div>
+
+        {/* Search Box */}
+        <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+          <SearchIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search employee name or code..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Main Table Card */}
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Monthly Late-Buffer Pool</h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Configured per hospital shift category. Lateness beyond the daily shift grace period draws from here. Unabsorbed lateness becomes eligible for late penalty / payroll fines.
+            </p>
+          </div>
+          <div className="text-[11px] font-semibold text-gray-400">
+            Showing {filteredRows.length} of {rows.length} staff
+          </div>
+        </div>
+
         {isLoading ? (
-          <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-xs text-gray-500">No buffer activity recorded for this period.</div>
+          <div className="p-12 text-center text-xs text-gray-400">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent mb-2"></div>
+            <div>Loading employee buffer balances…</div>
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="p-12 text-center text-xs text-gray-500">
+            No active staff matches the selected period or filters.
+          </div>
         ) : (
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                <th className="text-left px-4 py-2.5">Employee</th>
-                <th className="text-center px-3 py-2.5">Allocated</th>
-                <th className="text-center px-3 py-2.5">Used</th>
-                <th className="text-center px-3 py-2.5">Remaining</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((r) => {
-                const exhausted = Number(r.buffer_remaining_minutes) <= 0;
-                return (
-                  <tr key={r.id} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-2.5">
-                      <div className="font-bold text-gray-900">{r.full_name}</div>
-                      <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
-                    </td>
-                    <td className="px-3 py-2.5 text-center text-gray-600">{fmtMinutes(r.buffer_allocated_minutes)}</td>
-                    <td className="px-3 py-2.5 text-center text-amber-600 font-semibold">{fmtMinutes(r.buffer_used_minutes)}</td>
-                    <td className={`px-3 py-2.5 text-center font-bold ${exhausted ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {fmtMinutes(r.buffer_remaining_minutes)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <th className="text-left px-4 py-3">Employee</th>
+                  <th className="text-left px-3 py-3">Department</th>
+                  <th className="text-left px-3 py-3">Shift Policy</th>
+                  <th className="text-center px-3 py-3">Allocated Buffer</th>
+                  <th className="text-center px-3 py-3">Used Buffer</th>
+                  <th className="text-center px-3 py-3">Remaining Balance</th>
+                  <th className="text-center px-3 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredRows.map((r) => {
+                  const alloc = Number(r.buffer_allocated_minutes ?? 30);
+                  const used = Number(r.buffer_used_minutes ?? 0);
+                  const remaining = Number(r.buffer_remaining_minutes ?? Math.max(0, alloc - used));
+                  const pctUsed = alloc > 0 ? Math.min(100, Math.round((used / alloc) * 100)) : 100;
+                  const isExhausted = remaining <= 0;
+                  const isWarning = remaining > 0 && remaining <= 10;
+
+                  return (
+                    <tr key={r.id || r.employee_id} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="px-4 py-2.5">
+                        <div className="font-bold text-gray-900">{r.full_name}</div>
+                        <div className="text-[10px] text-gray-400 flex items-center gap-1.5">
+                          <span>Code: {r.employee_code}</span>
+                          {r.designation_name && (
+                            <>
+                              <span>·</span>
+                              <span>{r.designation_name}</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2.5 text-gray-600 font-medium">
+                        {r.department_name || '—'}
+                      </td>
+
+                      <td className="px-3 py-2.5">
+                        {getShiftBadge(r.shift_category)}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center text-gray-700 font-semibold">
+                        {fmtMinutes(alloc)}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center">
+                        <div className="flex flex-col items-center">
+                          <span className={`font-semibold ${used > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                            {fmtMinutes(used)}
+                          </span>
+                          <div className="w-16 bg-gray-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isExhausted ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${pctUsed}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className={`px-3 py-2.5 text-center font-bold ${isExhausted ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {fmtMinutes(remaining)}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-center">
+                        {isExhausted ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            Exhausted
+                          </span>
+                        ) : isWarning ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            Low Balance
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
