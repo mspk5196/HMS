@@ -721,16 +721,17 @@ async function syncBiometricEnrolledUsers(deviceId) {
 }
 
 /**
- * Synchronizes all active auto-sync enabled devices.
+ * Synchronizes registered users from all active auto-sync enabled devices.
  */
-async function syncAllActiveDevices(attendanceService) {
+async function syncAllEnrolledUsers() {
   const devices = await q.listBiometricDevices();
-  const activeDevices = devices.filter((d) => d.auto_sync_enabled);
-  const results = [];
+  const activeDevices = devices.filter((d) => d.auto_sync_enabled !== 0 && d.is_active !== 0);
+  const targets = activeDevices.length > 0 ? activeDevices : devices;
 
-  for (const dev of activeDevices) {
+  const results = [];
+  for (const dev of targets) {
     try {
-      const res = await syncBiometricDevice(dev.id, attendanceService);
+      const res = await syncBiometricEnrolledUsers(dev.id);
       results.push(res);
     } catch (err) {
       results.push({
@@ -752,4 +753,5 @@ module.exports = {
   syncBiometricDevice,
   syncAllActiveDevices,
   syncBiometricEnrolledUsers,
+  syncAllEnrolledUsers,
 };

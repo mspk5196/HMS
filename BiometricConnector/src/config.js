@@ -12,7 +12,7 @@ const config = {
   apiKey: process.env.CONNECTOR_API_KEY || 'neha_bio_secret_key_2026',
   mainBackendUrl: process.env.MAIN_BACKEND_URL || 'http://localhost:7000',
   mainBackendApiKey: process.env.MAIN_BACKEND_API_KEY || '',
-  autoSyncIntervalMins: Number(process.env.AUTO_SYNC_INTERVAL_MINS) || 10,
+  autoSyncIntervalMins: Number(process.env.AUTO_SYNC_INTERVAL_MINS) || 5,
 
   // Default device configuration
   defaultDevice: {
