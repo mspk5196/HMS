@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import AdmissionDetailView from './AdmissionDetailView';
 import ConsultationDetailView from './ConsultationDetailView';
@@ -45,7 +46,7 @@ const emptyForm = {
   mobile_number: '', address: '', blood_group: '', notes: '',
 };
 
-export default function PatientRecords() {
+export default function PatientRecords({ user }) {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'form' | 'history'
   const [editing, setEditing] = useState(null);
   const [historyFor, setHistoryFor] = useState(null);
@@ -131,12 +132,14 @@ export default function PatientRecords() {
         title="Patient Records"
         subtitle="One mobile number can belong to a whole family — search by mobile to see everyone linked to it."
         actions={
-          <button
-            onClick={startAdd}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-          >
-            + Register New Patient
-          </button>
+          hasPermission(user, 'patient.create') && (
+            <button
+              onClick={startAdd}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+            >
+              + Register New Patient
+            </button>
+          )
         }
       />
 
@@ -216,7 +219,9 @@ export default function PatientRecords() {
                   <td className="p-3.5 text-gray-500">{displayDate(p.created_at)}</td>
                   <td className="p-3.5">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => startEdit(p)} className="text-blue-600 font-bold hover:underline cursor-pointer">Edit</button>
+                      {hasPermission(user, 'patient.edit') && (
+                        <button onClick={() => startEdit(p)} className="text-blue-600 font-bold hover:underline cursor-pointer">Edit</button>
+                      )}
                       <button onClick={() => openHistory(p)} className="text-gray-600 font-bold hover:underline cursor-pointer">History</button>
                     </div>
                   </td>

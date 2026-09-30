@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -28,8 +29,13 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Discharge() {
-  const [tab, setTab] = useState('admitted');
+export default function Discharge({ user }) {
+  const tabs = [
+    { value: 'admitted', label: 'Currently Admitted', show: hasPermission(user, 'admission.view') || hasPermission(user, 'discharge.view') },
+    { value: 'discharged', label: 'Discharged / Balances', show: hasPermission(user, 'discharge.view') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => tabs[0]?.value || 'admitted');
   const [processing, setProcessing] = useState(null); // admission being discharged
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -39,6 +45,7 @@ export default function Discharge() {
   if (processing) {
     return (
       <ProcessDischarge
+        user={user}
         admission={processing}
         onBack={() => setProcessing(null)}
         onDone={(msg) => { flash(msg); setProcessing(null); }}
@@ -61,11 +68,11 @@ export default function Discharge() {
       <TabBar
         active={tab}
         onChange={setTab}
-        tabs={[{ value: 'admitted', label: 'Currently Admitted' }, { value: 'discharged', label: 'Discharged / Balances' }]}
+        tabs={tabs}
       />
 
-      {tab === 'admitted' && <AdmittedList onProcess={setProcessing} onError={fail} />}
-      {tab === 'discharged' && <DischargedList onError={fail} onSuccess={flash} />}
+      {tab === 'admitted' && <AdmittedList user={user} onProcess={setProcessing} onError={fail} />}
+      {tab === 'discharged' && <DischargedList user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
 }
@@ -74,7 +81,7 @@ export default function Discharge() {
    CURRENTLY ADMITTED
 ═══════════════════════════════════════════════════════════════════════ */
 
-function AdmittedList({ onProcess, onError }) {
+function AdmittedList({ user, onProcess, onError }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -119,12 +126,14 @@ function AdmittedList({ onProcess, onError }) {
                   Admitted {displayDate(a.admission_datetime)} · Dr. {a.doctor_name || '—'}
                 </div>
               </div>
-              <button
-                onClick={() => onProcess(a)}
-                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-              >
-                {a.status === 'payment_pending' ? 'Edit Discharge' : 'Process Discharge'}
-              </button>
+              {hasPermission(user, 'discharge.discharge_patient') && (
+                <button
+                  onClick={() => onProcess(a)}
+                  className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+                >
+                  {a.status === 'payment_pending' ? 'Edit Discharge' : 'Process Discharge'}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -137,7 +146,7 @@ function AdmittedList({ onProcess, onError }) {
    PROCESS DISCHARGE
 ═══════════════════════════════════════════════════════════════════════ */
 
-function ProcessDischarge({ admission, onBack, onDone, onError }) {
+function ProcessDischarge({ user, admission, onBack, onDone, onError }) {
   const [preview, setPreview] = useState(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -297,9 +306,11 @@ function ProcessDischarge({ admission, onBack, onDone, onError }) {
           After saving, this discharge will appear in <strong>Collect Payment</strong> page. Payment can be collected from there.
         </div>
 
-        <button type="submit" disabled={isSubmitting || isLoadingPreview} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50">
-          {isSubmitting ? 'Saving…' : 'Save & Move to Payment'}
-        </button>
+        {hasPermission(user, 'discharge.discharge_patient') && (
+          <button type="submit" disabled={isSubmitting || isLoadingPreview} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50">
+            {isSubmitting ? 'Saving…' : 'Save & Move to Payment'}
+          </button>
+        )}
       </form>
     </div>
   );

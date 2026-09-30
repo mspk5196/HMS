@@ -4,10 +4,24 @@ const { verifyToken, requireSettingsAccess } = require('../../middleware/auth');
 
 router.use(verifyToken);
 
+const canViewApprovals = (req, res, next) => {
+  if (
+    req.user?.role_name === 'Administrator' ||
+    req.user?.permissions?.includes('manage_all') ||
+    req.user?.permissions?.includes('approval.view') ||
+    req.user?.permissions?.includes('leave.review_reporting') ||
+    req.user?.permissions?.includes('leave.review_hr') ||
+    req.user?.can_access_settings
+  ) {
+    return next();
+  }
+  return res.status(403).json({ success: false, message: 'Forbidden. You do not have permission to view approvals.' });
+};
+
 // Approvals inbox — any authenticated user may see requests waiting on them,
-// or (for admins) the full list; not gated behind Settings access.
+// or users with approval permissions may see the full list.
 router.get('/approvals/mine', ctrl.listMyApprovals);
-router.get('/approvals', requireSettingsAccess, ctrl.listAllPendingApprovals);
+router.get('/approvals', canViewApprovals, ctrl.listAllPendingApprovals);
 router.post('/approvals/:id/approve', ctrl.approveRequest);
 router.post('/approvals/:id/reject', ctrl.rejectRequest);
 

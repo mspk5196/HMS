@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import {
   SearchIcon,
   CheckIcon,
@@ -40,7 +41,7 @@ const fmtTime12 = (t) => {
   return str;
 };
 
-export default function LateAttendanceFines({ departments = [], onError, onSuccess }) {
+export default function LateAttendanceFines({ departments = [], onError, onSuccess, user }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -464,15 +465,17 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowConfirmModal(true)}
-            disabled={selectedCandidates.length === 0 || isApplying}
-            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            <BoltIcon className="w-4 h-4 text-white" />
-            <span>Apply Fines to Selected ({selectedCandidates.length})</span>
-          </button>
+          {(!user || hasPermission(user, 'fine.apply_late_fines') || hasPermission(user, 'fine.create')) && (
+            <button
+              type="button"
+              onClick={() => setShowConfirmModal(true)}
+              disabled={selectedCandidates.length === 0 || isApplying}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              <BoltIcon className="w-4 h-4 text-white" />
+              <span>Apply Fines to Selected ({selectedCandidates.length})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -657,15 +660,17 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
                               <span>Fined: ₹{c.active_fine_amount}</span>
                             </span>
                             {c.existing_fines.map((f) => (
-                              <button
-                                key={f.id}
-                                type="button"
-                                disabled={cancellingId === f.id}
-                                onClick={() => handleCancelFine(f.id)}
-                                className="text-[9px] font-bold text-rose-600 hover:underline cursor-pointer disabled:opacity-50"
-                              >
-                                Cancel Fine
-                              </button>
+                              (!user || hasPermission(user, 'fine.delete') || hasPermission(user, 'fine.waive_fine')) ? (
+                                <button
+                                  key={f.id}
+                                  type="button"
+                                  disabled={cancellingId === f.id}
+                                  onClick={() => handleCancelFine(f.id)}
+                                  className="text-[9px] font-bold text-rose-600 hover:underline cursor-pointer disabled:opacity-50"
+                                >
+                                  Cancel Fine
+                                </button>
+                              ) : null
                             ))}
                           </div>
                         ) : (

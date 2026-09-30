@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import DoctorPicker from '../../components/DoctorPicker';
 import PageHeader from '../../components/PageHeader';
 
@@ -23,7 +24,7 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Appointments() {
+export default function Appointments({ user }) {
   const [date, setDate] = useState(today());
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
@@ -100,12 +101,14 @@ export default function Appointments() {
         title="Appointments"
         subtitle="Token numbers increase per patient visit for the day, hospital-wide — there are no fixed time slots."
         actions={
-          <button
-            onClick={() => setShowBook(true)}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-          >
-            + Book New Token
-          </button>
+          hasPermission(user, 'appointment.create') && (
+            <button
+              onClick={() => setShowBook(true)}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+            >
+              + Book New Token
+            </button>
+          )
         }
       />
 
@@ -158,12 +161,12 @@ export default function Appointments() {
                   </td>
                   <td className="p-3.5">
                     <div className="flex items-center gap-2.5">
-                      {a.status === 'waiting' && (
+                      {a.status === 'waiting' && hasPermission(user, 'appointment.edit') && (
                         <button onClick={() => advanceStatus(a.id, 'in_consultation')} disabled={busyId === a.id} className="text-blue-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
                           Start Consultation
                         </button>
                       )}
-                      {['waiting', 'in_consultation', 'completed'].includes(a.status) && (
+                      {['waiting', 'in_consultation', 'completed'].includes(a.status) && hasPermission(user, 'appointment.close_visit') && (
                         <button onClick={() => submitClose(a.id)} disabled={busyId === a.id} className="text-gray-700 font-bold hover:underline cursor-pointer disabled:opacity-50">
                           Save & Move to Payment
                         </button>
@@ -171,7 +174,7 @@ export default function Appointments() {
                       {a.status === 'payment_pending' && (
                         <span className="text-orange-600 font-bold text-[11px]">⏳ Awaiting Payment</span>
                       )}
-                      {['waiting', 'in_consultation'].includes(a.status) && (
+                      {['waiting', 'in_consultation'].includes(a.status) && hasPermission(user, 'appointment.edit') && (
                         <button onClick={() => advanceStatus(a.id, 'cancelled')} disabled={busyId === a.id} className="text-rose-600 font-bold hover:underline cursor-pointer disabled:opacity-50">
                           Cancel
                         </button>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import HospitalReceipt from '../../components/HospitalReceipt';
 import PageHeader from '../../components/PageHeader';
 import { CheckCircleIcon, CheckIcon } from '../../components/Icons';
@@ -40,8 +41,7 @@ const PAYMENT_MODES = [
   { value: 'credit', label: 'Credit' },
 ];
 
-export default function CollectPayment() {
-  const [tab, setTab] = useState('opd');
+export default function CollectPayment({ user }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pending, setPending] = useState({ opd: [], ipd: [], pharmacy: [] });
@@ -50,6 +50,14 @@ export default function CollectPayment() {
   const [successMsg, setSuccessMsg] = useState('');
   const [payingItem, setPayingItem] = useState(null); // { type: 'opd'|'ipd'|'pharmacy', item }
   const [showReceipt, setShowReceipt] = useState(null); // { type, data }
+
+  const tabs = [
+    { value: 'opd', label: 'OPD (Consultation)', count: pending.opd.length, show: hasPermission(user, 'payment.view') || hasPermission(user, 'payment.collect_opd') },
+    { value: 'ipd', label: 'IPD (Discharge)', count: pending.ipd.length, show: hasPermission(user, 'payment.view') || hasPermission(user, 'payment.collect_ipd') },
+    { value: 'pharmacy', label: 'Pharmacy Bills', count: pending.pharmacy.length, show: hasPermission(user, 'payment.view') || hasPermission(user, 'payment.collect_pharmacy') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => tabs[0]?.value || 'opd');
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 5000); };
   const fail = (err, fallback) => setErrorMsg(err?.message || fallback);
@@ -87,6 +95,7 @@ export default function CollectPayment() {
   if (payingItem) {
     return (
       <PaymentModal
+        user={user}
         type={payingItem.type}
         item={payingItem.item}
         onDone={handlePayDone}
@@ -111,11 +120,7 @@ export default function CollectPayment() {
         <TabBar
           active={tab}
           onChange={setTab}
-          tabs={[
-            { value: 'opd', label: 'OPD (Consultation)', count: pending.opd.length },
-            { value: 'ipd', label: 'IPD (Discharge)', count: pending.ipd.length },
-            { value: 'pharmacy', label: 'Pharmacy Bills', count: pending.pharmacy.length },
-          ]}
+          tabs={tabs}
         />
         <div className="relative ml-auto">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -342,12 +347,17 @@ function PharmacyList({ rows, isLoading, onPay }) {
 /* ═══════════════════════════════════════════════════════════
    PAYMENT MODAL (inline panel)
 ═══════════════════════════════════════════════════════════ */
-function PaymentModal({ type, item, onDone, onCancel, onError }) {
+function PaymentModal({ user, type, item, onDone, onCancel, onError }) {
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState('cash');
   const [notes, setNotes] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  const canCollect =
+    type === 'opd' ? hasPermission(user, 'payment.collect_opd') :
+    type === 'ipd' ? hasPermission(user, 'payment.collect_ipd') :
+    hasPermission(user, 'payment.collect_pharmacy');
 
   const balance = type === 'opd' ? Number(item.balance_due) : Number(item.balance_due);
 
@@ -501,18 +511,20 @@ function PaymentModal({ type, item, onDone, onCancel, onError }) {
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
-          >
-            {isBusy ? 'Recording…' : (
-              <>
-                <CheckIcon className="w-4 h-4 text-white" />
-                <span>Confirm Payment</span>
-              </>
-            )}
-          </button>
+          {canCollect && (
+            <button
+              type="submit"
+              disabled={isBusy}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+            >
+              {isBusy ? 'Recording…' : (
+                <>
+                  <CheckIcon className="w-4 h-4 text-white" />
+                  <span>Confirm Payment</span>
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={onCancel}

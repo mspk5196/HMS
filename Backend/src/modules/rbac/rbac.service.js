@@ -60,7 +60,7 @@ const listMyApprovals = (user) => q.listApprovalsForApprover(user);
 const listAllPendingApprovals = (status) => q.listAllPendingApprovals(status);
 
 const isEligibleApprover = (workflow, level, user) => {
-  if (user.permissions?.includes('manage_all')) return true;
+  if (user.role_name === 'Administrator' || user.permissions?.includes('manage_all')) return true;
   const type = level === 1 ? workflow.level1_type : workflow.level2_type;
   const roleId = level === 1 ? workflow.level1_role_id : workflow.level2_role_id;
   const userId = level === 1 ? workflow.level1_user_id : workflow.level2_user_id;

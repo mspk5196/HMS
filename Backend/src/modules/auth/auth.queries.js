@@ -1,21 +1,22 @@
 const db = require('../../config/db');
 
 const getUserByUsername = async (username) => {
+  const normalized = String(username || '').trim().toLowerCase();
   const [rows] = await db.execute(
-    `SELECT u.*, r.name AS role_name, r.can_access_settings
+    `SELECT u.*, COALESCE(r.name, 'Staff') AS role_name, COALESCE(r.can_access_settings, 0) AS can_access_settings
      FROM users u
-     JOIN roles r ON r.id = u.role_id
-     WHERE u.username = ? AND u.is_active = 1`,
-    [username]
+     LEFT JOIN roles r ON r.id = u.role_id
+     WHERE LOWER(u.username) = ? AND u.is_active = 1`,
+    [normalized]
   );
   return rows[0] ?? null;
 };
 
 const getUserById = async (id) => {
   const [rows] = await db.execute(
-    `SELECT u.*, r.name AS role_name, r.can_access_settings
+    `SELECT u.*, COALESCE(r.name, 'Staff') AS role_name, COALESCE(r.can_access_settings, 0) AS can_access_settings
      FROM users u
-     JOIN roles r ON r.id = u.role_id
+     LEFT JOIN roles r ON r.id = u.role_id
      WHERE u.id = ?`,
     [id]
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import DoctorPicker from '../../components/DoctorPicker';
 import MedicineSearchSelect from '../../components/MedicineSearchSelect';
 import PageHeader from '../../components/PageHeader';
@@ -75,8 +76,14 @@ function AddRow({ value, onChange, onAdd, placeholder }) {
   );
 }
 
-export default function AdmissionBeds() {
-  const [tab, setTab] = useState('occupancy');
+export default function AdmissionBeds({ user }) {
+  const tabs = [
+    { value: 'occupancy', label: 'Occupancy', show: hasPermission(user, 'admission.view') || hasPermission(user, 'facility.view') },
+    { value: 'admit', label: 'Admit Patient', show: hasPermission(user, 'admission.create') },
+    { value: 'structure', label: 'Manage Structure', show: hasPermission(user, 'facility.building_create') || hasPermission(user, 'facility.view') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => tabs[0]?.value || 'occupancy');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); };
@@ -96,16 +103,12 @@ export default function AdmissionBeds() {
       <TabBar
         active={tab}
         onChange={setTab}
-        tabs={[
-          { value: 'occupancy', label: 'Occupancy' },
-          { value: 'admit', label: 'Admit Patient' },
-          { value: 'structure', label: 'Manage Structure' },
-        ]}
+        tabs={tabs}
       />
 
-      {tab === 'occupancy' && <Occupancy onError={fail} onSuccess={flash} />}
-      {tab === 'admit' && <AdmitPatient onError={fail} onSuccess={flash} />}
-      {tab === 'structure' && <ManageStructure onError={fail} onSuccess={flash} />}
+      {tab === 'occupancy' && <Occupancy user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'admit' && <AdmitPatient user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'structure' && <ManageStructure user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
 }
@@ -378,7 +381,7 @@ function InpatientPrescribeModal({ admission, onClose, onSuccess, onError }) {
    ADMIT PATIENT
 ═══════════════════════════════════════════════════════════════════════ */
 
-function AdmitPatient({ onError, onSuccess }) {
+function AdmitPatient({ user, onError, onSuccess }) {
   const [mobile, setMobile] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [patient, setPatient] = useState(null);
@@ -555,7 +558,7 @@ function AdmitPatient({ onError, onSuccess }) {
    MANAGE STRUCTURE — Building → Floor → Ward → Room Type / Room → Bed
 ═══════════════════════════════════════════════════════════════════════ */
 
-function ManageStructure({ onError, onSuccess }) {
+function ManageStructure({ user, onError, onSuccess }) {
   const [buildings, setBuildings] = useState([]);
   const [floors, setFloors] = useState([]);
   const [wards, setWards] = useState([]);

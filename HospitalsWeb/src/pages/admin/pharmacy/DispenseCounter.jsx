@@ -3,11 +3,12 @@ import MedicineSearchSelect from '../../../components/MedicineSearchSelect';
 import HospitalReceipt from '../../../components/HospitalReceipt';
 import PageHeader from '../../../components/PageHeader';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { formatCurrency, todayISO } from './pharmacyUtils';
 
 const emptyLine = { medicine_id: '', unit_type: 'tablet', quantity: '', discount_percent: '' };
 
-export default function DispenseCounter() {
+export default function DispenseCounter({ user }) {
   const [medicines, setMedicines] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [doctorId, setDoctorId] = useState('');
@@ -309,7 +310,12 @@ export default function DispenseCounter() {
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
-          <button type="submit" disabled={isSaving} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50">
+          <button 
+            type="submit" 
+            disabled={isSaving || (user && !hasPermission(user, 'pharmacy.dispense_medicine') && !hasPermission(user, 'pharmacy.create'))} 
+            title={user && !hasPermission(user, 'pharmacy.dispense_medicine') && !hasPermission(user, 'pharmacy.create') ? 'You do not have permission to dispense medicines' : undefined}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+          >
             {isSaving ? 'Dispensing…' : 'Dispense Medicines & Save to Payment Queue'}
           </button>
         </div>

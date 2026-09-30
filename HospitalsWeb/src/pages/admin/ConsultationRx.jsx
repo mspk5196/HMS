@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import { CheckIcon } from '../../components/Icons';
 
@@ -15,7 +16,7 @@ function Banner({ msg, tone }) {
 
 const emptyItem = { medicine_id: '', medicine_name: '', dose_morning: 1, dose_afternoon: 0, dose_night: 1, duration_days: 5, food_instruction: 'after_food', notes: '' };
 
-export default function ConsultationRx() {
+export default function ConsultationRx({ user }) {
   const [date, setDate] = useState(today());
   const [queue, setQueue] = useState([]);
   const [isLoadingQueue, setIsLoadingQueue] = useState(false);
@@ -101,6 +102,7 @@ export default function ConsultationRx() {
             </div>
           ) : (
             <ConsultationPanel
+              user={user}
               appointment={selected}
               onSaved={async (msg) => { flash(msg); setSelected(null); await loadQueue(); }}
               onError={fail}
@@ -116,7 +118,7 @@ export default function ConsultationRx() {
    CONSULTATION PANEL
 ═══════════════════════════════════════════════════════════════════════ */
 
-function ConsultationPanel({ appointment, onSaved, onError }) {
+function ConsultationPanel({ user, appointment, onSaved, onError }) {
   const [existing, setExisting] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -377,13 +379,15 @@ function ConsultationPanel({ appointment, onSaved, onError }) {
         ))}
       </div>
 
-      <button
-        type="submit"
-        disabled={isSaving}
-        className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-      >
-        {isSaving ? 'Saving…' : 'Save Consultation & Prescription'}
-      </button>
+      {hasPermission(user, 'consultation.create') && (
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+        >
+          {isSaving ? 'Saving…' : 'Save Consultation & Prescription'}
+        </button>
+      )}
     </form>
   );
 }

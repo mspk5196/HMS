@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
 import { XIcon, AlertTriangleIcon } from '../../../components/Icons';
 
-export default function MedicineCategories() {
+export default function MedicineCategories({ user }) {
   const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'form-factors'
   const [categories, setCategories] = useState([]);
   const [formFactors, setFormFactors] = useState([]);
@@ -154,21 +155,23 @@ export default function MedicineCategories() {
         title="Categories & Form Factors"
         subtitle="Manage medicine categories and physical form factors (Tablet, Syrup, Injection, etc.) for medicine stock."
         actions={
-          activeTab === 'categories' ? (
-            <button
-              onClick={() => { setEditingCat(null); setCatName(''); setShowCatModal(true); }}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
-            >
-              + Add Category
-            </button>
-          ) : (
-            <button
-              onClick={() => { setEditingFf(null); setFfName(''); setShowFfModal(true); }}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
-            >
-              + Add Form Factor
-            </button>
-          )
+          (!user || hasPermission(user, 'pharmacy.create')) ? (
+            activeTab === 'categories' ? (
+              <button
+                onClick={() => { setEditingCat(null); setCatName(''); setShowCatModal(true); }}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                + Add Category
+              </button>
+            ) : (
+              <button
+                onClick={() => { setEditingFf(null); setFfName(''); setShowFfModal(true); }}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                + Add Form Factor
+              </button>
+            )
+          ) : null
         }
       />
 
@@ -238,18 +241,22 @@ export default function MedicineCategories() {
                       </span>
                     </td>
                     <td className="p-3.5 text-right space-x-3 font-semibold whitespace-nowrap">
-                      <button
-                        onClick={() => { setEditingCat(cat); setCatName(cat.name); setShowCatModal(true); }}
-                        className="text-blue-600 hover:underline cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeletingCat(cat)}
-                        className="text-rose-600 hover:underline cursor-pointer"
-                      >
-                        Delete
-                      </button>
+                      {(!user || hasPermission(user, 'pharmacy.edit')) && (
+                        <button
+                          onClick={() => { setEditingCat(cat); setCatName(cat.name); setShowCatModal(true); }}
+                          className="text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {(!user || hasPermission(user, 'pharmacy.delete')) && (
+                        <button
+                          onClick={() => setDeletingCat(cat)}
+                          className="text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -276,18 +283,22 @@ export default function MedicineCategories() {
                   <tr key={ff.id} className="hover:bg-gray-50/80">
                     <td className="p-3.5 font-bold text-gray-900">{ff.name}</td>
                     <td className="p-3.5 text-right space-x-3 font-semibold whitespace-nowrap">
-                      <button
-                        onClick={() => { setEditingFf(ff); setFfName(ff.name); setShowFfModal(true); }}
-                        className="text-blue-600 hover:underline cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeletingFf(ff)}
-                        className="text-rose-600 hover:underline cursor-pointer"
-                      >
-                        Delete
-                      </button>
+                      {(!user || hasPermission(user, 'pharmacy.edit')) && (
+                        <button
+                          onClick={() => { setEditingFf(ff); setFfName(ff.name); setShowFfModal(true); }}
+                          className="text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {(!user || hasPermission(user, 'pharmacy.delete')) && (
+                        <button
+                          onClick={() => setDeletingFf(ff)}
+                          className="text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

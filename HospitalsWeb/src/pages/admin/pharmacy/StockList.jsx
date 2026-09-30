@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
 import MedicineForm from './MedicineForm';
 import AddStockBatchForm from './AddStockBatchForm';
 
-export default function StockList() {
+export default function StockList({ user }) {
   const [medicines, setMedicines] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState('');
@@ -143,12 +144,14 @@ export default function StockList() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
         </div>
-        <button
-          onClick={() => { setEditingMedicine(null); setShowMedicineForm(true); }}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
-        >
-          + Add Medicine
-        </button>
+        {hasPermission(user, 'pharmacy.create') && (
+          <button
+            onClick={() => { setEditingMedicine(null); setShowMedicineForm(true); }}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
+          >
+            + Add Medicine
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden overflow-x-auto">
@@ -188,15 +191,21 @@ export default function StockList() {
                       <button onClick={() => toggleBatches(m.id)} className="text-blue-600 hover:underline cursor-pointer font-semibold">
                         {isExpanded ? 'Hide Batches' : 'Batches'}
                       </button>
-                      <button onClick={() => setStockTargetMedicine(m)} className="text-emerald-600 hover:underline cursor-pointer font-semibold">
-                        Add Stock
-                      </button>
-                      <button onClick={() => { setEditingMedicine(m); setShowMedicineForm(true); }} className="text-gray-500 hover:underline cursor-pointer font-semibold">
-                        Edit
-                      </button>
-                      <button onClick={() => setDeletingMedicine(m)} className="text-rose-600 hover:underline cursor-pointer font-semibold">
-                        Delete
-                      </button>
+                      {hasPermission(user, 'pharmacy.create') && (
+                        <button onClick={() => setStockTargetMedicine(m)} className="text-emerald-600 hover:underline cursor-pointer font-semibold">
+                          Add Stock
+                        </button>
+                      )}
+                      {hasPermission(user, 'pharmacy.edit') && (
+                        <button onClick={() => { setEditingMedicine(m); setShowMedicineForm(true); }} className="text-gray-500 hover:underline cursor-pointer font-semibold">
+                          Edit
+                        </button>
+                      )}
+                      {hasPermission(user, 'pharmacy.delete') && (
+                        <button onClick={() => setDeletingMedicine(m)} className="text-rose-600 hover:underline cursor-pointer font-semibold">
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                   {isExpanded && (

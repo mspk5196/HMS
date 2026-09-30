@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import { isoDate } from '../../util/mappers';
 import PageHeader from '../../components/PageHeader';
 import AddMemberForm from './departmentrole/AddMemberForm';
@@ -78,7 +79,14 @@ function Input({ label, value, onChange, type = 'text', options, disabled, hint 
   );
 }
 
-export default function HREmployees() {
+export default function HREmployees({ user }) {
+  const canCreate = hasPermission(user, 'hr_employee.create');
+  const canBulkImport = hasPermission(user, 'hr_employee.bulk_import') || canCreate;
+  const canEdit = hasPermission(user, 'hr_employee.edit');
+  const canRemap = hasPermission(user, 'hr_employee.remap');
+  const canSetSalary = hasPermission(user, 'hr_employee.set_salary');
+  const canEditShift = hasPermission(user, 'hr_shift.edit');
+
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add'
 
   const [employees, setEmployees] = useState([]);
@@ -277,15 +285,20 @@ export default function HREmployees() {
         }
       });
 
-      await apiFetch(`/hr/employees/${selectedId}`, {
+      const res = await apiFetch(`/hr/employees/${selectedId}`, {
         method: 'PATCH',
         body: fd,
       });
-      const fresh = await apiFetch(`/hr/employees/${selectedId}`);
-      setDetail(fresh);
-      setIsEditing(false);
-      flash(`${fresh.full_name} updated successfully.`);
-      await fetchEmployees();
+      if (res?.isPendingApproval) {
+        setIsEditing(false);
+        flash(`Employee update submitted for approval (Pending Review).`);
+      } else {
+        const fresh = await apiFetch(`/hr/employees/${selectedId}`);
+        setDetail(fresh);
+        setIsEditing(false);
+        flash(`${fresh.full_name} updated successfully.`);
+        await fetchEmployees();
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save employee.');
     } finally {
@@ -348,8 +361,12 @@ export default function HREmployees() {
 
       setViewMode('list');
       setPage(1);
-      setSelectedId(created.id);
-      flash(`${memberData.name} added to ${targetDept.name}.`);
+      if (created?.isPendingApproval) {
+        flash(`Registration for ${memberData.name} submitted for approval (Pending Review).`);
+      } else {
+        setSelectedId(created.id);
+        flash(`${memberData.name} added to ${targetDept.name}.`);
+      }
       await fetchEmployees();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to add employee.');
@@ -401,43 +418,51 @@ export default function HREmployees() {
         subtitle={`${meta.total} employee${meta.total === 1 ? '' : 's'} on record. Select an employee to view details or modify salary.`}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => setShowShiftTimingModal(true)}
-              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Configure hospital-wide Day and Night shift timings"
-            >
-              <GearIcon className="w-4 h-4 text-gray-500" />
-              <span>Shift Timings</span>
-            </button>
+            {canEditShift && (
+              <button
+                type="button"
+                onClick={() => setShowShiftTimingModal(true)}
+                className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Configure hospital-wide Day and Night shift timings"
+              >
+                <GearIcon className="w-4 h-4 text-gray-500" />
+                <span>Shift Timings</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => downloadEmployeeExcelTemplate(departments)}
-              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Download blank Excel spreadsheet template"
-            >
-              <DownloadIcon className="w-4 h-4 text-gray-500" />
-              <span>Excel Template</span>
-            </button>
+            {canBulkImport && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => downloadEmployeeExcelTemplate(departments)}
+                  className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download blank Excel spreadsheet template"
+                >
+                  <DownloadIcon className="w-4 h-4 text-gray-500" />
+                  <span>Excel Template</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setShowBulkModal(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <UploadIcon className="w-4 h-4 text-white" />
-              <span>Bulk Upload Staff</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkModal(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <UploadIcon className="w-4 h-4 text-white" />
+                  <span>Bulk Upload Staff</span>
+                </button>
+              </>
+            )}
 
-            <button
-              onClick={() => setViewMode('add')}
-              disabled={departments.length === 0}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <PlusIcon className="w-4 h-4 text-white" />
-              <span>Add Employee</span>
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setViewMode('add')}
+                disabled={departments.length === 0}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <PlusIcon className="w-4 h-4 text-white" />
+                <span>Add Employee</span>
+              </button>
+            )}
           </>
         }
       />
@@ -1151,6 +1176,7 @@ export default function HREmployees() {
                 <ShiftOverridesSection
                   employeeId={detail.id}
                   employeeName={detail.full_name}
+                  shiftConfigs={shiftConfigs}
                   onSuccess={flash}
                   onError={(err) => setErrorMsg(err?.message || 'Shift override error')}
                 />
@@ -1524,7 +1550,13 @@ function EmployeeRemappingLogsSection({ employeeId }) {
   );
 }
 
-function ShiftOverridesSection({ employeeId, employeeName, onSuccess, onError }) {
+function ShiftOverridesSection({
+  employeeId,
+  employeeName,
+  shiftConfigs = { day: { start: '08:00', end: '16:00' }, night: { start: '20:00', end: '08:00' } },
+  onSuccess,
+  onError,
+}) {
   const [overrides, setOverrides] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1662,17 +1694,17 @@ function ShiftOverridesSection({ employeeId, employeeName, onSuccess, onError })
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs.day.start, end_time: shiftConfigs.day.end }))}
+              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.day?.start || '08:00', end_time: shiftConfigs?.day?.end || '16:00' }))}
               className="px-2 py-1 text-[10px] font-semibold bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded cursor-pointer"
             >
-              Preset: Day ({shiftConfigs.day.start}–{shiftConfigs.day.end})
+              Preset: Day ({shiftConfigs?.day?.start || '08:00'}–{shiftConfigs?.day?.end || '16:00'})
             </button>
             <button
               type="button"
-              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs.night.start, end_time: shiftConfigs.night.end }))}
+              onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.night?.start || '20:00', end_time: shiftConfigs?.night?.end || '08:00' }))}
               className="px-2 py-1 text-[10px] font-semibold bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded cursor-pointer"
             >
-              Preset: Night ({shiftConfigs.night.start}–{shiftConfigs.night.end})
+              Preset: Night ({shiftConfigs?.night?.start || '20:00'}–{shiftConfigs?.night?.end || '08:00'})
             </button>
           </div>
 

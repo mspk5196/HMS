@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -12,7 +13,7 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function DoctorFeeSettings() {
+export default function DoctorFeeSettings({ user }) {
   const [doctors, setDoctors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -215,12 +216,14 @@ export default function DoctorFeeSettings() {
                         </span>
                       </td>
                       <td className="p-3.5">
-                        <button
-                          onClick={() => startEdit(doc)}
-                          className="text-blue-600 font-bold hover:underline cursor-pointer"
-                        >
-                          {doc.opd_fee || doc.ipd_daily_fee ? 'Edit' : 'Set Rate'}
-                        </button>
+                        {hasPermission(user, 'payment.set_fee_rate') && (
+                          <button
+                            onClick={() => startEdit(doc)}
+                            className="text-blue-600 font-bold hover:underline cursor-pointer"
+                          >
+                            {doc.opd_fee || doc.ipd_daily_fee ? 'Edit' : 'Set Rate'}
+                          </button>
+                        )}
                       </td>
                     </>
                   )}

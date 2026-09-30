@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
 
@@ -37,8 +38,13 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Fine() {
-  const [tab, setTab] = useState('fines');
+export default function Fine({ user }) {
+  const tabs = [
+    { value: 'fines', label: 'Fines', show: hasPermission(user, 'fine.view') },
+    { value: 'types', label: 'Fine Types', show: hasPermission(user, 'fine.view') || hasPermission(user, 'fine.create') || hasPermission(user, 'fine.edit') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => tabs[0]?.value || 'fines');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -59,11 +65,11 @@ export default function Fine() {
       <TabBar
         active={tab}
         onChange={setTab}
-        tabs={[{ value: 'fines', label: 'Fines' }, { value: 'types', label: 'Fine Types' }]}
+        tabs={tabs}
       />
 
-      {tab === 'fines' && <Fines onError={fail} onSuccess={flash} />}
-      {tab === 'types' && <FineTypes onError={fail} onSuccess={flash} />}
+      {tab === 'fines' && <Fines user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'types' && <FineTypes user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
 }
@@ -72,7 +78,7 @@ export default function Fine() {
    FINES
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Fines({ onError, onSuccess }) {
+function Fines({ user, onError, onSuccess }) {
   const [statusFilter, setStatusFilter] = useState('active');
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
@@ -184,12 +190,14 @@ function Fines({ onError, onSuccess }) {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="sm:ml-auto bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ New Fine'}
-        </button>
+        {hasPermission(user, 'fine.create') && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="sm:ml-auto bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            {showForm ? 'Cancel' : '+ New Fine'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -304,12 +312,16 @@ function Fines({ onError, onSuccess }) {
                   </span>
                   {f.status === 'active' && (
                     <>
-                      <button onClick={() => startAction(f.id, 'waive')} className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer">
-                        Waive
-                      </button>
-                      <button onClick={() => startAction(f.id, 'cancel')} className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer">
-                        Cancel
-                      </button>
+                      {hasPermission(user, 'fine.waive_fine') && (
+                        <button onClick={() => startAction(f.id, 'waive')} className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer">
+                          Waive
+                        </button>
+                      )}
+                      {hasPermission(user, 'fine.delete') && (
+                        <button onClick={() => startAction(f.id, 'cancel')} className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer">
+                          Cancel
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -326,7 +338,7 @@ function Fines({ onError, onSuccess }) {
    FINE TYPES
 ═══════════════════════════════════════════════════════════════════════ */
 
-function FineTypes({ onError, onSuccess }) {
+function FineTypes({ user, onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -350,6 +362,7 @@ function FineTypes({ onError, onSuccess }) {
   useEffect(() => { load(); }, [load]);
 
   const toggleActive = async (type) => {
+    if (!hasPermission(user, 'fine.edit')) return;
     try {
       await apiFetch(`/salary/fine-types/${type.id}`, { method: 'PATCH', body: JSON.stringify({ is_active: !type.is_active }) });
       onSuccess(`${type.name} ${type.is_active ? 'deactivated' : 'activated'}.`);
@@ -389,12 +402,14 @@ function FineTypes({ onError, onSuccess }) {
       </div>
 
       <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ New Fine Type'}
-        </button>
+        {hasPermission(user, 'fine.create') && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            {showForm ? 'Cancel' : '+ New Fine Type'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -492,7 +507,8 @@ function FineTypes({ onError, onSuccess }) {
                   <td className="px-3 py-2.5 text-center">
                     <button
                       onClick={() => toggleActive(t)}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer ${
+                      disabled={!hasPermission(user, 'fine.edit')}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                         t.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'
                       }`}
                     >

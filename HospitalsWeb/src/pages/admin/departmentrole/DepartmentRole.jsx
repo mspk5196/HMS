@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { mapEmployeeToMember } from '../../../util/mappers';
 import PageHeader from '../../../components/PageHeader';
 import AddDepartmentForm from './AddDepartmentForm';
@@ -13,7 +14,11 @@ import {
   PlusIcon,
 } from '../../../components/Icons';
 
-export default function DepartmentRole() {
+export default function DepartmentRole({ user }) {
+  const canCreateDept = hasPermission(user, 'hr_department.create');
+  const canEditDept = hasPermission(user, 'hr_department.edit');
+  const canDeleteDept = hasPermission(user, 'hr_department.delete');
+  const canRemap = hasPermission(user, 'hr_employee.remap');
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'add-dept' | 'members-list' | 'remap-logs'
   const [selectedDept, setSelectedDept] = useState(null);
   const [editingDept, setEditingDept] = useState(null);
@@ -201,23 +206,27 @@ export default function DepartmentRole() {
               <span>Remapping Logs</span>
             </button>
 
-            <button
-              onClick={() => setShowRemapModal(true)}
-              disabled={isLoading || departments.length === 0}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <SyncIcon className="w-3.5 h-3.5 text-white" />
-              <span>Remap Employee</span>
-            </button>
+            {canRemap && (
+              <button
+                onClick={() => setShowRemapModal(true)}
+                disabled={isLoading || departments.length === 0}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <SyncIcon className="w-3.5 h-3.5 text-white" />
+                <span>Remap Employee</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => { setEditingDept(null); setViewMode('add-dept'); }}
-              disabled={isLoading}
-              className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <PlusIcon className="w-3.5 h-3.5 text-white" />
-              <span>Add Department</span>
-            </button>
+            {canCreateDept && (
+              <button
+                onClick={() => { setEditingDept(null); setViewMode('add-dept'); }}
+                disabled={isLoading}
+                className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <PlusIcon className="w-3.5 h-3.5 text-white" />
+                <span>Add Department</span>
+              </button>
+            )}
           </>
         }
       />
@@ -242,20 +251,24 @@ export default function DepartmentRole() {
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleEditClick(dept)}
-                        title="Edit Department"
-                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
-                      >
-                        <EditIcon className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteDepartment(dept.id, dept.name)}
-                        title="Delete Department"
-                        className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
-                      >
-                        <TrashIcon className="w-3.5 h-3.5" />
-                      </button>
+                      {canEditDept && (
+                        <button
+                          onClick={() => handleEditClick(dept)}
+                          title="Edit Department"
+                          className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
+                          <EditIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canDeleteDept && (
+                        <button
+                          onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                          title="Delete Department"
+                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -371,7 +384,7 @@ function RemapEmployeeModal({ departments, onClose, onSuccess }) {
     try {
       setIsSubmitting(true);
       setErrorMsg('');
-      await apiFetch('/hr/employees/remap', {
+      const res = await apiFetch('/hr/employees/remap', {
         method: 'POST',
         body: JSON.stringify({
           employee_id: selectedEmp.id,
@@ -381,7 +394,11 @@ function RemapEmployeeModal({ departments, onClose, onSuccess }) {
           notes: notes.trim() || null,
         }),
       });
-      onSuccess(`Employee ${selectedEmp.full_name} (${selectedEmp.employee_code}) successfully remapped.`);
+      if (res?.isPendingApproval) {
+        onSuccess(`Employee remapping submitted for approval (Pending Review).`);
+      } else {
+        onSuccess(`Employee ${selectedEmp.full_name} (${selectedEmp.employee_code}) successfully remapped.`);
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Failed to remap employee.');
     } finally {

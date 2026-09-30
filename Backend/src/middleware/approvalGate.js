@@ -28,10 +28,13 @@ const gate = (permissionCode, executor) => {
     try {
       if (!req.user) return res.status(401).json(fail('Access denied. No user data.'));
 
-      if (req.user.permissions?.includes('manage_all')) {
+      if (req.user.role_name === 'Administrator' || req.user.permissions?.includes('manage_all')) {
         return executor(req, res, next);
       }
-      if (!req.user.permissions?.includes(permissionCode)) {
+
+      const mod = permissionCode.includes('.') ? permissionCode.split('.')[0] : null;
+      const hasPerm = req.user.permissions?.includes(permissionCode) || (mod && req.user.permissions?.includes(`${mod}.*`));
+      if (!hasPerm) {
         return res.status(403).json(fail('Forbidden. You do not have the required permission.'));
       }
 
@@ -52,7 +55,7 @@ const gate = (permissionCode, executor) => {
         query: req.query,
       });
 
-      return res.status(202).json(success({ id, status: 'pending_level1' }, 'Submitted for approval'));
+      return res.status(202).json(success({ id, status: 'pending_level1', isPendingApproval: true, message: 'Submitted for approval' }, 'Submitted for approval'));
     } catch (err) {
       next(err);
     }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
 import HospitalReceipt from '../../../components/HospitalReceipt';
 import PageHeader from '../../../components/PageHeader';
 
-export default function BillHistory() {
+export default function BillHistory({ user }) {
   const [bills, setBills] = useState([]);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isLoading, setIsLoading] = useState(false);
@@ -126,7 +127,7 @@ export default function BillHistory() {
                 <td className="p-3.5"><StatusBadge status={b.payment_status} /></td>
                 <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
                   <button onClick={() => viewBill(b)} className="text-blue-600 hover:underline cursor-pointer font-semibold">Receipt</button>
-                  {b.payment_status !== 'paid' && (
+                  {b.payment_status !== 'paid' && (!user || hasPermission(user, 'pharmacy.dispense_medicine') || hasPermission(user, 'pharmacy.edit')) && (
                     <>
                       <button onClick={() => openPayment(b)} className="text-emerald-600 hover:underline cursor-pointer font-semibold">Enter Paid</button>
                       {!b.closed_at && <button onClick={() => closeBill(b)} className="text-gray-600 hover:underline cursor-pointer font-semibold">Close</button>}

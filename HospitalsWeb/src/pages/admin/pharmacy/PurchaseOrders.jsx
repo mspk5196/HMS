@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
 import CreatePurchaseOrderForm from './CreatePurchaseOrderForm';
 
-export default function PurchaseOrders() {
+export default function PurchaseOrders({ user }) {
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isLoading, setIsLoading] = useState(false);
@@ -87,9 +88,11 @@ export default function PurchaseOrders() {
             </button>
           ))}
         </div>
-        <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
-          + Place Order
-        </button>
+        {(!user || hasPermission(user, 'pharmacy.create_purchase_order') || hasPermission(user, 'pharmacy.create')) && (
+          <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
+            + Place Order
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden overflow-x-auto">
@@ -118,7 +121,7 @@ export default function PurchaseOrders() {
                 <td className="p-3.5"><StatusBadge status={o.status} /></td>
                 <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
                   <button onClick={() => viewDetails(o)} className="text-blue-600 hover:underline cursor-pointer font-semibold">View</button>
-                  {(o.status === 'placed' || o.status === 'partially_received') && (
+                  {(o.status === 'placed' || o.status === 'partially_received') && (!user || hasPermission(user, 'pharmacy.delete') || hasPermission(user, 'pharmacy.edit')) && (
                     <button onClick={() => handleCancel(o)} className="text-rose-600 hover:underline cursor-pointer font-semibold">Cancel</button>
                   )}
                 </td>

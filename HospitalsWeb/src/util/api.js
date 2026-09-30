@@ -94,5 +94,11 @@ export async function apiFetch(endpoint, options = {}) {
     throw new Error(result?.message || `HTTP error! status: ${response.status}`);
   }
 
+  if (result?.data?.isPendingApproval) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('approval-requested', { detail: result.data }));
+    }
+  }
+
   return withMeta ? { data: result.data, meta: result.meta ?? null } : result.data;
 }

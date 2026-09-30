@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { formatCurrency, formatDate } from './pharmacyUtils';
 import { StatusBadge, Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
 import ReceiveGoodsForm from './ReceiveGoodsForm';
 
-export default function GoodsReceipts() {
+export default function GoodsReceipts({ user }) {
   const [receipts, setReceipts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -81,9 +82,11 @@ export default function GoodsReceipts() {
         title="Goods Receipt (GRN)"
         subtitle="Stock received against a supplier's bill — this is what updates the stock on hand."
         actions={
-          <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer">
-            + Receive Stock
-          </button>
+          (!user || hasPermission(user, 'pharmacy.receive_goods_grn') || hasPermission(user, 'pharmacy.create')) ? (
+            <button onClick={() => setShowCreate(true)} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer">
+              + Receive Stock
+            </button>
+          ) : null
         }
       />
       {successMsg && <Banner>{successMsg}</Banner>}
@@ -120,7 +123,7 @@ export default function GoodsReceipts() {
                 <td className="p-3.5"><StatusBadge status={g.payment_status} /></td>
                 <td className="p-3.5"><StatusBadge status={g.status} /></td>
                 <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
-                  {g.status === 'open' && (
+                  {g.status === 'open' && (!user || hasPermission(user, 'pharmacy.receive_goods_grn') || hasPermission(user, 'pharmacy.edit')) && (
                     <>
                       <button onClick={() => openPayment(g)} className="text-emerald-600 hover:underline cursor-pointer font-semibold">Enter Paid Amount</button>
                       <button onClick={() => closeOrder(g)} className="text-gray-600 hover:underline cursor-pointer font-semibold">Save &amp; Close</button>

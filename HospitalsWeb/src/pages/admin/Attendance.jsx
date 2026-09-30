@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 import AttendanceRegister from './AttendanceRegister';
@@ -103,8 +104,19 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Attendance() {
-  const [tab, setTab] = useState('daily'); // 'daily' | 'register' | 'late_fines' | 'punches' | 'devices' | 'corrections' | 'buffer' | 'windows'
+export default function Attendance({ user }) {
+  const availableTabs = [
+    { value: 'daily', label: 'Daily Log', show: hasPermission(user, 'attendance.view') },
+    { value: 'register', label: 'Attendance Register & Summary', show: hasPermission(user, 'attendance.view') },
+    { value: 'late_fines', label: 'Late Attendance Fines', show: hasPermission(user, 'fine.view') || hasPermission(user, 'attendance.view') },
+    { value: 'punches', label: 'Employee Punch Logs', show: hasPermission(user, 'biometric.view') || hasPermission(user, 'attendance.view') },
+    { value: 'devices', label: 'Biometric Devices & Sync', show: hasPermission(user, 'biometric.manage_devices') || hasPermission(user, 'biometric.view') },
+    { value: 'corrections', label: 'Corrections', show: hasPermission(user, 'attendance.view') },
+    { value: 'buffer', label: 'Buffer Pool', show: hasPermission(user, 'attendance.manage_buffer') || hasPermission(user, 'attendance.view') },
+    { value: 'windows', label: 'Biometric Windows', show: hasPermission(user, 'biometric.manage_windows') || hasPermission(user, 'biometric.view') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => availableTabs[0]?.value || 'daily');
   const [departments, setDepartments] = useState([]);
   const [staffRoles, setStaffRoles] = useState([]);
   const [showPunchesModal, setShowPunchesModal] = useState(false);
@@ -148,14 +160,16 @@ export default function Attendance() {
                 <span>Punches Template</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setShowPunchesModal(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <UploadIcon className="w-4 h-4 text-white" />
-                <span>Bulk Upload Punches</span>
-              </button>
+              {hasPermission(user, 'attendance.import_punches') && (
+                <button
+                  type="button"
+                  onClick={() => setShowPunchesModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <UploadIcon className="w-4 h-4 text-white" />
+                  <span>Bulk Upload Punches</span>
+                </button>
+              )}
             </>
           }
         />
@@ -166,42 +180,33 @@ export default function Attendance() {
         <TabBar
           active={tab}
           onChange={setTab}
-          tabs={[
-            { value: 'daily', label: 'Daily Log' },
-            { value: 'register', label: 'Attendance Register & Summary' },
-            { value: 'late_fines', label: 'Late Attendance Fines' },
-            { value: 'punches', label: 'Employee Punch Logs' },
-            { value: 'devices', label: 'Biometric Devices & Sync' },
-            { value: 'corrections', label: 'Corrections' },
-            { value: 'buffer', label: 'Buffer Pool' },
-            { value: 'windows', label: 'Biometric Windows' },
-          ]}
+          tabs={availableTabs}
         />
       </div>
 
       {tab === 'daily' && (
-        <DailyLog departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+        <DailyLog user={user} departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'register' && (
-        <AttendanceRegister departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+        <AttendanceRegister user={user} departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'late_fines' && (
-        <LateAttendanceFines departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
+        <LateAttendanceFines user={user} departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'punches' && (
-        <EmployeeBiometricPunches embedded={true} />
+        <EmployeeBiometricPunches user={user} embedded={true} />
       )}
       {tab === 'devices' && (
-        <BiometricDevices onError={(e) => fail(e)} onSuccess={flash} />
+        <BiometricDevices user={user} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'corrections' && (
-        <Corrections onError={(e) => fail(e)} onSuccess={flash} />
+        <Corrections user={user} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'buffer' && (
-        <BufferPool departments={departments} onError={(e) => fail(e)} />
+        <BufferPool user={user} departments={departments} onError={(e) => fail(e)} />
       )}
       {tab === 'windows' && (
-        <BiometricWindows staffRoles={staffRoles} onError={(e) => fail(e)} onSuccess={flash} />
+        <BiometricWindows user={user} staffRoles={staffRoles} onError={(e) => fail(e)} onSuccess={flash} />
       )}
 
       <BulkPunchesImportModal

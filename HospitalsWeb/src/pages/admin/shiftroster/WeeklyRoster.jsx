@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from './ConfigureShiftTimingModal';
 
@@ -141,7 +142,9 @@ const monthLabel = (iso) =>
     timeZone: 'UTC',
   });
 
-export default function WeeklyRoster({ departments = [], onBack }) {
+export default function WeeklyRoster({ departments = [], onBack, user }) {
+  const canBulkSave = hasPermission(user, 'hr_roster.bulk_save') || hasPermission(user, 'hr_roster.save_day');
+  const canEditShift = hasPermission(user, 'hr_shift.edit');
   const today = useMemo(() => getTodayISO(), []);
   const tableContainerRef = useRef(null);
 
@@ -481,7 +484,11 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         body: JSON.stringify({ weekStart: grid.weekStart, rows }),
       });
 
-      flash(`Successfully saved ${result.saved} duty assignments for active days.`);
+      if (result?.isPendingApproval) {
+        flash('Roster modifications submitted for approval (Pending Review).');
+      } else {
+        flash(`Successfully saved ${result.saved} duty assignments for active days.`);
+      }
       await load();
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save duty roster.');
@@ -586,24 +593,28 @@ export default function WeeklyRoster({ departments = [], onBack }) {
         onBack={onBack}
         actions={
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowTimingModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
-              title="Configure hospital-wide standard shift hours and monthly buffer limits"
-            >
-              <GearIcon className="w-3.5 h-3.5 text-gray-500" />
-              <span>Configure Shift Timings</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || isLoading || !grid?.employees?.length || isEntireWeekPast}
-              className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CheckIcon className="w-4 h-4" />
-              <span>{isSaving ? 'Saving…' : isEntireWeekPast ? 'Week Locked' : 'Save Duty Roster'}</span>
-            </button>
+            {canEditShift && (
+              <button
+                type="button"
+                onClick={() => setShowTimingModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                title="Configure hospital-wide standard shift hours and monthly buffer limits"
+              >
+                <GearIcon className="w-3.5 h-3.5 text-gray-500" />
+                <span>Configure Shift Timings</span>
+              </button>
+            )}
+            {canBulkSave && (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving || isLoading || !grid?.employees?.length || isEntireWeekPast}
+                className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckIcon className="w-4 h-4" />
+                <span>{isSaving ? 'Saving…' : isEntireWeekPast ? 'Week Locked' : 'Save Duty Roster'}</span>
+              </button>
+            )}
           </div>
         }
       />

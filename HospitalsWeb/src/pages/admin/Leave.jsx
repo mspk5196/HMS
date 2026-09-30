@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
 
@@ -32,8 +33,15 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Leave() {
-  const [tab, setTab] = useState('requests');
+export default function Leave({ user }) {
+  const availableTabs = [
+    { value: 'requests', label: 'Requests', show: true },
+    { value: 'balances', label: 'Balances', show: hasPermission(user, 'leave.view') },
+    { value: 'types', label: 'Leave Types', show: hasPermission(user, 'leave.create') || hasPermission(user, 'leave.edit') || hasPermission(user, 'leave.delete') },
+    { value: 'holidays', label: 'Holidays', show: hasPermission(user, 'leave.create_holiday') || hasPermission(user, 'leave.view') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => availableTabs[0]?.value || 'requests');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -54,18 +62,13 @@ export default function Leave() {
       <TabBar
         active={tab}
         onChange={setTab}
-        tabs={[
-          { value: 'requests', label: 'Requests' },
-          { value: 'balances', label: 'Balances' },
-          { value: 'types', label: 'Leave Types' },
-          { value: 'holidays', label: 'Holidays' },
-        ]}
+        tabs={availableTabs}
       />
 
-      {tab === 'requests' && <Requests onError={fail} onSuccess={flash} />}
-      {tab === 'balances' && <Balances onError={fail} onSuccess={flash} />}
-      {tab === 'types' && <LeaveTypes onError={fail} onSuccess={flash} />}
-      {tab === 'holidays' && <Holidays onError={fail} onSuccess={flash} />}
+      {tab === 'requests' && <Requests user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'balances' && <Balances user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'types' && <LeaveTypes user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'holidays' && <Holidays user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
 }
@@ -74,7 +77,7 @@ export default function Leave() {
    REQUESTS
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Requests({ onError, onSuccess }) {
+function Requests({ user, onError, onSuccess }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
@@ -228,18 +231,22 @@ function Requests({ onError, onSuccess }) {
           ))}
         </div>
         <div className="sm:ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setShowAbsence((v) => !v)}
-            className="bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
-          >
-            {showAbsence ? 'Cancel' : 'Record Unexplained Absence'}
-          </button>
-          <button
-            onClick={() => setShowApply((v) => !v)}
-            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-          >
-            {showApply ? 'Cancel' : '+ Apply for Leave'}
-          </button>
+          {hasPermission(user, 'leave.record_absence') && (
+            <button
+              onClick={() => setShowAbsence((v) => !v)}
+              className="bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            >
+              {showAbsence ? 'Cancel' : 'Record Unexplained Absence'}
+            </button>
+          )}
+          {hasPermission(user, 'leave.create') && (
+            <button
+              onClick={() => setShowApply((v) => !v)}
+              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+            >
+              {showApply ? 'Cancel' : '+ Apply for Leave'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -350,7 +357,7 @@ function Requests({ onError, onSuccess }) {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {resultBadge(r.result)}
-                  {r.reporting_person_status === 'pending' && (
+                  {r.reporting_person_status === 'pending' && hasPermission(user, 'leave.review_reporting') && (
                     <>
                       <button
                         onClick={() => approveReporting(r.id, 'approved')}
@@ -368,7 +375,7 @@ function Requests({ onError, onSuccess }) {
                       </button>
                     </>
                   )}
-                  {r.reporting_person_status === 'approved' && r.hr_status === 'pending' && (
+                  {r.reporting_person_status === 'approved' && r.hr_status === 'pending' && hasPermission(user, 'leave.review_hr') && (
                     <>
                       <button
                         onClick={() => approveHR(r.id, 'approved')}
@@ -400,7 +407,7 @@ function Requests({ onError, onSuccess }) {
    BALANCES
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Balances({ onError, onSuccess }) {
+function Balances({ user, onError, onSuccess }) {
   const [employeeId, setEmployeeId] = useState('');
   const [year, setYear] = useState(currentYear());
   const [rows, setRows] = useState([]);
@@ -471,7 +478,7 @@ function Balances({ onError, onSuccess }) {
         </div>
       </div>
 
-      {employeeId && (
+      {employeeId && hasPermission(user, 'leave.set_balance') && (
         <form onSubmit={allocate} className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-end gap-4">
           <div className="space-y-1 flex-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Allocate Leave Type</label>
@@ -547,7 +554,7 @@ function Balances({ onError, onSuccess }) {
    LEAVE TYPES
 ═══════════════════════════════════════════════════════════════════════ */
 
-function LeaveTypes({ onError, onSuccess }) {
+function LeaveTypes({ user, onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -592,6 +599,7 @@ function LeaveTypes({ onError, onSuccess }) {
   };
 
   const toggleActive = async (type) => {
+    if (!hasPermission(user, 'leave.edit')) return;
     try {
       await apiFetch(`/leave/types/${type.id}`, { method: 'PATCH', body: JSON.stringify({ is_active: !type.is_active }) });
       onSuccess(`${type.name} ${type.is_active ? 'deactivated' : 'activated'}.`);
@@ -661,15 +669,17 @@ function LeaveTypes({ onError, onSuccess }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button
-          onClick={() => {
-            if (showForm) { setShowForm(false); setEditingType(null); }
-            else { openNewForm(); }
-          }}
-          className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ New Leave Type'}
-        </button>
+        {hasPermission(user, 'leave.create') && (
+          <button
+            onClick={() => {
+              if (showForm) { setShowForm(false); setEditingType(null); }
+              else { openNewForm(); }
+            }}
+            className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            {showForm ? 'Cancel' : '+ New Leave Type'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -790,7 +800,8 @@ function LeaveTypes({ onError, onSuccess }) {
                     <td className="px-3 py-2.5 text-center">
                       <button
                         onClick={() => toggleActive(t)}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer ${
+                        disabled={!hasPermission(user, 'leave.edit')}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                           t.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'
                         }`}
                       >
@@ -798,17 +809,19 @@ function LeaveTypes({ onError, onSuccess }) {
                       </button>
                     </td>
                     <td className="px-4 py-2.5 text-right space-x-3 font-semibold whitespace-nowrap">
-                      <button
-                        onClick={() => openEditForm(t)}
-                        className="text-blue-600 hover:underline cursor-pointer"
-                      >
-                        Edit
-                      </button>
+                      {hasPermission(user, 'leave.edit') && (
+                        <button
+                          onClick={() => openEditForm(t)}
+                          className="text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
                       {isSystem ? (
                         <span className="text-gray-400 text-[11px] cursor-not-allowed" title="System default leave types cannot be deleted">
                           Locked
                         </span>
-                      ) : (
+                      ) : hasPermission(user, 'leave.delete') && (
                         <button
                           onClick={() => setDeletingType(t)}
                           className="text-rose-600 hover:underline cursor-pointer"
@@ -861,7 +874,7 @@ function LeaveTypes({ onError, onSuccess }) {
    HOLIDAYS
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Holidays({ onError, onSuccess }) {
+function Holidays({ user, onError, onSuccess }) {
   const [year, setYear] = useState(currentYear());
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -915,12 +928,14 @@ function Holidays({ onError, onSuccess }) {
             className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold"
           />
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="ml-auto bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ Add Holiday'}
-        </button>
+        {hasPermission(user, 'leave.create_holiday') && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="ml-auto bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            {showForm ? 'Cancel' : '+ Add Holiday'}
+          </button>
+        )}
       </div>
 
       {showForm && (

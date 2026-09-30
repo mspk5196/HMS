@@ -37,6 +37,7 @@ const MODULES = [
 
   // ─── Administration ───
   { code: 'users', name: 'Users & Authentication', group: 'Administration', order: 18 },
+  { code: 'approval', name: 'Approvals Inbox', group: 'Administration', order: 19 },
 ];
 
 // action code -> { name, special (bool) }
@@ -67,10 +68,14 @@ const MODULE_ACTIONS = {
     'view', 'create', 'edit',
     { code: 'recalculate', name: 'Recalculate Attendance', approvable: false },
     { code: 'import_punches', name: 'Import Attendance Punches', approvable: true },
+    { code: 'manual_mark', name: 'Manual Attendance Mark', approvable: true },
+    { code: 'manage_buffer', name: 'Buffer Pool Access', approvable: false },
   ],
   biometric: [
     'view', 'create', 'edit', 'delete',
     { code: 'sync_device', name: 'Sync Punches from Device', approvable: false },
+    { code: 'manage_devices', name: 'Manage Biometric Devices', approvable: false },
+    { code: 'manage_windows', name: 'Biometric Window Overrides', approvable: true },
   ],
   leave: [
     'view', 'create', 'edit', 'delete',
@@ -83,6 +88,7 @@ const MODULE_ACTIONS = {
   fine: [
     'view', 'create', 'edit', 'delete',
     { code: 'waive_fine', name: 'Waive Fine', approvable: true },
+    { code: 'apply_late_fines', name: 'Apply Late Fines', approvable: true },
   ],
   payroll: [
     'view', 'create', 'edit',
@@ -137,6 +143,11 @@ const MODULE_ACTIONS = {
   users: [
     'view', 'create', 'edit', 'delete',
     { code: 'reset_password', name: 'Reset User Password', approvable: true },
+  ],
+  approval: [
+    'view',
+    { code: 'approve_request', name: 'Approve Request', approvable: false },
+    { code: 'reject_request', name: 'Reject Request', approvable: false },
   ],
 };
 

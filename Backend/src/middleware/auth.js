@@ -47,19 +47,33 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-const requirePermissions = (requiredPermissions) => {
+const requirePermissions = (requiredPermissions, matchMode = 'some') => {
   return (req, res, next) => {
     // If not authenticated, let verifyToken handle it earlier, but check just in case
     if (!req.user) {
       return res.status(401).json(fail('Access denied. No user data.'));
     }
 
-    // Admins (usually ID 1 or having 'manage_all') bypass permission checks
-    if (req.user.permissions?.includes('manage_all')) {
+    // Admins bypass permission checks
+    if (req.user.role_name === 'Administrator' || req.user.permissions?.includes('manage_all')) {
       return next();
     }
 
-    const hasPermission = requiredPermissions.every(p => req.user.permissions?.includes(p));
+    const perms = Array.isArray(req.user.permissions) ? req.user.permissions : [];
+    const checkOne = (code) => {
+      if (perms.includes(code)) return true;
+      if (code.includes('.')) {
+        const [mod] = code.split('.');
+        if (perms.includes(`${mod}.*`)) return true;
+      }
+      return false;
+    };
+
+    const list = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions];
+    const hasPermission = matchMode === 'every'
+      ? list.every(checkOne)
+      : list.some(checkOne);
+
     if (!hasPermission) {
       return res.status(403).json(fail('Forbidden. You do not have the required permissions.'));
     }

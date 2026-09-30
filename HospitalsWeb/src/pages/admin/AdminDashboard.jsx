@@ -124,6 +124,17 @@ export default function AdminDashboard({ user, onLogout }) {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [user]);
 
+  const [approvalNotice, setApprovalNotice] = useState(null);
+
+  useEffect(() => {
+    const handleApprovalEvent = (e) => {
+      setApprovalNotice(e.detail?.message || 'Action submitted for approval (Pending Review).');
+      setTimeout(() => setApprovalNotice(null), 6000);
+    };
+    window.addEventListener('approval-requested', handleApprovalEvent);
+    return () => window.removeEventListener('approval-requested', handleApprovalEvent);
+  }, []);
+
   // Auto-switch to first accessible tab if current tab is not permitted
   useEffect(() => {
     if (permittedTabs.length > 0 && !canViewTab(user, activeTab)) {
@@ -179,63 +190,63 @@ export default function AdminDashboard({ user, onLogout }) {
 
     switch (activeTab) {
       case 'hr-employees':
-        return <HREmployees />;
+        return <HREmployees user={user} />;
       case 'department-role':
-        return <DepartmentRole />;
+        return <DepartmentRole user={user} />;
       case 'shift-roster':
-        return <ShiftRoster />;
+        return <ShiftRoster user={user} />;
       case 'attendance':
-        return <Attendance />;
+        return <Attendance user={user} />;
       case 'biometric-punches':
-        return <EmployeeBiometricPunches />;
+        return <EmployeeBiometricPunches user={user} />;
       case 'leave':
-        return <Leave />;
+        return <Leave user={user} />;
       case 'fine':
-        return <Fine />;
+        return <Fine user={user} />;
       case 'payroll':
-        return <Payroll />;
+        return <Payroll user={user} />;
       case 'patient-records':
-        return <PatientRecords />;
+        return <PatientRecords user={user} />;
       case 'appointments':
-        return <Appointments />;
+        return <Appointments user={user} />;
       case 'consultation-rx':
-        return <ConsultationRx />;
+        return <ConsultationRx user={user} />;
       case 'pharmacy-stock':
-        return <PharmacyStock />;
+        return <PharmacyStock user={user} />;
       case 'pharmacy-categories':
-        return <PharmacyCategories />;
+        return <PharmacyCategories user={user} />;
       case 'pharmacy-dispense':
-        return <PharmacyDispense />;
+        return <PharmacyDispense user={user} />;
       case 'pharmacy-bills':
-        return <PharmacyBillHistory />;
+        return <PharmacyBillHistory user={user} />;
       case 'pharmacy-purchase-orders':
-        return <PharmacyPurchaseOrders />;
+        return <PharmacyPurchaseOrders user={user} />;
       case 'pharmacy-goods-receipts':
-        return <PharmacyGoodsReceipts />;
+        return <PharmacyGoodsReceipts user={user} />;
       case 'pharmacy-suppliers':
-        return <PharmacySuppliers />;
+        return <PharmacySuppliers user={user} />;
       case 'pharmacy-expiry':
-        return <PharmacyExpiryStock />;
+        return <PharmacyExpiryStock user={user} />;
       case 'pharmacy-non-movable':
-        return <PharmacyNonMovableStock />;
+        return <PharmacyNonMovableStock user={user} />;
       case 'pharmacy-movements':
-        return <PharmacyMovements />;
+        return <PharmacyMovements user={user} />;
       case 'admission-beds':
-        return <AdmissionBeds />;
+        return <AdmissionBeds user={user} />;
       case 'discharge':
-        return <Discharge />;
+        return <Discharge user={user} />;
       case 'collect-payment':
-        return <CollectPayment />;
+        return <CollectPayment user={user} />;
       case 'doctor-fee-settings':
-        return <DoctorFeeSettings />;
+        return <DoctorFeeSettings user={user} />;
       case 'users-auth':
-        return <UsersAuthentication />;
+        return <UsersAuthentication user={user} />;
       case 'approvals':
-        return <Approvals />;
+        return <Approvals user={user} />;
       case 'settings':
-        return <Settings />;
+        return <Settings user={user} />;
       default:
-        return <HREmployees />;
+        return <HREmployees user={user} />;
     }
   };
 
@@ -251,7 +262,21 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto space-y-4">
+          {approvalNotice && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-500 font-bold">⏳</span>
+                <span>{approvalNotice}</span>
+              </div>
+              <button
+                onClick={() => setApprovalNotice(null)}
+                className="text-amber-600 hover:text-amber-800 cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {renderContent()}
         </div>
       </main>

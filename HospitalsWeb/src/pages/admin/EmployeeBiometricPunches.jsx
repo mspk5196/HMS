@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
 import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
@@ -57,7 +58,7 @@ const formatTime12 = (timeStr) => {
   return `${h}:${m}${s} ${ampm}`;
 };
 
-export default function EmployeeBiometricPunches({ embedded = false }) {
+export default function EmployeeBiometricPunches({ embedded = false, user }) {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedDept, setSelectedDept] = useState('');
@@ -221,35 +222,39 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
             <p className="text-xs text-gray-500">Inspect individual employee raw biometric device punches, timestamps, and terminal logs.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowHistoricalModal(true)}
-              disabled={isSyncing || isLoading}
-              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-              title="Sync old/historical punches while leaving existing records intact"
-            >
-              <ClockIcon className="w-4 h-4 text-white" />
-              <span>Sync Old / Historical Punches</span>
-            </button>
-            <button
-              onClick={handleSyncAll}
-              disabled={isSyncing || isLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {isSyncing ? (
-                <>
-                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                  </svg>
-                  <span>Syncing eSSL…</span>
-                </>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <BoltIcon className="w-4 h-4 text-white" />
-                  <span>Sync Biometric Devices</span>
-                </span>
-              )}
-            </button>
+            {(!user || hasPermission(user, 'biometric.manage_devices') || hasPermission(user, 'attendance.edit')) && (
+              <>
+                <button
+                  onClick={() => setShowHistoricalModal(true)}
+                  disabled={isSyncing || isLoading}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  title="Sync old/historical punches while leaving existing records intact"
+                >
+                  <ClockIcon className="w-4 h-4 text-white" />
+                  <span>Sync Old / Historical Punches</span>
+                </button>
+                <button
+                  onClick={handleSyncAll}
+                  disabled={isSyncing || isLoading}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSyncing ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>Syncing eSSL…</span>
+                    </>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <BoltIcon className="w-4 h-4 text-white" />
+                      <span>Sync Biometric Devices</span>
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
             <button
               onClick={handlePrint}
               className="bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -267,35 +272,39 @@ export default function EmployeeBiometricPunches({ embedded = false }) {
           className="no-print"
           actions={
             <>
-              <button
-                onClick={() => setShowHistoricalModal(true)}
-                disabled={isSyncing || isLoading}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                title="Sync old/historical punches while leaving existing records intact"
-              >
-                <ClockIcon className="w-4 h-4 text-white" />
-                <span>Sync Old / Historical Punches</span>
-              </button>
-              <button
-                onClick={handleSyncAll}
-                disabled={isSyncing || isLoading}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isSyncing ? (
-                  <>
-                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Syncing eSSL…</span>
-                  </>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <BoltIcon className="w-4 h-4 text-white" />
-                    <span>Sync Biometric Devices</span>
-                  </span>
-                )}
-              </button>
+              {(!user || hasPermission(user, 'biometric.manage_devices') || hasPermission(user, 'attendance.edit')) && (
+                <>
+                  <button
+                    onClick={() => setShowHistoricalModal(true)}
+                    disabled={isSyncing || isLoading}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    title="Sync old/historical punches while leaving existing records intact"
+                  >
+                    <ClockIcon className="w-4 h-4 text-white" />
+                    <span>Sync Old / Historical Punches</span>
+                  </button>
+                  <button
+                    onClick={handleSyncAll}
+                    disabled={isSyncing || isLoading}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSyncing ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span>Syncing eSSL…</span>
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <BoltIcon className="w-4 h-4 text-white" />
+                        <span>Sync Biometric Devices</span>
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
               <button
                 onClick={handlePrint}
                 className="bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"

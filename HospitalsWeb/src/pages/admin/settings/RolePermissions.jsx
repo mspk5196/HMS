@@ -62,6 +62,10 @@ export default function RolePermissions() {
   // current state — Save then applies those edits to every selected role.
   useEffect(() => { loadMatrix(selectedIds[0]); }, [selectedIds[0], loadMatrix]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [prioritySearch, setPrioritySearch] = useState('');
+  const [isPriorityOpen, setIsPriorityOpen] = useState(false);
+  const [draggedIdx, setDraggedIdx] = useState(null);
+
   const moveRole = (idx, dir) => {
     setOrderedRoles((prev) => {
       const next = [...prev];
@@ -72,6 +76,60 @@ export default function RolePermissions() {
     });
   };
 
+  const jumpRole = (fromIdx, toRank) => {
+    const targetRank = Math.max(1, Math.min(orderedRoles.length, parseInt(toRank, 10) || 1));
+    const targetIdx = targetRank - 1;
+    if (fromIdx === targetIdx) return;
+    setOrderedRoles((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(fromIdx, 1);
+      next.splice(targetIdx, 0, removed);
+      return next;
+    });
+  };
+
+  const moveToTop = (idx) => {
+    if (idx === 0) return;
+    setOrderedRoles((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.unshift(item);
+      return next;
+    });
+  };
+
+  const moveToBottom = (idx) => {
+    if (idx === orderedRoles.length - 1) return;
+    setOrderedRoles((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.push(item);
+      return next;
+    });
+  };
+
+  const handleDragStart = (e, idx) => {
+    setDraggedIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) return;
+    setOrderedRoles((prev) => {
+      const next = [...prev];
+      const [dragged] = next.splice(draggedIdx, 1);
+      next.splice(targetIdx, 0, dragged);
+      return next;
+    });
+    setDraggedIdx(null);
+  };
+
   const savePriority = async () => {
     try {
       setIsSaving(true);
@@ -79,7 +137,7 @@ export default function RolePermissions() {
         method: 'PATCH',
         body: JSON.stringify({ orderedIds: orderedRoles.map((r) => r.id) }),
       });
-      flash('Priority order saved.');
+      flash('Priority order saved successfully.');
       await loadBase();
     } catch (err) {
       fail(err, 'Failed to save priority order.');
@@ -171,37 +229,206 @@ export default function RolePermissions() {
       <Banner msg={successMsg} tone="success" />
       <Banner msg={errorMsg} tone="error" />
 
-      {/* Priority Order */}
-      <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900">Role Priority Order</h3>
-          <p className="text-[11px] text-gray-500">Use the arrows to reorder. Higher position = higher priority.</p>
-        </div>
-        <div className="space-y-2">
-          {orderedRoles.map((r, idx) => (
-            <div key={r.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-2.5">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-blue-600">#{idx + 1}</span>
-                <span className="text-sm font-bold text-gray-900">{r.name}</span>
-                {r.department_name && (
-                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">{r.department_name}</span>
-                )}
-                {r.description && <span className="text-xs text-gray-400">{r.description}</span>}
+      {/* Priority Order (Collapsible & Searchable with Drag-Drop & Direct Jump) */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div
+          onClick={() => setIsPriorityOpen(!isPriorityOpen)}
+          className="p-4 bg-gray-50/80 hover:bg-gray-100/80 transition-colors flex items-center justify-between cursor-pointer border-b border-gray-100"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center font-bold text-xs">
+              ↕
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">Role Priority Hierarchy</h3>
+                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  {orderedRoles.length} Roles
+                </span>
               </div>
-              <div className="flex flex-col gap-0.5">
-                <button onClick={() => moveRole(idx, -1)} disabled={idx === 0} className="w-6 h-5 flex items-center justify-center border border-gray-200 rounded text-[10px] text-gray-500 disabled:opacity-30 cursor-pointer hover:bg-gray-50">▲</button>
-                <button onClick={() => moveRole(idx, 1)} disabled={idx === orderedRoles.length - 1} className="w-6 h-5 flex items-center justify-center border border-gray-200 rounded text-[10px] text-gray-500 disabled:opacity-30 cursor-pointer hover:bg-gray-50">▼</button>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Higher rank (#1 = highest) determines authority in approvals and permission cascades. Drag rows, type rank directly, or use quick jump buttons.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-blue-600">
+              {isPriorityOpen ? 'Collapse' : 'Configure Order'}
+            </span>
+            <span className="text-gray-400 text-xs">{isPriorityOpen ? '▲' : '▼'}</span>
+          </div>
+        </div>
+
+        {isPriorityOpen && (
+          <div className="p-4 space-y-3 bg-gray-50/40">
+            {/* Search and Quick Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="relative flex-1 min-w-[240px]">
+                <input
+                  type="text"
+                  value={prioritySearch}
+                  onChange={(e) => setPrioritySearch(e.target.value)}
+                  placeholder="Search role or department in priority list…"
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                />
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                {prioritySearch && (
+                  <button
+                    onClick={() => setPrioritySearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={savePriority}
+                  disabled={isSaving}
+                  className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-1.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSaving ? 'Saving…' : 'Save Priority Order'}
+                </button>
               </div>
             </div>
-          ))}
-        </div>
-        <button
-          onClick={savePriority}
-          disabled={isSaving}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-        >
-          Save Priority Order
-        </button>
+
+            {/* Reorderable List */}
+            <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+              {orderedRoles
+                .map((r, actualIdx) => ({ r, actualIdx }))
+                .filter(({ r }) => {
+                  if (!prioritySearch.trim()) return true;
+                  const q = prioritySearch.toLowerCase().trim();
+                  return (
+                    (r.name || '').toLowerCase().includes(q) ||
+                    (r.department_name || '').toLowerCase().includes(q) ||
+                    (r.description || '').toLowerCase().includes(q)
+                  );
+                })
+                .map(({ r, actualIdx }) => {
+                  const isDragging = draggedIdx === actualIdx;
+                  return (
+                    <div
+                      key={r.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, actualIdx)}
+                      onDragOver={(e) => handleDragOver(e, actualIdx)}
+                      onDrop={(e) => handleDrop(e, actualIdx)}
+                      className={`flex items-center justify-between bg-white border rounded-lg px-3 py-2 transition-all duration-150 ${
+                        isDragging
+                          ? 'border-blue-500 bg-blue-50/50 shadow-md opacity-60'
+                          : 'border-gray-200 hover:border-blue-300 hover:shadow-xs'
+                      }`}
+                    >
+                      {/* Left: Drag Handle, Direct Rank Jump Input, Name, Department */}
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <span
+                          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-700 text-sm select-none p-1"
+                          title="Drag to reorder"
+                        >
+                          ⠿
+                        </span>
+
+                        {/* Numeric Rank Input */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-gray-400">#</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={orderedRoles.length}
+                            defaultValue={actualIdx + 1}
+                            key={`rank-${r.id}-${actualIdx}`}
+                            onBlur={(e) => jumpRole(actualIdx, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                jumpRole(actualIdx, e.currentTarget.value);
+                                e.currentTarget.blur();
+                              }
+                            }}
+                            className="w-11 px-1.5 py-0.5 text-center text-xs font-bold text-blue-700 bg-blue-50/80 border border-blue-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            title="Type rank number and press Enter to jump position"
+                          />
+                        </div>
+
+                        <span className="text-xs font-bold text-gray-900 truncate">{r.name}</span>
+
+                        {r.department_name && (
+                          <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 shrink-0">
+                            {r.department_name}
+                          </span>
+                        )}
+
+                        {r.description && (
+                          <span className="text-[11px] text-gray-400 truncate hidden md:inline">
+                            {r.description}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Right: Quick Navigation Jump Buttons */}
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        {/* Jump to Top */}
+                        <button
+                          type="button"
+                          onClick={() => moveToTop(actualIdx)}
+                          disabled={actualIdx === 0}
+                          className="px-1.5 py-1 text-[10px] font-bold text-gray-600 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded border border-gray-200 disabled:opacity-25 cursor-pointer"
+                          title="Jump to Top (#1)"
+                        >
+                          ⏫ Top
+                        </button>
+
+                        {/* Move Up */}
+                        <button
+                          type="button"
+                          onClick={() => moveRole(actualIdx, -1)}
+                          disabled={actualIdx === 0}
+                          className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-600 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded border border-gray-200 disabled:opacity-25 cursor-pointer"
+                          title="Move up 1 position"
+                        >
+                          ▲
+                        </button>
+
+                        {/* Move Down */}
+                        <button
+                          type="button"
+                          onClick={() => moveRole(actualIdx, 1)}
+                          disabled={actualIdx === orderedRoles.length - 1}
+                          className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-600 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded border border-gray-200 disabled:opacity-25 cursor-pointer"
+                          title="Move down 1 position"
+                        >
+                          ▼
+                        </button>
+
+                        {/* Jump to Bottom */}
+                        <button
+                          type="button"
+                          onClick={() => moveToBottom(actualIdx)}
+                          disabled={actualIdx === orderedRoles.length - 1}
+                          className="px-1.5 py-1 text-[10px] font-bold text-gray-600 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded border border-gray-200 disabled:opacity-25 cursor-pointer"
+                          title="Jump to Bottom (Last rank)"
+                        >
+                          ⏬ Bottom
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-gray-200/80 text-[11px] text-gray-500">
+              <span>💡 Tip: Grab ⠿ to drag &amp; drop, or type rank number directly into any box.</span>
+              <button
+                onClick={savePriority}
+                disabled={isSaving}
+                className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-1.5 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Saving…' : 'Save Priority Order'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Configure Role(s) — multi-select grouped by department */}

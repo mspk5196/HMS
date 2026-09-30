@@ -33,49 +33,55 @@
 
 const router = require('express').Router();
 const ctrl = require('./salary.controller');
+const { verifyToken, requirePermissions } = require('../../middleware/auth');
+const { gate } = require('../../middleware/approvalGate');
+
+router.use(verifyToken);
+const canViewPayroll = requirePermissions(['payroll.view']);
+const canViewFine = requirePermissions(['fine.view']);
 
 // Salary Structures
-router.get('/structures', ctrl.listStructures);
-router.post('/structures', ctrl.createStructure);
-router.post('/structures/revision', ctrl.addRevision);
-router.patch('/structures/:id', ctrl.updateStructure);
+router.get('/structures', canViewPayroll, ctrl.listStructures);
+router.post('/structures', gate('payroll.create', ctrl.createStructure));
+router.post('/structures/revision', gate('payroll.edit', ctrl.addRevision));
+router.patch('/structures/:id', gate('payroll.edit', ctrl.updateStructure));
 
 // What payroll will actually use for an employee in a period
-router.get('/effective/:employeeId', ctrl.getEffectiveSalary);
+router.get('/effective/:employeeId', canViewPayroll, ctrl.getEffectiveSalary);
 
 // Payroll constants (PF/ESI percentages and ceilings)
-router.get('/config', ctrl.getConfig);
-router.patch('/config', ctrl.updateConfig);
+router.get('/config', canViewPayroll, ctrl.getConfig);
+router.patch('/config', gate('payroll.edit', ctrl.updateConfig));
 
 // Night-shift rates
-router.get('/night-shift-rates/:shiftId', ctrl.listNightShiftRates);
-router.post('/night-shift-rates', ctrl.addNightShiftRate);
+router.get('/night-shift-rates/:shiftId', canViewPayroll, ctrl.listNightShiftRates);
+router.post('/night-shift-rates', gate('payroll.edit', ctrl.addNightShiftRate));
 
 // Payroll runs
-router.get('/payroll-runs', ctrl.listRuns);
-router.get('/payroll-runs/:id', ctrl.getRun);
-router.post('/payroll-runs', ctrl.createRun);
-router.post('/payroll-runs/generate', ctrl.generatePayroll);
-router.post('/payroll-runs/:id/calculate', ctrl.calculateRun);
-router.post('/payroll-runs/:id/lock', ctrl.lockRun);
-router.get('/payroll-runs/:id/items', ctrl.listItems);
-router.get('/payroll-runs/:id/calculation-summary', ctrl.getCalculationSummary);
-router.get('/payroll-runs/:id/export', ctrl.exportPayrollRun);
-router.get('/payroll-runs/:id/payslip/:employeeId', ctrl.getPayslip);
+router.get('/payroll-runs', canViewPayroll, ctrl.listRuns);
+router.get('/payroll-runs/:id', canViewPayroll, ctrl.getRun);
+router.post('/payroll-runs', gate('payroll.create', ctrl.createRun));
+router.post('/payroll-runs/generate', gate('payroll.generate_payroll', ctrl.generatePayroll));
+router.post('/payroll-runs/:id/calculate', gate('payroll.edit', ctrl.calculateRun));
+router.post('/payroll-runs/:id/lock', gate('payroll.approve_payroll', ctrl.lockRun));
+router.get('/payroll-runs/:id/items', canViewPayroll, ctrl.listItems);
+router.get('/payroll-runs/:id/calculation-summary', canViewPayroll, ctrl.getCalculationSummary);
+router.get('/payroll-runs/:id/export', canViewPayroll, ctrl.exportPayrollRun);
+router.get('/payroll-runs/:id/payslip/:employeeId', canViewPayroll, ctrl.getPayslip);
 
 // Fine Types
-router.get('/fine-types', ctrl.listFineTypes);
-router.post('/fine-types', ctrl.createFineType);
-router.patch('/fine-types/:id', ctrl.updateFineType);
+router.get('/fine-types', canViewFine, ctrl.listFineTypes);
+router.post('/fine-types', gate('fine.create', ctrl.createFineType));
+router.patch('/fine-types/:id', gate('fine.edit', ctrl.updateFineType));
 
 // Fines
-router.get('/fines', ctrl.listFines);
-router.post('/fines', ctrl.createFine);
-router.patch('/fines/:id/waive', ctrl.waiveFine);
-router.patch('/fines/:id/cancel', ctrl.cancelFine);
+router.get('/fines', canViewFine, ctrl.listFines);
+router.post('/fines', gate('fine.create', ctrl.createFine));
+router.patch('/fines/:id/waive', gate('fine.waive_fine', ctrl.waiveFine));
+router.patch('/fines/:id/cancel', gate('fine.delete', ctrl.cancelFine));
 
 // Overtime
-router.get('/overtime', ctrl.listOvertime);
-router.post('/overtime', ctrl.createOvertime);
+router.get('/overtime', canViewPayroll, ctrl.listOvertime);
+router.post('/overtime', gate('payroll.edit', ctrl.createOvertime));
 
 module.exports = router;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
 import {
@@ -47,8 +48,15 @@ function Banner({ msg, tone }) {
   return <div className={`text-xs font-medium px-4 py-3 rounded-xl border shadow-sm ${cls}`}>{msg}</div>;
 }
 
-export default function Payroll() {
-  const [tab, setTab] = useState('runs');
+export default function Payroll({ user }) {
+  const tabs = [
+    { value: 'runs', label: 'Payroll Runs', show: hasPermission(user, 'payroll.view') },
+    { value: 'calc', label: 'Salary & PF/ESI Calculation', show: hasPermission(user, 'payroll.view') },
+    { value: 'overtime', label: 'Overtime', show: hasPermission(user, 'payroll.view') },
+    { value: 'config', label: 'PF/ESI Config', show: hasPermission(user, 'payroll.view') },
+  ].filter((t) => t.show);
+
+  const [tab, setTab] = useState(() => tabs[0]?.value || 'runs');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -69,18 +77,13 @@ export default function Payroll() {
       <TabBar
         active={tab}
         onChange={setTab}
-        tabs={[
-          { value: 'runs', label: 'Payroll Runs' },
-          { value: 'calc', label: 'Salary & PF/ESI Calculation' },
-          { value: 'overtime', label: 'Overtime' },
-          { value: 'config', label: 'PF/ESI Config' },
-        ]}
+        tabs={tabs}
       />
 
-      {tab === 'runs' && <Runs onError={fail} onSuccess={flash} />}
-      {tab === 'calc' && <SalaryPfEsiCalculation onError={fail} onSuccess={flash} />}
-      {tab === 'overtime' && <Overtime onError={fail} onSuccess={flash} />}
-      {tab === 'config' && <Config onError={fail} onSuccess={flash} />}
+      {tab === 'runs' && <Runs user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'calc' && <SalaryPfEsiCalculation user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'overtime' && <Overtime user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'config' && <Config user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
 }
@@ -89,7 +92,7 @@ export default function Payroll() {
    PAYROLL RUNS
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Runs({ onError, onSuccess }) {
+function Runs({ user, onError, onSuccess }) {
   const now = new Date();
   const [runs, setRuns] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
@@ -144,6 +147,7 @@ function Runs({ onError, onSuccess }) {
   if (selectedRunId) {
     return (
       <RunDetail
+        user={user}
         runId={selectedRunId}
         onBack={() => { setSelectedRunId(null); load(); }}
         onError={onError}
@@ -165,51 +169,53 @@ function Runs({ onError, onSuccess }) {
             </p>
           </div>
 
-          <form onSubmit={handleGeneratePayroll} className="flex flex-wrap items-center gap-3 bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20">
-            <div className="space-y-0.5">
-              <label className="text-[9px] font-bold text-blue-200 uppercase block">Select Month</label>
-              <select
-                value={genMonth}
-                onChange={(e) => setGenMonth(e.target.value)}
-                className="px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs cursor-pointer border border-gray-200"
+          {hasPermission(user, 'payroll.generate_payroll') && (
+            <form onSubmit={handleGeneratePayroll} className="flex flex-wrap items-center gap-3 bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20">
+              <div className="space-y-0.5">
+                <label className="text-[9px] font-bold text-blue-200 uppercase block">Select Month</label>
+                <select
+                  value={genMonth}
+                  onChange={(e) => setGenMonth(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs cursor-pointer border border-gray-200"
+                >
+                  {MONTH_NAMES.map((m, i) => (
+                    <option key={m} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-0.5">
+                <label className="text-[9px] font-bold text-blue-200 uppercase block">Year</label>
+                <input
+                  type="number"
+                  value={genYear}
+                  onChange={(e) => setGenYear(e.target.value)}
+                  className="w-20 px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs border border-gray-200"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isGenerating}
+                className="mt-3.5 sm:mt-0 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-4 py-2 rounded-lg shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-end"
               >
-                {MONTH_NAMES.map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-0.5">
-              <label className="text-[9px] font-bold text-blue-200 uppercase block">Year</label>
-              <input
-                type="number"
-                value={genYear}
-                onChange={(e) => setGenYear(e.target.value)}
-                className="w-20 px-2.5 py-1.5 bg-white text-gray-900 rounded-lg text-xs font-bold shadow-xs border border-gray-200"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isGenerating}
-              className="mt-3.5 sm:mt-0 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold px-4 py-2 rounded-lg shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-end"
-            >
-              {isGenerating ? (
-                <>
-                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                  </svg>
-                  Calculating…
-                </>
-              ) : (
-                <>
-                  <BoltIcon className="w-4 h-4 text-white" />
-                  <span>Generate &amp; Calculate Payroll</span>
-                </>
-              )}
-            </button>
-          </form>
+                {isGenerating ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    Calculating…
+                  </>
+                ) : (
+                  <>
+                    <BoltIcon className="w-4 h-4 text-white" />
+                    <span>Generate &amp; Calculate Payroll</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
         </div>
       </div>
 
@@ -270,7 +276,7 @@ function Runs({ onError, onSuccess }) {
    RUN DETAIL — items table + calculate/lock + payslip
 ═══════════════════════════════════════════════════════════════════════ */
 
-function RunDetail({ runId, onBack, onError, onSuccess }) {
+function RunDetail({ user, runId, onBack, onError, onSuccess }) {
   const [run, setRun] = useState(null);
   const [items, setItems] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
@@ -448,26 +454,30 @@ function RunDetail({ runId, onBack, onError, onSuccess }) {
             <DownloadIcon className="w-4 h-4 text-white" />
             <span>Export Excel</span>
           </button>
-          <button
-            onClick={calculate}
-            disabled={busy || run.status !== 'draft'}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {busy ? 'Recalculating…' : (
-              <>
-                <SyncIcon className="w-4 h-4 text-white" />
-                <span>Recalculate Payroll</span>
-              </>
-            )}
-          </button>
-          <button
-            onClick={lock}
-            disabled={busy || run.status !== 'draft'}
-            className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
-          >
-            <LockIcon className="w-4 h-4 text-white" />
-            <span>Lock &amp; Confirm Run</span>
-          </button>
+          {hasPermission(user, 'payroll.edit') && (
+            <button
+              onClick={calculate}
+              disabled={busy || run.status !== 'draft'}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {busy ? 'Recalculating…' : (
+                <>
+                  <SyncIcon className="w-4 h-4 text-white" />
+                  <span>Recalculate Payroll</span>
+                </>
+              )}
+            </button>
+          )}
+          {hasPermission(user, 'payroll.approve_payroll') && (
+            <button
+              onClick={lock}
+              disabled={busy || run.status !== 'draft'}
+              className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <LockIcon className="w-4 h-4 text-white" />
+              <span>Lock &amp; Confirm Run</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1116,7 +1126,7 @@ function PayslipView({ payslip, onBack }) {
    Complete dynamic view based on EPF & ESI CALCULATION.xlsx and 06 STAFF ATTENDANCE JUNE-2026.xlsx
 ═══════════════════════════════════════════════════════════════════════ */
 
-function SalaryPfEsiCalculation({ onError, onSuccess }) {
+function SalaryPfEsiCalculation({ user, onError, onSuccess }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -1268,33 +1278,37 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
             />
 
             {!data?.run ? (
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isGenerating ? 'Calculating…' : (
-                  <>
-                    <BoltIcon className="w-4 h-4 text-white" />
-                    <span>Calculate for Month</span>
-                  </>
-                )}
-              </button>
-            ) : (
-              <>
+              hasPermission(user, 'payroll.generate_payroll') && (
                 <button
                   onClick={handleGenerate}
-                  disabled={isGenerating || data.run.status !== 'draft'}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                  title="Recalculate with latest biometric punches and settings"
+                  disabled={isGenerating}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isGenerating ? 'Recalculating…' : (
+                  {isGenerating ? 'Calculating…' : (
                     <>
-                      <SyncIcon className="w-3.5 h-3.5" />
-                      <span>Recalculate</span>
+                      <BoltIcon className="w-4 h-4 text-white" />
+                      <span>Calculate for Month</span>
                     </>
                   )}
                 </button>
+              )
+            ) : (
+              <>
+                {hasPermission(user, 'payroll.edit') && (
+                  <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || data.run.status !== 'draft'}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    title="Recalculate with latest biometric punches and settings"
+                  >
+                    {isGenerating ? 'Recalculating…' : (
+                      <>
+                        <SyncIcon className="w-3.5 h-3.5" />
+                        <span>Recalculate</span>
+                      </>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => setShowExportModal(true)}
                   disabled={isExporting}
@@ -1701,7 +1715,7 @@ function SalaryPfEsiCalculation({ onError, onSuccess }) {
    OVERTIME
 ═══════════════════════════════════════════════════════════════════════ */
 
-function Overtime({ onError, onSuccess }) {
+function Overtime({ user, onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0 });
   const [isLoading, setIsLoading] = useState(false);
@@ -1766,12 +1780,14 @@ function Overtime({ onError, onSuccess }) {
       </div>
 
       <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
-        >
-          {showForm ? 'Cancel' : '+ New Entry'}
-        </button>
+        {hasPermission(user, 'payroll.edit') && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="bg-gray-800 hover:bg-gray-900 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors"
+          >
+            {showForm ? 'Cancel' : '+ New Entry'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -1882,7 +1898,7 @@ const CONFIG_LABELS = {
   STANDARD_SHIFT_MINUTES: 'Standard shift length (minutes)',
 };
 
-function Config({ onError, onSuccess }) {
+function Config({ user, onError, onSuccess }) {
   const [config, setConfig] = useState({});
   const [form, setForm] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -1948,13 +1964,15 @@ function Config({ onError, onSuccess }) {
             ))}
           </div>
         )}
-        <button
-          type="submit"
-          disabled={isSaving || !changed}
-          className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-        >
-          {isSaving ? 'Saving…' : 'Save Changes'}
-        </button>
+        {hasPermission(user, 'payroll.edit') && (
+          <button
+            type="submit"
+            disabled={isSaving || !changed}
+            className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            {isSaving ? 'Saving…' : 'Save Changes'}
+          </button>
+        )}
       </form>
     </div>
   );

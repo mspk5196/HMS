@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../util/api';
+import { hasPermission } from '../../util/permissions';
 import EmployeePicker from '../../components/EmployeePicker';
 import {
   SearchIcon,
@@ -56,7 +57,9 @@ const getDaysArray = (fromDate, toDate) => {
   return days;
 };
 
-export default function AttendanceRegister({ departments = [], onError, onSuccess }) {
+export default function AttendanceRegister({ departments = [], onError, onSuccess, user }) {
+  const canManualMark = hasPermission(user, 'attendance.manual_mark');
+  const canRecalculate = hasPermission(user, 'attendance.recalculate');
   const now = new Date();
   const [viewType, setViewType] = useState('monthly'); // 'monthly' | 'weekly' | 'custom'
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -131,6 +134,10 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
       if (onError) onError(null, 'Please select a staff member.');
       return;
     }
+    if (!canManualMark) {
+      if (onError) onError(null, 'You do not have permission to manually mark attendance.');
+      return;
+    }
     if (!markingModal?.date) {
       if (onError) onError(null, 'Please select an attendance date.');
       return;
@@ -142,7 +149,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
 
     try {
       setIsSavingManual(true);
-      await apiFetch('/attendance/mark', {
+      const res = await apiFetch('/attendance/mark', {
         method: 'POST',
         body: JSON.stringify({
           employee_id: Number(markingModal.employee_id),
@@ -154,7 +161,11 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
         }),
       });
       if (onSuccess) {
-        onSuccess(`Manual attendance saved successfully for ${markingModal.employee_name || 'Staff'} on ${markingModal.date}!`);
+        if (res?.isPendingApproval) {
+          onSuccess(`Manual attendance submitted for approval (Pending Review).`);
+        } else {
+          onSuccess(`Manual attendance saved successfully for ${markingModal.employee_name || 'Staff'} on ${markingModal.date}!`);
+        }
       }
       setMarkingModal(null);
       await loadRegister();
@@ -221,12 +232,16 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
         method: 'POST',
         body: JSON.stringify({ fromDate, toDate }),
       });
-      const processedCount = res?.data?.processed ?? res?.processed ?? 0;
-      const datesCount = res?.data?.datesProcessed ?? res?.datesProcessed ?? 0;
       if (onSuccess) {
-        onSuccess(
-          `Successfully processed punches across ${datesCount} day(s) (${fromDate} to ${toDate})! ${processedCount} daily summaries generated/updated.`
-        );
+        if (res?.isPendingApproval) {
+          onSuccess('Punch recalculation submitted for approval (Pending Review).');
+        } else {
+          const processedCount = res?.data?.processed ?? res?.processed ?? 0;
+          const datesCount = res?.data?.datesProcessed ?? res?.datesProcessed ?? 0;
+          onSuccess(
+            `Successfully processed punches across ${datesCount} day(s) (${fromDate} to ${toDate})! ${processedCount} daily summaries generated/updated.`
+          );
+        }
       }
       await loadRegister();
     } catch (err) {

@@ -56,64 +56,66 @@
 
 const router = require('express').Router();
 const ctrl = require('./pharmacy.controller');
-const { verifyToken } = require('../../middleware/auth');
+const { verifyToken, requirePermissions } = require('../../middleware/auth');
+const { gate } = require('../../middleware/approvalGate');
 
 router.use(verifyToken);
+const canViewPharmacy = requirePermissions(['pharmacy.view']);
 
 // Medicines — NOTE: specific routes MUST come before /:id to avoid conflict
-router.get('/medicines/categories', ctrl.listCategories);
-router.post('/medicines/categories', ctrl.createCategory);
-router.patch('/medicines/categories/:id', ctrl.updateCategory);
-router.delete('/medicines/categories/:id', ctrl.deleteCategory);
-router.get('/medicines/form-factors', ctrl.listFormFactors);
-router.post('/medicines/form-factors', ctrl.createFormFactor);
-router.patch('/medicines/form-factors/:id', ctrl.updateFormFactor);
-router.delete('/medicines/form-factors/:id', ctrl.deleteFormFactor);
-router.get('/medicines/barcode/:barcode', ctrl.getByBarcode);
-router.get('/medicines', ctrl.listMedicines);
-router.get('/medicines/:id', ctrl.getMedicine);
-router.post('/medicines', ctrl.createMedicine);
-router.patch('/medicines/:id', ctrl.updateMedicine);
-router.delete('/medicines/:id', ctrl.deleteMedicine);
+router.get('/medicines/categories', canViewPharmacy, ctrl.listCategories);
+router.post('/medicines/categories', gate('pharmacy.create', ctrl.createCategory));
+router.patch('/medicines/categories/:id', gate('pharmacy.edit', ctrl.updateCategory));
+router.delete('/medicines/categories/:id', gate('pharmacy.delete', ctrl.deleteCategory));
+router.get('/medicines/form-factors', canViewPharmacy, ctrl.listFormFactors);
+router.post('/medicines/form-factors', gate('pharmacy.create', ctrl.createFormFactor));
+router.patch('/medicines/form-factors/:id', gate('pharmacy.edit', ctrl.updateFormFactor));
+router.delete('/medicines/form-factors/:id', gate('pharmacy.delete', ctrl.deleteFormFactor));
+router.get('/medicines/barcode/:barcode', canViewPharmacy, ctrl.getByBarcode);
+router.get('/medicines', canViewPharmacy, ctrl.listMedicines);
+router.get('/medicines/:id', canViewPharmacy, ctrl.getMedicine);
+router.post('/medicines', gate('pharmacy.create', ctrl.createMedicine));
+router.patch('/medicines/:id', gate('pharmacy.edit', ctrl.updateMedicine));
+router.delete('/medicines/:id', gate('pharmacy.delete', ctrl.deleteMedicine));
 
 // Stock
-router.get('/stock', ctrl.listStock);
-router.post('/stock', ctrl.addStock);
+router.get('/stock', canViewPharmacy, ctrl.listStock);
+router.post('/stock', gate('pharmacy.create', ctrl.addStock));
 
 // Prescription suggestions
-router.post('/suggest', ctrl.suggestMedicines);
+router.post('/suggest', canViewPharmacy, ctrl.suggestMedicines);
 
 // Billing
-router.get('/bills', ctrl.listBills);
-router.get('/bills/:id', ctrl.getBill);
-router.post('/bills', ctrl.generateBill);
-router.patch('/bills/:id/payment', ctrl.recordBillPayment);
-router.post('/bills/:id/close', ctrl.closeBill);
+router.get('/bills', canViewPharmacy, ctrl.listBills);
+router.get('/bills/:id', canViewPharmacy, ctrl.getBill);
+router.post('/bills', gate('pharmacy.dispense_medicine', ctrl.generateBill));
+router.patch('/bills/:id/payment', gate('pharmacy.dispense_medicine', ctrl.recordBillPayment));
+router.post('/bills/:id/close', gate('pharmacy.dispense_medicine', ctrl.closeBill));
 
 // Suppliers
-router.get('/suppliers', ctrl.listSuppliers);
-router.get('/suppliers/:id', ctrl.getSupplier);
-router.post('/suppliers', ctrl.createSupplier);
-router.patch('/suppliers/:id', ctrl.updateSupplier);
+router.get('/suppliers', canViewPharmacy, ctrl.listSuppliers);
+router.get('/suppliers/:id', canViewPharmacy, ctrl.getSupplier);
+router.post('/suppliers', gate('pharmacy.create', ctrl.createSupplier));
+router.patch('/suppliers/:id', gate('pharmacy.edit', ctrl.updateSupplier));
 
 // Purchase orders
-router.get('/purchase-orders', ctrl.listPurchaseOrders);
-router.get('/purchase-orders/:id', ctrl.getPurchaseOrder);
-router.post('/purchase-orders', ctrl.createPurchaseOrder);
-router.post('/purchase-orders/:id/cancel', ctrl.cancelPurchaseOrder);
+router.get('/purchase-orders', canViewPharmacy, ctrl.listPurchaseOrders);
+router.get('/purchase-orders/:id', canViewPharmacy, ctrl.getPurchaseOrder);
+router.post('/purchase-orders', gate('pharmacy.create_purchase_order', ctrl.createPurchaseOrder));
+router.post('/purchase-orders/:id/cancel', gate('pharmacy.delete', ctrl.cancelPurchaseOrder));
 
 // Goods receipt / GRN
-router.get('/goods-receipts', ctrl.listGoodsReceipts);
-router.get('/goods-receipts/:id', ctrl.getGoodsReceipt);
-router.post('/goods-receipts', ctrl.createGoodsReceipt);
-router.patch('/goods-receipts/:id/payment', ctrl.recordGoodsReceiptPayment);
-router.post('/goods-receipts/:id/close', ctrl.closeGoodsReceipt);
+router.get('/goods-receipts', canViewPharmacy, ctrl.listGoodsReceipts);
+router.get('/goods-receipts/:id', canViewPharmacy, ctrl.getGoodsReceipt);
+router.post('/goods-receipts', gate('pharmacy.receive_goods_grn', ctrl.createGoodsReceipt));
+router.patch('/goods-receipts/:id/payment', gate('pharmacy.receive_goods_grn', ctrl.recordGoodsReceiptPayment));
+router.post('/goods-receipts/:id/close', gate('pharmacy.receive_goods_grn', ctrl.closeGoodsReceipt));
 
 // Reports — NOTE: specific routes MUST come before any /:id-style report route
-router.get('/reports/low-stock', ctrl.lowStockReport);
-router.get('/reports/expiring', ctrl.expiringStockReport);
-router.get('/reports/non-movable', ctrl.nonMovableStockReport);
-router.get('/reports/movements/daily', ctrl.dailyMovementSummary);
-router.get('/reports/movements', ctrl.listMovements);
+router.get('/reports/low-stock', canViewPharmacy, ctrl.lowStockReport);
+router.get('/reports/expiring', canViewPharmacy, ctrl.expiringStockReport);
+router.get('/reports/non-movable', canViewPharmacy, ctrl.nonMovableStockReport);
+router.get('/reports/movements/daily', canViewPharmacy, ctrl.dailyMovementSummary);
+router.get('/reports/movements', canViewPharmacy, ctrl.listMovements);
 
 module.exports = router;

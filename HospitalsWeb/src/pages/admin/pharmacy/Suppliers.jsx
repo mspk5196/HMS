@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../util/api';
+import { hasPermission } from '../../../util/permissions';
 import { Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
 
 const emptyForm = { name: '', contact_person: '', phone: '', email: '', address: '', gstin: '' };
 
-export default function Suppliers() {
+export default function Suppliers({ user }) {
   const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -79,9 +80,11 @@ export default function Suppliers() {
         title="Suppliers"
         subtitle="Vendors the pharmacy orders stock from."
         actions={
-          <button onClick={openCreate} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
-            + Add Supplier
-          </button>
+          (!user || hasPermission(user, 'pharmacy.create')) ? (
+            <button onClick={openCreate} className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer whitespace-nowrap">
+              + Add Supplier
+            </button>
+          ) : null
         }
       />
       {successMsg && <Banner>{successMsg}</Banner>}
@@ -126,10 +129,14 @@ export default function Suppliers() {
                   </span>
                 </td>
                 <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
-                  <button onClick={() => openEdit(s)} className="text-blue-600 hover:underline cursor-pointer font-semibold">Edit</button>
-                  <button onClick={() => toggleActive(s)} className="text-gray-500 hover:underline cursor-pointer font-semibold">
-                    {s.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
+                  {(!user || hasPermission(user, 'pharmacy.edit')) && (
+                    <>
+                      <button onClick={() => openEdit(s)} className="text-blue-600 hover:underline cursor-pointer font-semibold">Edit</button>
+                      <button onClick={() => toggleActive(s)} className="text-gray-500 hover:underline cursor-pointer font-semibold">
+                        {s.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
