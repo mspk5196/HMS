@@ -104,13 +104,99 @@ const getPermissionCatalog = async () => {
 const listRoles = async () => {
   const [rows] = await db.execute(
     `SELECT r.id, r.name, r.description, r.priority, r.can_access_settings,
-            r.staff_role_id, d.id AS department_id, d.name AS department_name
+            r.staff_role_id, d.id AS department_id, d.name AS department_name,
+            (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id) AS user_count
      FROM roles r
      LEFT JOIN staff_roles sr ON sr.id = r.staff_role_id
      LEFT JOIN departments d ON d.id = sr.department_id
-     ORDER BY d.name IS NULL, d.name, r.priority ASC, r.id ASC`
+     ORDER BY r.priority ASC, r.id ASC`
   );
   return rows;
+};
+
+const createRole = async ({ name, description, priority, can_access_settings = 0 }) => {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw new Error('Role name is required');
+  
+  const [[existing]] = await db.execute(`SELECT id FROM roles WHERE LOWER(name) = LOWER(?)`, [trimmed]);
+  if (existing) throw new Error(`A role named "${trimmed}" already exists`);
+
+  const p = Number(priority) || 10;
+  const [res] = await db.execute(
+    `INSERT INTO roles (name, description, priority, can_access_settings) VALUES (?, ?, ?, ?)`,
+    [trimmed, description?.trim() || null, p, can_access_settings ? 1 : 0]
+  );
+  return res.insertId;
+};
+
+const updateRole = async (id, { name, description, priority, can_access_settings }) => {
+  const roleId = Number(id);
+  const [[role]] = await db.execute(`SELECT id, name FROM roles WHERE id = ?`, [roleId]);
+  if (!role) throw new Error('Role not found');
+
+  if (roleId === 1 && name && name.trim().toLowerCase() !== 'administrator') {
+    throw new Error('Administrator role name cannot be modified');
+  }
+
+  const fields = [];
+  const vals = [];
+
+  if (name !== undefined) {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('Role name cannot be empty');
+    const [[clash]] = await db.execute(`SELECT id FROM roles WHERE LOWER(name) = LOWER(?) AND id != ?`, [trimmed, roleId]);
+    if (clash) throw new Error(`A role named "${trimmed}" already exists`);
+    fields.push('name = ?');
+    vals.push(trimmed);
+  }
+
+  if (description !== undefined) {
+    fields.push('description = ?');
+    vals.push(description ? description.trim() : null);
+  }
+
+  if (priority !== undefined) {
+    fields.push('priority = ?');
+    vals.push(Math.max(1, Number(priority) || 1));
+  }
+
+  if (can_access_settings !== undefined) {
+    fields.push('can_access_settings = ?');
+    vals.push(can_access_settings ? 1 : 0);
+  }
+
+  if (!fields.length) return;
+  vals.push(roleId);
+
+  await db.execute(`UPDATE roles SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+const deleteRole = async (id) => {
+  const roleId = Number(id);
+  if (roleId === 1) {
+    throw new Error('Administrator role cannot be deleted');
+  }
+
+  const [[role]] = await db.execute(`SELECT id, name FROM roles WHERE id = ?`, [roleId]);
+  if (!role) throw new Error('Role not found');
+
+  const [[{ user_count }]] = await db.execute(`SELECT COUNT(*) AS user_count FROM users WHERE role_id = ?`, [roleId]);
+  if (user_count > 0) {
+    throw new Error(`Cannot delete role "${role.name}": ${user_count} user(s) are currently assigned to this role. Please reassign them first.`);
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute(`DELETE FROM role_permissions WHERE role_id = ?`, [roleId]);
+    await conn.execute(`DELETE FROM roles WHERE id = ?`, [roleId]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 const updateRolePriorities = async (orderedIds) => {
@@ -349,7 +435,7 @@ const getUserById = async (id) => {
 
 module.exports = {
   getPermissionCatalog,
-  listRoles, updateRolePriorities,
+  listRoles, createRole, updateRole, deleteRole, updateRolePriorities,
   getRoleMatrix, setRoleMatrix, setRoleMatrixBulk, hasSkipApproval,
   getSettingsAccessRoles, setSettingsAccessRoles,
   listApprovalWorkflows, getApprovalWorkflow, upsertApprovalWorkflow,

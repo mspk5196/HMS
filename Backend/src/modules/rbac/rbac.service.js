@@ -7,6 +7,31 @@ const { replay } = require('../../middleware/approvalGate');
 const getPermissionCatalog = () => q.getPermissionCatalog();
 const listRoles = () => q.listRoles();
 
+const createRole = async (data) => {
+  if (!data?.name?.trim()) throw new AppError('Role name is required', 400);
+  try {
+    return await q.createRole(data);
+  } catch (err) {
+    throw new AppError(err.message, 400);
+  }
+};
+
+const updateRole = async (id, data) => {
+  try {
+    await q.updateRole(id, data);
+  } catch (err) {
+    throw new AppError(err.message, 400);
+  }
+};
+
+const deleteRole = async (id) => {
+  try {
+    await q.deleteRole(id);
+  } catch (err) {
+    throw new AppError(err.message, 400);
+  }
+};
+
 const updateRolePriorities = async (orderedIds) => {
   if (!Array.isArray(orderedIds) || !orderedIds.length) {
     throw new AppError('orderedIds must be a non-empty array', 400);
@@ -137,7 +162,7 @@ const reject = async (pendingId, approverUser, reason) => {
 };
 
 module.exports = {
-  getPermissionCatalog, listRoles, updateRolePriorities,
+  getPermissionCatalog, listRoles, createRole, updateRole, deleteRole, updateRolePriorities,
   getRoleMatrix, setRoleMatrix, setRoleMatrixBulk,
   getSettingsAccessRoles, setSettingsAccessRoles,
   listApprovalWorkflows, upsertApprovalWorkflow,

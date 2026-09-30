@@ -13,7 +13,7 @@ const sanitizeUsername = (raw) => {
     .replace(/-+/g, '-');
 };
 
-const createLogin = async ({ employee_id, username, password }) => {
+const createLogin = async ({ employee_id, username, password, role_id: explicitRoleId }) => {
   if (!username || !password) {
     throw new AppError('username and password are required', 400);
   }
@@ -28,7 +28,9 @@ const createLogin = async ({ employee_id, username, password }) => {
   if (existing) throw new AppError('This username is already taken', 400);
 
   const phone = employee_id ? await q.getEmployeePhone(employee_id) : null;
-  const role_id = (employee_id ? await q.getRoleIdForEmployee(employee_id) : null) ?? await q.getStaffRoleRoleId();
+  const role_id = (explicitRoleId ? Number(explicitRoleId) : null)
+    || (employee_id ? await q.getRoleIdForEmployee(employee_id) : null)
+    || await q.getStaffRoleRoleId();
   if (!role_id) throw new AppError('Baseline "Staff" role is missing', 500);
 
   const password_hash = await bcrypt.hash(password, 10);

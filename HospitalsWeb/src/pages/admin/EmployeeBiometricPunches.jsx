@@ -46,16 +46,31 @@ const getPresetDates = (preset) => {
   }
 };
 
-const formatTime12 = (timeStr) => {
+const formatTime12 = (timeStr, baseDate = null) => {
   if (!timeStr) return '—';
-  const parts = String(timeStr).split(':');
+  const str = String(timeStr).trim();
+  const timePart = str.includes('T')
+    ? str.split('T')[1]?.replace(/Z$/, '')
+    : str.includes(' ')
+    ? str.split(' ')[1]
+    : str;
+
+  const datePart = str.includes('T')
+    ? str.split('T')[0]
+    : str.includes(' ')
+    ? str.split(' ')[0]
+    : null;
+
+  const isNextDay = Boolean(baseDate && datePart && datePart > String(baseDate).slice(0, 10));
+
+  const parts = timePart.split(':');
   if (parts.length < 2) return timeStr;
   let h = parseInt(parts[0], 10);
   const m = parts[1];
   const s = parts[2] ? `:${parts[2].slice(0, 2)}` : '';
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
-  return `${h}:${m}${s} ${ampm}`;
+  return `${h}:${m}${s} ${ampm}${isNextDay ? ' (+1d)' : ''}`;
 };
 
 export default function EmployeeBiometricPunches({ embedded = false, user }) {
@@ -578,11 +593,11 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
                         {summary && (
                           <div className="text-xs text-gray-600 flex items-center gap-3">
                             <span>
-                              Calculated In: <strong className="text-gray-900">{formatTime12(summary.in_time)}</strong>
+                              Calculated In: <strong className="text-gray-900">{formatTime12(summary.in_time || summary.first_in_time)}</strong>
                             </span>
                             <span>·</span>
                             <span>
-                              Calculated Out: <strong className="text-gray-900">{formatTime12(summary.out_time)}</strong>
+                              Calculated Out: <strong className="text-gray-900">{formatTime12(summary.out_time || summary.last_out_time, summary.attendance_date || summary.summary_date)}</strong>
                             </span>
                             {summary.worked_minutes > 0 && (
                               <span className="bg-gray-100 px-2 py-0.5 rounded text-[11px] font-bold text-gray-800">
@@ -889,10 +904,10 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
                     )}
                   </td>
                   <td className="border border-black px-2 py-1 text-center font-mono font-bold text-black">
-                    {formatTime12(summary?.in_time)}
+                    {formatTime12(summary?.in_time || summary?.first_in_time)}
                   </td>
                   <td className="border border-black px-2 py-1 text-center font-mono font-bold text-black">
-                    {formatTime12(summary?.out_time)}
+                    {formatTime12(summary?.out_time || summary?.last_out_time, summary?.attendance_date || summary?.summary_date)}
                   </td>
                   <td className="border border-black px-2 py-1 text-center font-bold text-black">
                     {summary?.worked_minutes > 0 ? `${(Number(summary.worked_minutes) / 60).toFixed(1)}h` : '—'}

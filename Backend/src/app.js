@@ -1,10 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-// const { auditMiddleware } = require('./middleware/auditMiddleware');
+const { auditMiddleware } = require('./middleware/auditMiddleware');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Set up global rate limiter: maximum of 1000 requests per 15 minutes
 const globalLimiter = rateLimit({
@@ -41,6 +42,10 @@ app.options(/.*/, cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 
+// Request audit middleware: captures metadata (method, endpoint, user, public IP, device, status code)
+// Strictly omits headers and payload body
+app.use(auditMiddleware);
+
 // Serve uploaded employee documents (Aadhar, PAN, etc.)
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -71,6 +76,7 @@ app.use('/api/bed', require('./modules/bed/bed.routes'));
 app.use('/api/payment', require('./modules/payment/payment.routes'));
 app.use('/api/rbac', require('./modules/rbac/rbac.routes'));
 app.use('/api/users', require('./modules/users/users.routes'));
+app.use('/api/audit', require('./modules/audit/audit.routes'));
 
 // ─── Global error handler (must be last) ────────────────────────────────────
 app.use(require('./middleware/errorHandler'));

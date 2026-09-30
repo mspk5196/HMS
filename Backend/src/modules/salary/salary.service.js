@@ -38,7 +38,10 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
     `SELECT
        COALESCE(SUM(status IN ('present','late_present')), 0) AS days_present,
        COALESCE(SUM(status = 'on_leave'), 0)                  AS days_paid_leave,
+       COALESCE(SUM(status = 'half_day_leave'), 0)           AS days_half_day_leave,
+       COALESCE(SUM(status = 'half_day_lop'), 0)             AS days_half_day_lop,
        COALESCE(SUM(status = 'lop'), 0)                       AS days_lop,
+       COALESCE(SUM(status = 'absent'), 0)                    AS days_unexcused_absent,
        COALESCE(SUM(status = 'week_off'), 0)                  AS days_week_off,
        COALESCE(SUM(late_minutes), 0)                         AS total_late_minutes
      FROM attendance_daily_summary
@@ -70,12 +73,7 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
     [employeeId, month, year]
   );
 
-  // Week-offs the employee was entitled to but worked instead — paid as an
-  // extra day. Currently handled informally in cash; this makes it a real line.
-  //
-  // Only counted when a roster actually exists for the month. Without that
-  // guard an unrostered month reads as "took none of your week-offs" and pays
-  // out the full entitlement, turning missing data into a bonus.
+  // Week-offs the employee was entitled to but worked instead — paid as an extra day
   const [[weekOffRow]] = await db.execute(
     `SELECT COALESCE(sr.weekly_off_count, 0) AS entitled,
             (SELECT COUNT(*) FROM roster_entries re
@@ -90,7 +88,7 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
     [month, year, month, year, employeeId]
   );
 
-  // Lateness beyond what the monthly buffer pool absorbed is chargeable.
+  // Lateness beyond buffer
   const [[bufferRow]] = await db.execute(
     `SELECT buffer_allocated_minutes AS allocated, buffer_used_minutes AS used
      FROM employee_attendance_buffers
@@ -106,10 +104,23 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
   const taken = Number(weekOffRow?.taken ?? 0);
   const rosteredDays = Number(weekOffRow?.rostered_days ?? 0);
 
+  // Reconciled effective LOP: full LOP + unexcused absence + half-day LOP (0.5)
+  const fullLopDays = Number(summary.days_lop ?? 0) + Number(summary.days_unexcused_absent ?? 0);
+  const halfDayLop = Number(summary.days_half_day_lop ?? 0) * 0.5;
+  const effectiveLopDays = round2(fullLopDays + halfDayLop);
+
+  // Reconciled effective Paid Leave: full paid leave + half-day leave (0.5)
+  const effectivePaidLeaveDays = round2(
+    Number(summary.days_paid_leave ?? 0) + (Number(summary.days_half_day_leave ?? 0) * 0.5)
+  );
+
   return {
     days_present: Number(summary.days_present ?? 0),
-    days_paid_leave: Number(summary.days_paid_leave ?? 0),
-    days_lop: Number(summary.days_lop ?? 0),
+    days_paid_leave: effectivePaidLeaveDays,
+    days_half_day_leave: Number(summary.days_half_day_leave ?? 0),
+    days_half_day_lop: Number(summary.days_half_day_lop ?? 0),
+    days_lop: effectiveLopDays,
+    days_unexcused_absent: Number(summary.days_unexcused_absent ?? 0),
     shifts_worked: Number(shiftRow?.shifts_worked ?? 0),
     night_shifts_worked: Number(shiftRow?.night_shifts_worked ?? 0),
     unused_week_offs: rosteredDays > 0 ? Math.max(0, entitled - taken) : 0,

@@ -31,7 +31,10 @@ router.use(requireSettingsAccess);
 router.get('/catalog', ctrl.getPermissionCatalog);
 
 router.get('/roles', ctrl.listRoles);
+router.post('/roles', ctrl.createRole);
 router.patch('/roles/priority', ctrl.updateRolePriorities);
+router.patch('/roles/:id', ctrl.updateRole);
+router.delete('/roles/:id', ctrl.deleteRole);
 router.put('/roles/matrix/bulk', ctrl.setRoleMatrixBulk);
 router.get('/roles/:roleId/matrix', ctrl.getRoleMatrix);
 router.put('/roles/:roleId/matrix', ctrl.setRoleMatrix);

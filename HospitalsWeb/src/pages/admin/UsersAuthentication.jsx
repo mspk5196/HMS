@@ -450,16 +450,73 @@ export default function UsersAuthentication() {
   );
 }
 
+/** Smartly suggests an RBAC role based on employee designation / department */
+export const guessRole = (emp, rolesList) => {
+  if (!emp || !rolesList?.length) return '';
+  const des = String(emp.designation_name || '').toLowerCase();
+  const dept = String(emp.department_name || '').toLowerCase();
+
+  // 1. Direct match with staff_role_id if any role is linked
+  const directLink = rolesList.find((r) => r.staff_role_id && r.staff_role_id === emp.designation_id);
+  if (directLink) return directLink.id;
+
+  // 2. Doctor / Clinician
+  if (emp.is_doctor || des.includes('doctor') || des.includes('consultant') || des.includes('surgeon')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('doctor') || r.name.toLowerCase().includes('consultant'));
+    if (match) return match.id;
+  }
+  // 3. Nurse
+  if (des.includes('nurse') || dept.includes('nurs')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('nurse'));
+    if (match) return match.id;
+  }
+  // 4. Pharmacist
+  if (des.includes('pharmac') || dept.includes('pharmac')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('pharmac'));
+    if (match) return match.id;
+  }
+  // 5. Lab Technician
+  if (des.includes('lab') || dept.includes('lab')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('lab'));
+    if (match) return match.id;
+  }
+  // 6. Scan / Radiographer
+  if (des.includes('scan') || des.includes('radiograph') || dept.includes('radiolog')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('scan') || r.name.toLowerCase().includes('radiograph'));
+    if (match) return match.id;
+  }
+  // 7. Admin / Receptionist / Billing
+  if (des.includes('admin') || des.includes('reception') || des.includes('billing') || des.includes('cashier')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('admin') || r.name.toLowerCase().includes('reception'));
+    if (match) return match.id;
+  }
+  // 8. Security
+  if (des.includes('security')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('security'));
+    if (match) return match.id;
+  }
+  // 9. Housekeeping
+  if (des.includes('house') || des.includes('clean')) {
+    const match = rolesList.find((r) => r.name.toLowerCase().includes('house'));
+    if (match) return match.id;
+  }
+
+  // Fallback to first non-admin role or first available
+  const fallback = rolesList.find((r) => r.id !== 1);
+  return fallback?.id || rolesList[0]?.id || '';
+};
+
 /* ═══════════════════════════════════════════════════════════════════════
    CREATE LOGIN MODAL
 ═══════════════════════════════════════════════════════════════════════ */
 
-function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
+function CreateLoginModal({ roles = [], onClose, onSuccess, onError }) {
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [roleId, setRoleId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -482,6 +539,8 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
     setQuery(emp.full_name);
     const autoUser = generateDefaultUsername(emp.full_name, emp.employee_code || emp.id);
     setUsername(autoUser);
+    const suggestedRole = guessRole(emp, roles);
+    setRoleId(suggestedRole);
   };
 
   const handleUsernameChange = (e) => {
@@ -503,6 +562,10 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
       onError({ message: 'Password must be at least 6 characters.' });
       return;
     }
+    if (!roleId) {
+      onError({ message: 'Please select an RBAC Security Role for this user.' });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -512,6 +575,7 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
           employee_id: selectedEmp.id,
           username: cleanUser,
           password,
+          role_id: Number(roleId),
         }),
       });
       onSuccess(`Login created successfully for ${cleanUser}.`);
@@ -622,13 +686,38 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
             </div>
           </div>
 
+          {/* RBAC Security Role */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700">RBAC Security Role *</label>
+              {selectedEmp && (
+                <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">
+                  Suggested for {selectedEmp.designation_name || 'Staff'}
+                </span>
+              )}
+            </div>
+            <select
+              required
+              value={roleId}
+              onChange={(e) => setRoleId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+            >
+              <option value="" disabled>-- Select RBAC Security Role --</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} {r.id === 1 ? '(Superuser)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-lg text-[11px] text-blue-800 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
               <BoltIcon className="w-3.5 h-3.5 text-blue-600" />
-              <span>Role Auto-Mapping</span>
+              <span>Decoupled Role Security</span>
             </div>
             <p className="text-blue-700/90 text-[10px]">
-              The user role and permissions are automatically derived from the employee's hospital designation. You can also customize the role anytime via Edit.
+              This sets the user's software authorization profile. Their clinical title and department remain managed under Department &amp; Role.
             </p>
           </div>
 
@@ -642,7 +731,7 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedEmp}
+              disabled={isSubmitting || !selectedEmp || !roleId}
               className="px-4 py-2 text-xs font-semibold bg-[#1e40af] hover:bg-[#1c399b] text-white rounded-lg cursor-pointer disabled:opacity-50 shadow-sm"
             >
               {isSubmitting ? 'Creating…' : 'Create Login'}
@@ -658,10 +747,11 @@ function CreateLoginModal({ roles, onClose, onSuccess, onError }) {
    EDIT USER MODAL (Username, Role, Phone, Email)
 ═══════════════════════════════════════════════════════════════════════ */
 
-function EditUserModal({ user, onClose, onSuccess, onError }) {
+function EditUserModal({ user, roles = [], onClose, onSuccess, onError }) {
   const [username, setUsername] = useState(user.username || '');
   const [email, setEmail] = useState(user.email || '');
   const [phone, setPhone] = useState(user.phone || '');
+  const [roleId, setRoleId] = useState(user.role_id || '');
   const [isActive, setIsActive] = useState(!!user.is_active);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -676,6 +766,10 @@ function EditUserModal({ user, onClose, onSuccess, onError }) {
       onError({ message: 'Username must be at least 3 characters with only lowercase letters, numbers, and hyphens.' });
       return;
     }
+    if (!roleId) {
+      onError({ message: 'Please select an RBAC Role.' });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -685,6 +779,7 @@ function EditUserModal({ user, onClose, onSuccess, onError }) {
           username: cleanUser,
           email: email || null,
           phone: phone || null,
+          role_id: user.username === 'admin' ? undefined : Number(roleId),
           is_active: isActive,
         }),
       });
@@ -729,13 +824,31 @@ function EditUserModal({ user, onClose, onSuccess, onError }) {
             />
           </div>
 
-          {/* Role (Read-only display) */}
+          {/* Role Selector */}
           <div className="space-y-1">
-            <label className="block text-xs font-semibold text-gray-700">Assigned Role</label>
-            <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-800">{user.role_name || 'Staff'}</span>
-              <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">Derived from Designation</span>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700">RBAC Security Role *</label>
+              {user.designation_name && (
+                <span className="text-[10px] text-gray-400 font-normal">
+                  Designation: {user.designation_name}
+                </span>
+              )}
             </div>
+            <select
+              value={roleId}
+              onChange={(e) => setRoleId(e.target.value)}
+              disabled={user.username === 'admin'}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 disabled:bg-gray-100"
+            >
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} {r.id === 1 ? '(Superuser)' : ''}
+                </option>
+              ))}
+            </select>
+            {user.username === 'admin' && (
+              <p className="text-[10px] text-amber-600 font-medium">The primary Administrator role cannot be changed.</p>
+            )}
           </div>
 
           {/* Email */}

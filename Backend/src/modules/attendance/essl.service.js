@@ -468,7 +468,14 @@ async function syncBiometricDevice(deviceId, attendanceService, { fromDate, toDa
     if (punches.length > 0) {
       const punchRows = punches.map((p) => {
         const datePart = (p.punch_time || '').slice(0, 10);
-        if (datePart) affectedDates.add(datePart);
+        if (datePart) {
+          affectedDates.add(datePart);
+          const timePart = (p.punch_time || '').slice(11);
+          if (timePart && timePart < '12:00:00') {
+            const prev = new Date(new Date(datePart + 'T12:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
+            affectedDates.add(prev);
+          }
+        }
         return {
           employee_code: String(p.employee_code).trim(),
           device_id: device.name || `DEV-${device.id}`,
@@ -482,10 +489,11 @@ async function syncBiometricDevice(deviceId, attendanceService, { fromDate, toDa
       insertedCount = inserted;
       await q.linkOrphanPunches();
 
-      // Recalculate daily attendance summaries for affected dates
+      // Recalculate daily attendance summaries for affected dates in chronological order
       const procFn = attendanceService?.processDailyAttendance || attendanceService?.processDay;
       if (typeof procFn === 'function') {
-        for (const d of affectedDates) {
+        const sortedDates = Array.from(affectedDates).sort();
+        for (const d of sortedDates) {
           try {
             await procFn(d);
           } catch (procErr) {

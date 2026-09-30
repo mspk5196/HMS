@@ -100,6 +100,7 @@ const buildResolvedShift = ({
   start_time = '08:00:00',
   end_time = '18:00:00',
   is_night_shift = 0,
+  crosses_midnight = null,
   grace_period_minutes = 10,
   is_week_off = 0,
   is_holiday = 0,
@@ -122,13 +123,17 @@ const buildResolvedShift = ({
   }
   const sTime = start_time.length === 5 ? `${start_time}:00` : start_time;
   const eTime = end_time.length === 5 ? `${end_time}:00` : end_time;
+  const crosses = crosses_midnight !== null && crosses_midnight !== undefined
+    ? Number(crosses_midnight) === 1
+    : (sTime && eTime ? sTime > eTime : false);
 
   return {
     shift_id,
     shift_name,
     start_time: sTime,
     end_time: eTime,
-    is_night_shift: is_night_shift ? 1 : 0,
+    is_night_shift: is_night_shift ? 1 : (crosses ? 1 : 0),
+    crosses_midnight: crosses ? 1 : 0,
     grace_period_minutes: Number(grace_period_minutes) || 0,
     biometric_in_start: adjustTimeMinutes(sTime, -60),
     biometric_in_end: sTime,
@@ -235,9 +240,9 @@ const getShiftForDate = async (employeeId, date, dayPunches = []) => {
         [isNight ? 1 : 0]
       );
       const configured = shiftRows[0];
-      const start = configured?.start_time || (isNight ? '20:00:00' : '08:30:00');
-      const end = configured?.end_time || (isNight ? '08:00:00' : '18:30:00');
-      const grace = configured?.grace_period_minutes ?? 10;
+      const start = emp.custom_shift_start || configured?.start_time || (isNight ? '20:00:00' : '08:30:00');
+      const end = emp.custom_shift_end || configured?.end_time || (isNight ? '08:00:00' : '18:30:00');
+      const grace = emp.custom_buffer_minutes ?? configured?.grace_period_minutes ?? 10;
       return buildResolvedShift({
         shift_id: configured?.id ?? null,
         shift_name: configured?.name || (isNight ? 'Night Shift' : 'Day Shift'),
@@ -324,6 +329,70 @@ const getDefaultBufferMinutes = async () => {
   return rows[0] ? parseInt(rows[0].config_value, 10) : 30;
 };
 
+/**
+ * Deduplicate raw punches for an employee within a 1-hour window.
+ * If staff punch repeatedly within windowMinutes (thought that they keep bio),
+ * take only the FIRST kept punch in that 1-hour bio window and ignore subsequent punches.
+ */
+const deduplicatePunches = (punches, windowMinutes = 60) => {
+  if (!Array.isArray(punches) || punches.length <= 1) return punches || [];
+
+  const sorted = [...punches].sort(
+    (a, b) => new Date(String(a.punch_time).replace(' ', 'T')) - new Date(String(b.punch_time).replace(' ', 'T'))
+  );
+
+  const result = [];
+  let lastKeptTimeMs = null;
+
+  for (const p of sorted) {
+    const pTimeMs = new Date(String(p.punch_time).replace(' ', 'T')).getTime();
+    if (isNaN(pTimeMs)) continue;
+
+    if (lastKeptTimeMs === null || (pTimeMs - lastKeptTimeMs) >= windowMinutes * 60 * 1000) {
+      result.push(p);
+      lastKeptTimeMs = pTimeMs;
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Determine if an employee started a night shift on date `d`.
+ */
+const didStartNightShift = (emp, d, dedupedPunches) => {
+  if (emp.shift_category === 'night') return true;
+  if (emp.shift_category === 'day') return false;
+
+  const punchesOnD = dedupedPunches.filter((p) => String(p.punch_time).startsWith(d));
+  // A day shift arrival is between 07:00 and 11:30
+  const hasMorningArrival = punchesOnD.some((p) => {
+    const t = String(p.punch_time).slice(11);
+    return t >= '07:00:00' && t <= '11:30:00';
+  });
+  if (hasMorningArrival) return false;
+
+  // Evening arrival for night shift between 16:00 and 23:59:59
+  const hasEveningArrival = punchesOnD.some((p) => {
+    const t = String(p.punch_time).slice(11);
+    return t >= '16:00:00' && t <= '23:59:59';
+  });
+  if (!hasEveningArrival) return false;
+
+  // If the employee already had multiple evening punches on date d (e.g. arrived at 20:00 and punched out at 23:00),
+  // their shift completed before midnight on date d and does NOT cross into nextDate morning!
+  const eveningPunches = punchesOnD.filter((p) => String(p.punch_time).slice(11) >= '16:00:00');
+  if (eveningPunches.length >= 2) {
+    const firstP = eveningPunches[0];
+    const lastP = eveningPunches[eveningPunches.length - 1];
+    if (minutesBetween(firstP.punch_time, lastP.punch_time) >= 120) {
+      return false; // completed on date d before midnight
+    }
+  }
+
+  return true;
+};
+
 /* ─────────────────────────────────────────────
    PUNCH CLASSIFICATION
 ───────────────────────────────────────────── */
@@ -349,7 +418,7 @@ const classifyPunches = (punches, shift, override) => {
     const ignored = punches.filter((p) => !inside.includes(p));
     if (!inside.length) return { ins: [], outs: [], ignored };
     return {
-      ins: inside.slice(0, Math.max(1, inside.length - 1)),
+      ins: inside.slice(0, 1),
       outs: inside.length > 1 ? [inside[inside.length - 1]] : [],
       ignored,
     };
@@ -395,6 +464,11 @@ const computeBreakMinutes = (sortedPunches) => {
 /**
  * Turn a day's raw punches into daily summary rows.
  *
+ * Handles:
+ *   - 1-hour biometric window deduplication (rapid repeated punches take the first punch)
+ *   - Night shifts / cross-midnight shifts (evening IN on date D paired with morning OUT on date D+1)
+ *   - Preventing D+1 morning OUT punches from polluting D+1 as fake IN punches
+ *
  * @param {string} date YYYY-MM-DD
  */
 const processDailyAttendance = async (date) => {
@@ -402,12 +476,32 @@ const processDailyAttendance = async (date) => {
   await q.linkOrphanPunches();
 
   const defaultBuffer = await getDefaultBufferMinutes();
-  const punches = await q.getPunchesForDate(date, date);
-  if (!punches.length) return { processed: 0, skipped: 0, date };
+  const nextDate = new Date(new Date(date + 'T12:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
+  const prevDate = new Date(new Date(date + 'T12:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
+
+  // Fetch punches across the 3-day envelope: prevDate (to check night shift departure), date, and nextDate morning
+  const [windowPunches] = await db.query(
+    `SELECT arp.*, e.full_name, e.shift_category, e.custom_shift_start, e.custom_shift_end, e.department_id, e.designation_id
+     FROM attendance_raw_punches arp
+     JOIN employees e ON e.id = arp.employee_id
+     WHERE arp.punch_time >= ? AND arp.punch_time <= ?
+     ORDER BY arp.employee_id, arp.punch_time ASC`,
+    [`${prevDate} 00:00:00`, `${nextDate} 12:00:00`]
+  );
 
   const byEmployee = {};
-  for (const p of punches) {
+  for (const p of windowPunches) {
     (byEmployee[p.employee_id] ||= { employee: p, punches: [] }).punches.push(p);
+  }
+
+  // Also include all active employees so non-punch staff get processed as well
+  const [activeEmployees] = await db.query(
+    "SELECT id, full_name, employee_code, shift_category, custom_shift_start, custom_shift_end, department_id, designation_id FROM employees WHERE status = 'active'"
+  );
+  for (const emp of activeEmployees) {
+    if (!byEmployee[emp.id]) {
+      byEmployee[emp.id] = { employee: emp, punches: [] };
+    }
   }
 
   const [month, year] = [Number(date.slice(5, 7)), Number(date.slice(0, 4))];
@@ -416,36 +510,134 @@ const processDailyAttendance = async (date) => {
 
   for (const empId of Object.keys(byEmployee)) {
     const employeeId = Number(empId);
-    const { employee, punches: empPunches } = byEmployee[empId];
+    const { employee, punches: rawEmpPunches } = byEmployee[empId];
 
-    const shift = await getShiftForDate(employeeId, date, empPunches);
-    const override = await q.getBiometricWindow(date, employee.designation_id ?? null);
+    // 1. Deduplicate raw punches (taking the first kept bio punch in that 1-hour window)
+    const dedupedPunches = deduplicatePunches(rawEmpPunches, 60);
 
-    empPunches.sort((a, b) => new Date(String(a.punch_time).replace(' ', 'T')) - new Date(String(b.punch_time).replace(' ', 'T')));
-    const { ins, outs } = classifyPunches(empPunches, shift, override);
+    // 2. Check if employee worked a night shift on prevDate
+    const hadPrevNightShift = didStartNightShift(employee, prevDate, dedupedPunches);
 
-    let firstIn = ins.length ? ins[0].punch_time : null;
-    let lastOut = outs.length ? outs[outs.length - 1].punch_time : null;
-
-    // Fallback: If no punch fell into strict windows, or if employee has punches
-    if (!firstIn && empPunches.length > 0) {
-      firstIn = empPunches[0].punch_time;
+    // If they worked night shift on prevDate, their early morning punch on `date` (before 11:00 AM)
+    // was their OUT punch for prevDate!
+    let prevNightOutPunch = null;
+    if (hadPrevNightShift) {
+      prevNightOutPunch = dedupedPunches.find(
+        (p) => String(p.punch_time).startsWith(date) && String(p.punch_time).slice(11) <= '11:00:00'
+      );
     }
-    if (!lastOut && empPunches.length > 1) {
-      const lastP = empPunches[empPunches.length - 1];
-      if (lastP.punch_time !== firstIn && minutesBetween(firstIn, lastP.punch_time) >= 10) {
-        lastOut = lastP.punch_time;
+
+    // Auto-heal prevDate's night shift out punch if prevDate is missing last_out_time
+    if (prevNightOutPunch) {
+      const prevSummary = await q.getDailySummary(employeeId, prevDate);
+      if (prevSummary && (!prevSummary.last_out_time || prevSummary.is_missed_punch)) {
+        const pIn = prevSummary.first_in_time;
+        const pOut = prevNightOutPunch.punch_time;
+        const pSpan = pIn && pOut ? minutesBetween(pIn, pOut) : 0;
+        await q.upsertDailySummary({
+          ...prevSummary,
+          first_punch_in: pIn,
+          last_punch_out: pOut,
+          worked_minutes: pSpan,
+          is_missed_punch: 0,
+        });
       }
     }
 
+    // Punches eligible for `date` shift:
+    // Exclude the punch consumed by prevDate night shift!
+    const eligiblePunches = dedupedPunches.filter((p) => {
+      if (prevNightOutPunch && p.punch_time === prevNightOutPunch.punch_time) return false;
+      const pStr = String(p.punch_time);
+      if (pStr.startsWith(date)) return true;
+      if (pStr.startsWith(nextDate) && pStr.slice(11) <= '12:00:00') return true;
+      return false;
+    });
+
+    const shift = await getShiftForDate(employeeId, date, eligiblePunches);
+    const override = await q.getBiometricWindow(date, employee.designation_id ?? null);
+
+    let firstIn = null;
+    let lastOut = null;
+    let ins = [];
+    let outs = [];
+
+    if (shift.crosses_midnight) {
+      // For Shifts that cross midnight (e.g. 20:00 to 08:00, or 18:30 to 08:30):
+      // IN punch on `date` evening (from 16:00 onwards, or early hours of date)
+      const inCandidates = eligiblePunches.filter(
+        (p) => String(p.punch_time).startsWith(date) && String(p.punch_time).slice(11) >= '16:00:00'
+      );
+      if (inCandidates.length) {
+        firstIn = inCandidates[0].punch_time;
+        ins.push(inCandidates[0]);
+      }
+      // OUT punch on `nextDate` morning (between 05:00:00 and 12:00:00)
+      const outCandidates = eligiblePunches.filter(
+        (p) => String(p.punch_time).startsWith(nextDate) && String(p.punch_time).slice(11) <= '12:00:00'
+      );
+      if (outCandidates.length) {
+        // Take the first kept bio in that 1hr window
+        lastOut = outCandidates[0].punch_time;
+        outs.push(outCandidates[0]);
+      }
+    } else {
+      // For Day Shifts:
+      const dayPunches = eligiblePunches.filter((p) => String(p.punch_time).startsWith(date));
+      if (dayPunches.length) {
+        const classified = classifyPunches(dayPunches, shift, override);
+        ins = classified.ins;
+        outs = classified.outs;
+
+        // Take first in arrival window, first in departure window
+        firstIn = ins.length ? ins[0].punch_time : null;
+        lastOut = outs.length ? outs[0].punch_time : null;
+
+        // Fallback for non-strict punch times:
+        if (!firstIn && dayPunches.length > 0) {
+          firstIn = dayPunches[0].punch_time;
+        }
+        if (!lastOut && dayPunches.length > 1) {
+          const potentialOut = dayPunches[dayPunches.length - 1].punch_time;
+          if (potentialOut !== firstIn && minutesBetween(firstIn, potentialOut) >= 60) {
+            lastOut = potentialOut;
+          }
+        }
+      }
+    }
+
+    // Safety guard: firstIn and lastOut MUST NEVER be the exact same punch
+    if (firstIn && lastOut && firstIn === lastOut) {
+      lastOut = null;
+    }
+
+    // If employee has no punches on this date:
     if (!firstIn && !lastOut) {
-      skipped++;
+      const existing = await q.getDailySummary(employeeId, date);
+      // Preserve manual marks or approved leave
+      if (!existing || (!existing.is_manually_marked && existing.status !== 'on_leave')) {
+        const defaultStatus = shift?.is_week_off ? 'week_off' : (shift?.is_holiday ? 'holiday' : 'absent');
+        await q.upsertDailySummary({
+          employee_id: employeeId,
+          attendance_date: date,
+          shift_id: shift.shift_id ?? null,
+          status: defaultStatus,
+          first_punch_in: null,
+          last_punch_out: null,
+          worked_minutes: 0,
+          break_minutes: 0,
+          late_minutes: 0,
+          early_leave_minutes: 0,
+          is_missed_punch: 0,
+          biometric_window_extended: false,
+          overtime_minutes: 0,
+        });
+        processed++;
+      }
       continue;
     }
 
-    const isMissedPunch = !firstIn || !lastOut;
-
-    // Lateness is measured against the shift start with no daily buffer (lateness accumulates into monthly buffer pool).
+    // Calculate worked minutes, lateness, early leave:
     let lateMinutes = 0;
     if (firstIn && shift.start_time) {
       let rawLate = dateToMinutes(firstIn) - timeToMinutes(shift.start_time);
@@ -454,11 +646,6 @@ const processDailyAttendance = async (date) => {
       }
       lateMinutes = Math.max(0, rawLate);
     }
-
-    const accepted = [...ins, ...outs].sort((a, b) => new Date(a.punch_time) - new Date(b.punch_time));
-    const breakMinutes = computeBreakMinutes(accepted);
-    const span = firstIn && lastOut ? minutesBetween(firstIn, lastOut) : 0;
-    const workedMinutes = Math.max(0, span - breakMinutes);
 
     let earlyLeaveMinutes = 0;
     if (lastOut && shift.end_time) {
@@ -469,7 +656,13 @@ const processDailyAttendance = async (date) => {
       earlyLeaveMinutes = Math.max(0, rawEarly);
     }
 
-    const status = lateMinutes > 0 ? 'late_present' : 'present';
+    const isMissedPunch = (!firstIn || !lastOut) ? 1 : 0;
+    const accepted = [...ins, ...outs].sort((a, b) => new Date(a.punch_time) - new Date(b.punch_time));
+    const breakMinutes = computeBreakMinutes(accepted);
+    const span = firstIn && lastOut ? minutesBetween(firstIn, lastOut) : 0;
+    const workedMinutes = Math.max(0, span - breakMinutes);
+
+    const status = lateMinutes > (shift.grace_period_minutes || 0) ? 'late_present' : 'present';
 
     await q.upsertDailySummary({
       employee_id: employeeId,
@@ -507,42 +700,6 @@ const processDailyAttendance = async (date) => {
     }
 
     processed++;
-  }
-
-  // Also record active employees who have no biometric punches on this date
-  try {
-    const [activeEmployees] = await db.query(
-      "SELECT id, department_id, designation_id FROM employees WHERE status = 'active'"
-    );
-
-    for (const emp of activeEmployees) {
-      if (!byEmployee[emp.id]) {
-        const existing = await q.getDailySummary(emp.id, date);
-        // If already recorded (e.g. manually marked present, on_leave, etc.), preserve it
-        if (!existing) {
-          const shift = await getShiftForDate(emp.id, date);
-          const status = shift?.is_week_off ? 'week_off' : 'absent';
-          await q.upsertDailySummary({
-            employee_id: emp.id,
-            attendance_date: date,
-            shift_id: shift?.shift_id ?? null,
-            status,
-            first_punch_in: null,
-            last_punch_out: null,
-            worked_minutes: 0,
-            break_minutes: 0,
-            late_minutes: 0,
-            early_leave_minutes: 0,
-            is_missed_punch: 0,
-            biometric_window_extended: false,
-            overtime_minutes: 0,
-          });
-          processed++;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[processDailyAttendance] Warning processing non-punch staff:', err.message);
   }
 
   await db.execute(
@@ -808,6 +965,10 @@ module.exports = {
   getEmployeeBuffer,
   getShiftForDate,
   classifyPunches,
+  buildResolvedShift,
+  deduplicatePunches,
+  didStartNightShift,
+  minutesBetween,
   listDailySummaries: q.listDailySummaries,
   getAttendanceRegister: q.getAttendanceRegister,
   getDailySummary: q.getDailySummary,

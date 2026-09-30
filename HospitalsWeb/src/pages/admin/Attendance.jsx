@@ -48,7 +48,7 @@ const STATUS_STYLE = {
   holiday: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
-const fmtTime = (v) => {
+const fmtTime = (v, baseDate = null) => {
   if (!v) return '—';
   const str = String(v).trim();
   const timePart = str.includes('T')
@@ -57,6 +57,14 @@ const fmtTime = (v) => {
     ? str.split(' ')[1]
     : str;
 
+  const datePart = str.includes('T')
+    ? str.split('T')[0]
+    : str.includes(' ')
+    ? str.split(' ')[0]
+    : null;
+
+  const isNextDay = Boolean(baseDate && datePart && datePart > String(baseDate).slice(0, 10));
+
   const parts = timePart.split(':');
   if (parts.length >= 2) {
     let h = parseInt(parts[0], 10);
@@ -64,7 +72,7 @@ const fmtTime = (v) => {
     const s = parts[2] ? `:${parts[2].slice(0, 2)}` : '';
     const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
-    return `${h}:${m}${s} ${ampm}`;
+    return `${h}:${m}${s} ${ampm}${isNextDay ? ' (+1d)' : ''}`;
   }
   return str;
 };
@@ -511,7 +519,7 @@ function DailyLog({ departments, onError, onSuccess }) {
 
                     {/* Out Time */}
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
-                      {fmtTime(r.last_punch_out)}
+                      {fmtTime(r.last_punch_out, r.attendance_date)}
                     </td>
 
                     <td className="px-3 py-2.5 text-center text-gray-700">{fmtMinutes(r.worked_minutes)}</td>

@@ -40,18 +40,12 @@ const dateRange = (from, to) => {
 
 const createLeaveType = async (data) => {
   if (!data.name) throw new AppError('name is required', 400);
-  if (data.is_half_day_allowed) {
-    throw new AppError('Half-day leave is not supported', 400);
-  }
   return q.createLeaveType(data);
 };
 
 const updateLeaveType = async (id, data) => {
   const type = await q.getLeaveType(id);
   if (!type) throw new AppError('Leave type not found', 404);
-  if (data.is_half_day_allowed) {
-    throw new AppError('Half-day leave is not supported', 400);
-  }
   await q.updateLeaveType(id, data);
 };
 
@@ -59,8 +53,8 @@ const deleteLeaveType = async (id) => {
   const type = await q.getLeaveType(id);
   if (!type) throw new AppError('Leave type not found', 404);
   const normalized = (type.name || '').toLowerCase().trim();
-  const SYSTEM_TYPES = ['casual leave', 'cl', 'privilege leave', 'pl', 'loss of pay', 'lop', 'sick leave', 'sl', 'weekly off', 'week off', 'wh'];
-  if (SYSTEM_TYPES.includes(normalized) || Number(id) <= 5) {
+  const SYSTEM_TYPES = ['casual leave', 'cl', 'privilege leave', 'pl', 'loss of pay', 'lop', 'sick leave', 'sl'];
+  if (SYSTEM_TYPES.includes(normalized) || Number(id) <= 4) {
     throw new AppError(`Cannot delete system default leave type "${type.name}". It is required by attendance and payroll processing.`, 400);
   }
   await q.deleteLeaveType(id);
@@ -71,11 +65,14 @@ const deleteLeaveType = async (id) => {
 ───────────────────────────────────────────── */
 
 const applyForLeave = async (data) => {
-  const { employee_id, leave_type_id, from_date, to_date, reason } = data;
-  if (!employee_id || !leave_type_id || !from_date || !to_date) {
-    throw new AppError('employee_id, leave_type_id, from_date and to_date are required', 400);
+  const { employee_id, leave_type_id, from_date, to_date, duration_type = 'full_day', reason } = data;
+  if (!employee_id || !leave_type_id || !from_date) {
+    throw new AppError('employee_id, leave_type_id, and from_date are required', 400);
   }
-  if (to_date < from_date) {
+  const isHalfDay = duration_type === 'first_half' || duration_type === 'second_half';
+  const finalToDate = isHalfDay ? from_date : (to_date || from_date);
+
+  if (finalToDate < from_date) {
     throw new AppError('to_date cannot be before from_date', 400);
   }
 
@@ -83,24 +80,38 @@ const applyForLeave = async (data) => {
   if (!leaveType) throw new AppError('Leave type not found', 404);
   if (!leaveType.is_active) throw new AppError('This leave type is no longer active', 400);
 
+  if (isHalfDay && !leaveType.is_half_day_allowed) {
+    throw new AppError(`Half-day leave is not permitted for "${leaveType.name}".`, 400);
+  }
+
   const [[emp]] = await db.execute(
     `SELECT id, reporting_person_id FROM employees WHERE id = ?`, [employee_id]
   );
   if (!emp) throw new AppError('Employee not found', 404);
 
-  // Reject overlapping requests up front rather than letting two rows both
-  // try to claim the same date.
-  const overlapDates = dateRange(from_date, to_date);
+  // Check overlapping requests
+  const overlapDates = dateRange(from_date, finalToDate);
   for (const d of overlapDates) {
     const existing = await q.findRequestCoveringDate(employee_id, d);
     if (existing) {
-      throw new AppError(`This employee already has a leave request covering ${d} (request #${existing.id})`, 409);
+      if (!existing.is_half_day || !isHalfDay || existing.duration_type === duration_type) {
+        throw new AppError(`This employee already has a leave request covering ${d} (request #${existing.id})`, 409);
+      }
     }
   }
 
+  const daysCount = isHalfDay ? 0.5 : overlapDates.length;
+
   return q.createLeaveRequest({
-    employee_id, leave_type_id, from_date, to_date, reason,
-    reporting_person_id: emp.reporting_person_id,
+    employee_id,
+    leave_type_id,
+    from_date,
+    to_date: finalToDate,
+    duration_type,
+    days_count: daysCount,
+    is_half_day: isHalfDay ? 1 : 0,
+    reason,
+    reporting_person_id: emp.reporting_person_id || null,
   });
 };
 
@@ -127,19 +138,21 @@ const reviewByReportingPerson = async (id, decision) => {
 };
 
 /**
- * HR's final sign-off. This is where outcome 1 vs 2 is decided:
- *   - enough balance to cover the whole request → paid_leave, balance consumed
- *   - not enough → lop, balance untouched (the process was still followed, so
- *     no fine — that only applies to unexplained absences, see below)
+ * HR's final sign-off.
+ * Outcome decided based on live balance:
+ *   - enough balance -> paid_leave, balance consumed
+ *   - not enough -> lop, no fine
  */
-const reviewByHR = async (id, decision, reviewerId) => {
+const reviewByHR = async (id, decision, reviewerId, isSuperuser = false) => {
   if (!['approved', 'rejected'].includes(decision.status)) {
     throw new AppError('status must be approved or rejected', 400);
   }
   const req = await q.getLeaveRequest(id);
   if (!req) throw new AppError('Leave request not found', 404);
-  if (req.reporting_person_status !== 'approved') {
-    throw new AppError('The reporting person must approve this request before HR can act', 400);
+
+  // If request has a reporting person, require approval unless bypassed by admin or reporting person unassigned
+  if (req.reporting_person_id && req.reporting_person_status !== 'approved' && !decision.bypass_reporting_person && !isSuperuser) {
+    throw new AppError('The reporting person must approve this request before HR can act (or check Administrator bypass)', 400);
   }
   if (req.hr_status !== 'pending') {
     throw new AppError(`This request was already ${req.hr_status} by HR`, 400);
@@ -151,27 +164,41 @@ const reviewByHR = async (id, decision, reviewerId) => {
   }
 
   const dates = dateRange(req.from_date, req.to_date);
-  const totalDays = dates.length;
+  const totalDays = Number(req.days_count) || (req.duration_type !== 'full_day' ? 0.5 : dates.length);
   const year = new Date(`${req.from_date}T00:00:00Z`).getUTCFullYear();
 
-  const balance = await q.getLeaveBalance(req.employee_id, req.leave_type_id, year);
-  const available = Number(balance?.balance_days ?? 0);
+  let available = 0;
+  const isCompOff = Number(req.leave_type_id) === 6 || (req.leave_type_name || '').toLowerCase().includes('comp');
+  if (isCompOff) {
+    available = await q.getActiveCompOffBalance(req.employee_id);
+  } else {
+    const balance = await q.getLeaveBalance(req.employee_id, req.leave_type_id, year);
+    available = Number(balance?.balance_days ?? 0);
+  }
 
   let result;
   if (available >= totalDays) {
     result = 'paid_leave';
-    await q.upsertLeaveBalance({
-      employee_id: req.employee_id,
-      leave_type_id: req.leave_type_id,
-      year,
-      allocated_days: balance?.allocated_days ?? 0,
-      used_days: Number(balance?.used_days ?? 0) + totalDays,
-    });
-    await attendanceQ.markLeaveDays(req.employee_id, dates, 'on_leave');
+    if (isCompOff) {
+      await q.consumeCompOffCredit(req.employee_id, totalDays);
+    } else {
+      const balance = await q.getLeaveBalance(req.employee_id, req.leave_type_id, year);
+      await q.upsertLeaveBalance({
+        employee_id: req.employee_id,
+        leave_type_id: req.leave_type_id,
+        year,
+        allocated_days: balance?.allocated_days ?? 0,
+        used_days: Number(balance?.used_days ?? 0) + totalDays,
+      });
+    }
+
+    const attendanceStatus = totalDays === 0.5 ? 'half_day_leave' : 'on_leave';
+    await attendanceQ.markLeaveDays(req.employee_id, dates, attendanceStatus);
   } else {
     // Applied properly, but not enough balance — LOP, no fine.
     result = 'lop';
-    await attendanceQ.markLeaveDays(req.employee_id, dates, 'lop');
+    const attendanceStatus = totalDays === 0.5 ? 'half_day_lop' : 'lop';
+    await attendanceQ.markLeaveDays(req.employee_id, dates, attendanceStatus);
   }
 
   await q.setHrDecision(id, { hr_status: 'approved', result, hr_user_id: reviewerId });
@@ -253,16 +280,32 @@ const allocateLeaveBalance = async (data) => {
   await q.allocateLeaveBalance(employee_id, leave_type_id, year, allocated_days);
 };
 
+const creditCompOff = async (data) => {
+  const { employee_id, earned_date, days_credited = 1.0, reason, expiry_days = 90 } = data;
+  if (!employee_id || !earned_date) {
+    throw new AppError('employee_id and earned_date are required', 400);
+  }
+  return q.createCompOffCredit({
+    employeeId: employee_id,
+    earnedDate: earned_date,
+    daysCredited: Number(days_credited),
+    reason,
+    expiryDays: Number(expiry_days),
+  });
+};
+
 module.exports = {
   createLeaveType, updateLeaveType, deleteLeaveType,
   applyForLeave, reviewByReportingPerson, reviewByHR,
   recordUnexplainedAbsence,
   allocateLeaveBalance,
+  creditCompOff,
   // Pass-through
   listLeaveTypes: q.listLeaveTypes,
   listHolidays: q.listHolidays,
   createHoliday: q.createHoliday,
   getLeaveBalances: q.getLeaveBalances,
+  listAllLeaveBalances: q.listAllLeaveBalances,
   listLeaveRequests: q.listLeaveRequests,
   getLeaveRequest: q.getLeaveRequest,
   listWeekOffPolicies: q.listWeekOffPolicies,

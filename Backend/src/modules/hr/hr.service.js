@@ -26,7 +26,24 @@ const createEmployee = async (data) => {
     throw new AppError(`shift_category must be one of: ${VALID_SHIFT_CATEGORIES.join(', ')}`, 400);
   }
 
-  return q.createEmployee({ ...data, employee_code: code });
+  const empId = await q.createEmployee({ ...data, employee_code: code });
+
+  // Auto-initialize standard leave balances for the joining year
+  try {
+    const joiningYear = new Date(data.date_of_joining).getFullYear() || new Date().getFullYear();
+    const db = require('../../config/db');
+    await db.query(`
+      INSERT INTO leave_balances (employee_id, leave_type_id, year, allocated_days, used_days)
+      SELECT ?, id, ?, quota_days, 0.00
+      FROM leave_types
+      WHERE is_active = 1 AND id IN (1, 2, 4)
+      ON DUPLICATE KEY UPDATE allocated_days = VALUES(allocated_days)
+    `, [empId, joiningYear]);
+  } catch (err) {
+    console.error('Failed to auto-initialize leave balances for new employee:', err.message);
+  }
+
+  return empId;
 };
 
 const updateEmployee = async (id, data, userId = null) => {

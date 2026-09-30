@@ -10,6 +10,21 @@ const listRoles = asyncHandler(async (req, res) => {
   res.json(success(await svc.listRoles()));
 });
 
+const createRole = asyncHandler(async (req, res) => {
+  const id = await svc.createRole(req.body);
+  res.status(201).json(success({ id }, 'Role created successfully'));
+});
+
+const updateRole = asyncHandler(async (req, res) => {
+  await svc.updateRole(Number(req.params.id), req.body);
+  res.json(success(null, 'Role updated successfully'));
+});
+
+const deleteRole = asyncHandler(async (req, res) => {
+  await svc.deleteRole(Number(req.params.id));
+  res.json(success(null, 'Role deleted successfully'));
+});
+
 const updateRolePriorities = asyncHandler(async (req, res) => {
   const { orderedIds } = req.body;
   await svc.updateRolePriorities(orderedIds);
@@ -67,7 +82,7 @@ const rejectRequest = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  getPermissionCatalog, listRoles, updateRolePriorities,
+  getPermissionCatalog, listRoles, createRole, updateRole, deleteRole, updateRolePriorities,
   getRoleMatrix, setRoleMatrix, setRoleMatrixBulk,
   getSettingsAccess, setSettingsAccess,
   listApprovalWorkflows, upsertApprovalWorkflow,

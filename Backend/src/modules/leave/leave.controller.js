@@ -35,15 +35,25 @@ const createHoliday = asyncHandler(async (req, res) => {
 
 /* ─── LEAVE BALANCES ─── */
 const getBalances = asyncHandler(async (req, res) => {
-  const { employeeId, year } = req.query;
-  if (!employeeId || !year) return res.status(400).json(fail('employeeId and year are required'));
-  return res.json(success(await svc.getLeaveBalances(Number(employeeId), Number(year))));
+  const { employeeId, year, departmentId, search } = req.query;
+  const targetYear = Number(year) || new Date().getFullYear();
+  if (employeeId) {
+    return res.json(success(await svc.getLeaveBalances(Number(employeeId), targetYear)));
+  }
+  // Return organization-wide leave balances
+  return res.json(success(await svc.listAllLeaveBalances({ year: targetYear, departmentId, search })));
 });
 
 /** POST /leave/balances — admin sets a year's quota (allocation only, never usage). */
 const setBalance = asyncHandler(async (req, res) => {
   await svc.allocateLeaveBalance(req.body);
   return res.json(success(null, 'Leave balance allocated'));
+});
+
+/** POST /leave/balances/comp-off — award/credit compensatory off */
+const creditCompOff = asyncHandler(async (req, res) => {
+  const id = await svc.creditCompOff(req.body);
+  return res.status(201).json(created({ id }, 'Comp-off credited successfully'));
 });
 
 /* ─── LEAVE REQUESTS ─── */
@@ -78,7 +88,8 @@ const reviewReporting = asyncHandler(async (req, res) => {
 
 /** PATCH /leave/requests/:id/review-hr  Body: { status: 'approved'|'rejected' } */
 const reviewHR = asyncHandler(async (req, res) => {
-  const result = await svc.reviewByHR(Number(req.params.id), req.body, req.user?.id ?? null);
+  const isSuperuser = req.user?.role_name === 'Administrator' || !!req.user?.can_access_settings;
+  const result = await svc.reviewByHR(Number(req.params.id), req.body, req.user?.id ?? null, isSuperuser);
   return res.json(success(result, `Leave request ${result.result}`));
 });
 

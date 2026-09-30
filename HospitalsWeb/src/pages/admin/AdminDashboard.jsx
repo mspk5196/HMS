@@ -28,6 +28,7 @@ import DoctorFeeSettings from './DoctorFeeSettings';
 import Settings from './Settings';
 import UsersAuthentication from './UsersAuthentication';
 import Approvals from './Approvals';
+import AuditLogs from './AuditLogs';
 import { apiFetch } from '../../util/api';
 import { canViewTab } from '../../util/permissions';
 
@@ -60,6 +61,7 @@ const ALL_TABS = [
   'users-auth',
   'approvals',
   'settings',
+  'audit-logs',
 ];
 
 // Helper to resolve active tab from URL hash, search query, localStorage or default fallback
@@ -245,6 +247,8 @@ export default function AdminDashboard({ user, onLogout }) {
         return <Approvals user={user} />;
       case 'settings':
         return <Settings user={user} />;
+      case 'audit-logs':
+        return <AuditLogs user={user} />;
       default:
         return <HREmployees user={user} />;
     }

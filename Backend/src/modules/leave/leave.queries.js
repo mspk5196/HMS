@@ -83,12 +83,50 @@ const createHoliday = async (data) => {
 
 const getLeaveBalances = async (employeeId, year) => {
   const [rows] = await db.execute(
-    `SELECT lb.*, lt.name AS leave_type_name, lt.is_lop_applicable
+    `SELECT lb.*, lt.name AS leave_type_name, lt.is_lop_applicable, lt.is_half_day_allowed
      FROM leave_balances lb
      JOIN leave_types lt ON lt.id = lb.leave_type_id
      WHERE lb.employee_id = ? AND lb.year = ?
-     ORDER BY lt.name`,
+     ORDER BY lt.id`,
     [employeeId, year]
+  );
+  return rows;
+};
+
+const listAllLeaveBalances = async ({ year = new Date().getFullYear(), departmentId, search }) => {
+  let where = `WHERE e.status = 'active'`;
+  const params = [];
+
+  if (departmentId) {
+    where += ` AND e.department_id = ?`;
+    params.push(departmentId);
+  }
+  if (search && search.trim()) {
+    where += ` AND (e.full_name LIKE ? OR e.employee_code LIKE ?)`;
+    params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+  }
+
+  const [rows] = await db.query(
+    `SELECT
+       e.id AS employee_id,
+       e.full_name,
+       e.employee_code,
+       d.name AS department_name,
+       sr.name AS designation_name,
+       lt.id AS leave_type_id,
+       lt.name AS leave_type_name,
+       COALESCE(lb.year, ?) AS year,
+       COALESCE(lb.allocated_days, 0) AS allocated_days,
+       COALESCE(lb.used_days, 0) AS used_days,
+       COALESCE(lb.balance_days, 0) AS balance_days
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     CROSS JOIN leave_types lt
+     LEFT JOIN leave_balances lb ON lb.employee_id = e.id AND lb.leave_type_id = lt.id AND lb.year = ?
+     ${where} AND lt.is_active = 1 AND lt.quota_days > 0
+     ORDER BY e.full_name, lt.id`,
+    [year, year, ...params]
   );
   return rows;
 };
@@ -99,6 +137,48 @@ const getLeaveBalance = async (employeeId, leaveTypeId, year) => {
     [employeeId, leaveTypeId, year]
   );
   return rows[0] ?? null;
+};
+
+/** Comp-Off Ledger Support */
+const getActiveCompOffBalance = async (employeeId) => {
+  const [rows] = await db.execute(
+    `SELECT COALESCE(SUM(days_credited - days_consumed), 0) AS comp_off_days
+     FROM comp_off_ledger
+     WHERE employee_id = ? AND status = 'active' AND expiry_date >= CURDATE()`,
+    [employeeId]
+  );
+  return Number(rows[0]?.comp_off_days ?? 0);
+};
+
+const createCompOffCredit = async ({ employeeId, earnedDate, daysCredited = 1.0, reason, expiryDays = 90 }) => {
+  const [res] = await db.execute(
+    `INSERT INTO comp_off_ledger (employee_id, earned_date, days_credited, days_consumed, expiry_date, reason, status)
+     VALUES (?, ?, ?, 0.0, DATE_ADD(?, INTERVAL ? DAY), ?, 'active')`,
+    [employeeId, earnedDate, daysCredited, earnedDate, expiryDays, reason || 'Overtime on Weekly Off / Holiday']
+  );
+  return res.insertId;
+};
+
+const consumeCompOffCredit = async (employeeId, daysNeeded) => {
+  let remaining = daysNeeded;
+  const [entries] = await db.execute(
+    `SELECT * FROM comp_off_ledger
+     WHERE employee_id = ? AND status = 'active' AND expiry_date >= CURDATE()
+     ORDER BY earned_date ASC`,
+    [employeeId]
+  );
+  for (const entry of entries) {
+    if (remaining <= 0) break;
+    const avail = Number(entry.days_credited) - Number(entry.days_consumed);
+    const toTake = Math.min(avail, remaining);
+    const newConsumed = Number(entry.days_consumed) + toTake;
+    const newStatus = newConsumed >= Number(entry.days_credited) ? 'consumed' : 'active';
+    await db.execute(
+      `UPDATE comp_off_ledger SET days_consumed = ?, status = ? WHERE id = ?`,
+      [newConsumed, newStatus, entry.id]
+    );
+    remaining -= toTake;
+  }
 };
 
 /**
@@ -198,13 +278,13 @@ const findRequestCoveringDate = async (employeeId, date) => {
   return rows[0] ?? null;
 };
 
-const createLeaveRequest = async ({ employee_id, leave_type_id, from_date, to_date, reason, reporting_person_id }) => {
+const createLeaveRequest = async ({ employee_id, leave_type_id, from_date, to_date, duration_type = 'full_day', days_count = 1.0, is_half_day = 0, reason, reporting_person_id }) => {
   const [result] = await db.execute(
     `INSERT INTO leave_requests
-       (employee_id, leave_type_id, from_date, to_date, is_half_day, reason,
+       (employee_id, leave_type_id, from_date, to_date, duration_type, days_count, is_half_day, reason,
         reporting_person_status, reporting_person_id, hr_status, result)
-     VALUES (?, ?, ?, ?, 0, ?, 'pending', ?, 'pending', 'pending')`,
-    [employee_id, leave_type_id, from_date, to_date, reason ?? null, reporting_person_id ?? null]
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 'pending', 'pending')`,
+    [employee_id, leave_type_id, from_date, to_date, duration_type, days_count, is_half_day ? 1 : 0, reason ?? null, reporting_person_id ?? null]
   );
   return result.insertId;
 };
@@ -259,7 +339,8 @@ const upsertWeekOffPolicy = async ({ designation_id, week_offs_per_month, prefer
 module.exports = {
   listLeaveTypes, getLeaveType, createLeaveType, updateLeaveType, deleteLeaveType,
   listHolidays, createHoliday,
-  getLeaveBalances, getLeaveBalance, getTotalRemainingBalance, upsertLeaveBalance, allocateLeaveBalance,
+  getLeaveBalances, listAllLeaveBalances, getLeaveBalance, getTotalRemainingBalance, upsertLeaveBalance, allocateLeaveBalance,
+  createCompOffCredit, getActiveCompOffBalance, consumeCompOffCredit,
   listLeaveRequests, getLeaveRequest, findRequestCoveringDate,
   createLeaveRequest, setReportingPersonDecision, setHrDecision,
   listWeekOffPolicies, upsertWeekOffPolicy,

@@ -110,6 +110,8 @@ export function canViewTab(user, tabId) {
       );
     case 'settings':
       return !!user.can_access_settings;
+    case 'audit-logs':
+      return user.role_name === 'Administrator' || !!user.can_access_settings || hasPermission(user, 'audit.view');
 
     default:
       return false;

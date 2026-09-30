@@ -19,6 +19,7 @@ router.post('/holidays', gate('leave.create_holiday', ctrl.createHoliday));
 // Balances
 router.get('/balances', canView, ctrl.getBalances);
 router.post('/balances', gate('leave.set_balance', ctrl.setBalance));
+router.post('/balances/comp-off', gate('leave.set_balance', ctrl.creditCompOff));
 
 // Leave Requests — two-step approval: reporting person, then HR.
 // These ARE the approval actions for a leave request — they are not
