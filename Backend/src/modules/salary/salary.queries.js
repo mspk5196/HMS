@@ -303,6 +303,13 @@ const createPayrollRun = async ({ period_month, period_year, salary_date_type, s
   return result.insertId;
 };
 
+const updatePayrollRunSalaryDate = async (id, { salary_date, salary_date_type }) => {
+  await db.execute(
+    `UPDATE payroll_runs SET salary_date = ?, salary_date_type = ? WHERE id = ?`,
+    [salary_date, salary_date_type, id]
+  );
+};
+
 const updatePayrollRunStatus = async (id, status) => {
   await db.execute(`UPDATE payroll_runs SET status = ? WHERE id = ?`, [status, id]);
 };
@@ -632,7 +639,7 @@ module.exports = {
   getPayrollConfig, setPayrollConfig,
   getNightShiftRate, addNightShiftRate, listNightShiftRates,
   listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
-  updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
+  updatePayrollRunSalaryDate, updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
   getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem,
   getPayrollItemById, updatePayrollItemDeductions, syncPayrollRunTotals,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,

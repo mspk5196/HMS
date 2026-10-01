@@ -44,4 +44,20 @@ const employeeDocUpload = multer({
   { name: 'pan_doc', maxCount: 1 },
 ]);
 
-module.exports = { employeeDocUpload };
+const logoFilter = (_req, file, cb) => {
+  const allowed = ['.jpg', '.jpeg', '.png', '.svg', '.webp'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowed.includes(ext) || file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Unsupported image type "${ext}". Allowed: jpg, jpeg, png, svg, webp`));
+  }
+};
+
+const logoUpload = multer({
+  storage,
+  fileFilter: logoFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+}).single('logo');
+
+module.exports = { employeeDocUpload, logoUpload };

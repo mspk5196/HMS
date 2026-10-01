@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../util/api';
 import { hasPermission } from '../../util/permissions';
 import EmployeePicker from '../../components/EmployeePicker';
+import HospitalHeaderBanner from '../../components/HospitalHeaderBanner';
 import {
   SearchIcon,
   DownloadIcon,
@@ -982,30 +983,15 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
           ═══════════════════════════════════════════════════════════════ */}
       <div className="hidden print:block w-full text-black bg-white font-sans text-[8pt] leading-tight">
         {/* Hospital Official Letterhead */}
-        <div className="border-b-2 border-black pb-2 mb-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-extrabold uppercase tracking-wide text-black m-0 leading-none">
-                NEHA HOSPITALS
-              </h1>
-              <div className="text-[8pt] text-gray-800 font-semibold mt-1">
-                Multi-Speciality Hospital &amp; Research Centre · Sathyamangalam, Tamil Nadu - 638401
-              </div>
-              <div className="text-[7pt] text-gray-600">
-                Ph: +91 4295 226000 | Email: hr@nehahospitals.com | Web: www.nehahospital.com
-              </div>
+        <HospitalHeaderBanner
+          variant="report"
+          documentTitle="STAFF ATTENDANCE REGISTER"
+          documentMeta={
+            <div className="text-[7pt] text-gray-600 print:text-black mt-1">
+              Printed: <strong className="text-black font-bold">{printGeneratedAt}</strong>
             </div>
-            <div className="text-right">
-              <div className="border border-black px-3 py-1 text-center rounded bg-gray-50 inline-block">
-                <span className="block text-[7pt] uppercase font-bold text-gray-700 tracking-wider">Official HR Document</span>
-                <span className="block text-[9pt] font-extrabold text-black uppercase">Staff Attendance Register</span>
-              </div>
-              <div className="text-[7pt] text-gray-600 mt-1">
-                Printed: <strong className="text-black font-bold">{printGeneratedAt}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* Document Metadata Strip */}
         <div className="bg-gray-100 border border-gray-400 rounded px-2.5 py-1 mb-2 flex items-center justify-between text-[7.5pt]">

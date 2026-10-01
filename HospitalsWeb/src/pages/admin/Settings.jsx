@@ -19,6 +19,8 @@ const TABS = [
   { id: 'hospital-profile', label: 'Hospital Profile', icon: LandmarkIcon, desc: 'Hospital name, address, and system settings' },
 ];
 
+import TabBar from '../../components/TabBar';
+
 export default function Settings({ user }) {
   const [tab, setTab] = useState('role-permissions');
 
@@ -31,26 +33,13 @@ export default function Settings({ user }) {
       />
 
       {/* Tab Navigation */}
-      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-1.5 flex flex-wrap gap-1.5">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const isActive = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                isActive
-                  ? 'bg-[#1e40af] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-              <span>{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TabBar
+        tabs={TABS}
+        active={tab}
+        onChange={setTab}
+        maxVisible={4}
+        dropdownLabel="More Settings"
+      />
 
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6">
         {tab === 'role-permissions' && <RolePermissions user={user} />}

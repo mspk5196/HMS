@@ -15,23 +15,7 @@ const BED_STYLE = {
   maintenance: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
-function TabBar({ tabs, active, onChange }) {
-  return (
-    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm w-fit flex-wrap">
-      {tabs.map((t) => (
-        <button
-          key={t.value}
-          onClick={() => onChange(t.value)}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-            active === t.value ? 'bg-[#1e40af] text-white shadow-xs' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+import TabBar from '../../components/TabBar';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;

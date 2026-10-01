@@ -3,6 +3,7 @@ import { apiFetch } from '../../util/api';
 import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
+import HospitalHeaderBanner from '../../components/HospitalHeaderBanner';
 import {
   BoltIcon,
   CalendarIcon,
@@ -18,28 +19,14 @@ import {
   XIcon,
   CurrencyRupeeIcon,
   EditIcon,
+  InformationCircleIcon,
+  CheckIcon,
 } from '../../components/Icons';
+
+import TabBar from '../../components/TabBar';
 
 const MONTH_NAMES = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }));
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-
-function TabBar({ tabs, active, onChange }) {
-  return (
-    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm w-fit">
-      {tabs.map((t) => (
-        <button
-          key={t.value}
-          onClick={() => onChange(t.value)}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-            active === t.value ? 'bg-[#1e40af] text-white shadow-xs' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -54,6 +41,7 @@ export default function Payroll({ user }) {
     { value: 'runs', label: 'Payroll Runs', show: hasPermission(user, 'payroll.view') },
     { value: 'calc', label: 'Salary & PF/ESI Calculation', show: hasPermission(user, 'payroll.view') },
     { value: 'overtime', label: 'Overtime', show: hasPermission(user, 'payroll.view') },
+    { value: 'policy', label: 'Salary Cycle & Disbursement Policy', show: hasPermission(user, 'payroll.view') },
     { value: 'config', label: 'PF/ESI Config', show: hasPermission(user, 'payroll.view') },
   ].filter((t) => t.show);
 
@@ -69,7 +57,7 @@ export default function Payroll({ user }) {
       <PageHeader
         category="Staff & Salary"
         title="Payroll"
-        subtitle="Monthly runs, per-employee payslips, overtime, and the PF/ESI constants that drive them."
+        subtitle="Monthly runs, per-employee payslips, overtime, salary calculation cycle rules, and PF/ESI configuration."
       />
 
       <Banner msg={successMsg} tone="success" />
@@ -84,6 +72,7 @@ export default function Payroll({ user }) {
       {tab === 'runs' && <Runs user={user} onError={fail} onSuccess={flash} />}
       {tab === 'calc' && <SalaryPfEsiCalculation user={user} onError={fail} onSuccess={flash} />}
       {tab === 'overtime' && <Overtime user={user} onError={fail} onSuccess={flash} />}
+      {tab === 'policy' && <SalaryCyclePolicy user={user} onError={fail} onSuccess={flash} />}
       {tab === 'config' && <Config user={user} onError={fail} onSuccess={flash} />}
     </div>
   );
@@ -247,8 +236,18 @@ function Runs({ user, onError, onSuccess }) {
                     <div className="text-sm font-extrabold text-gray-900">
                       {MONTH_NAMES[r.period_month - 1]} {r.period_year}
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      <span className="font-semibold text-gray-700">{r.item_count} payslips calculated</span> · total net payable: <strong className="text-emerald-700">{money(r.total_net)}</strong>
+                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-700">{r.item_count} payslips calculated</span>
+                      <span>·</span>
+                      <span>total net: <strong className="text-emerald-700">{money(r.total_net)}</strong></span>
+                      {r.salary_date && (
+                        <>
+                          <span>·</span>
+                          <span className="text-blue-700 font-medium bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[11px]">
+                            Pay Date: {new Date(r.salary_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -286,8 +285,61 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
   const [page, setPage] = useState(1);
   const [itemSearch, setItemSearch] = useState('');
   const [payslipFor, setPayslipFor] = useState(null);
-  const [payslip, setPayslip] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showSalaryDateModal, setShowSalaryDateModal] = useState(false);
+  const [targetSalaryDate, setTargetSalaryDate] = useState('');
+  const [targetSalaryDateType, setTargetSalaryDateType] = useState('last_day_of_month');
+  const [isUpdatingDate, setIsUpdatingDate] = useState(false);
+
+  useEffect(() => {
+    if (run) {
+      setTargetSalaryDate(run.salary_date ? run.salary_date.slice(0, 10) : '');
+      setTargetSalaryDateType(run.salary_date_type || 'last_day_of_month');
+    }
+  }, [run]);
+
+  const handleDateTypeSelect = (type) => {
+    setTargetSalaryDateType(type);
+    if (!run) return;
+    const y = run.period_year;
+    const m = run.period_month;
+    if (type === 'last_day_of_month') {
+      setTargetSalaryDate(new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10));
+    } else if (type === 'first_of_next_month') {
+      setTargetSalaryDate(new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10));
+    } else if (type === '5th_of_next_month') {
+      setTargetSalaryDate(new Date(Date.UTC(y, m, 5)).toISOString().slice(0, 10));
+    } else if (type === '7th_of_next_month') {
+      setTargetSalaryDate(new Date(Date.UTC(y, m, 7)).toISOString().slice(0, 10));
+    } else if (type === '10th_of_next_month') {
+      setTargetSalaryDate(new Date(Date.UTC(y, m, 10)).toISOString().slice(0, 10));
+    }
+  };
+
+  const handleUpdateSalaryDate = async (e) => {
+    e.preventDefault();
+    if (!targetSalaryDate) {
+      onError(null, 'Please select a valid salary disbursement date.');
+      return;
+    }
+    try {
+      setIsUpdatingDate(true);
+      await apiFetch(`/salary/payroll-runs/${runId}/salary-date`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          salary_date: targetSalaryDate,
+          salary_date_type: targetSalaryDateType,
+        }),
+      });
+      onSuccess(`Salary disbursement date updated to ${targetSalaryDate} for this run.`);
+      setShowSalaryDateModal(false);
+      await loadRun();
+    } catch (err) {
+      onError(err, 'Failed to update salary disbursement date.');
+    } finally {
+      setIsUpdatingDate(false);
+    }
+  };
 
   const loadRun = useCallback(async () => {
     try {
@@ -477,9 +529,22 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
                 {run.status}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Calculated on biometric attendance, buffer pools, and base salary structures.
-            </p>
+            <div className="flex items-center gap-2.5 text-xs text-gray-500 mt-1 flex-wrap">
+              <span>Period: 1st – {new Date(run.period_year, run.period_month, 0).getDate()} {MONTH_NAMES[run.period_month - 1]} {run.period_year}</span>
+              <span>•</span>
+              <span>
+                Disbursement Date: <strong className="text-gray-900 font-semibold">{run.salary_date ? new Date(run.salary_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'End of Month'}</strong>
+              </span>
+              {run.status === 'draft' && hasPermission(user, 'payroll.edit') && (
+                <button
+                  type="button"
+                  onClick={() => setShowSalaryDateModal(true)}
+                  className="text-blue-600 hover:text-blue-800 underline font-semibold text-[11px] ml-0.5 cursor-pointer"
+                >
+                  Change Date
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -786,6 +851,140 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
         </div>
       )}
 
+      {/* Change Salary Date Modal */}
+      {showSalaryDateModal && run && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 border border-gray-100">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Change Salary Disbursement Date</h3>
+                <p className="text-[11px] text-gray-500 font-medium">
+                  {MONTH_NAMES[run.period_month - 1]} {run.period_year} Payroll Run #{run.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSalaryDateModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSalaryDate} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-gray-700">Quick Presets</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDateTypeSelect('last_day_of_month')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === 'last_day_of_month'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    End of Month (30th/31st)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDateTypeSelect('first_of_next_month')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === 'first_of_next_month'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    1st of Next Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDateTypeSelect('5th_of_next_month')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === '5th_of_next_month'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    5th of Next Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDateTypeSelect('7th_of_next_month')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === '7th_of_next_month'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    7th of Next Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDateTypeSelect('10th_of_next_month')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === '10th_of_next_month'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    10th of Next Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetSalaryDateType('custom_date')}
+                    className={`px-3 py-1.5 rounded-lg border text-left font-semibold text-[11px] cursor-pointer transition-colors ${
+                      targetSalaryDateType === 'custom_date'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    Custom Specific Date
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-gray-700">Disbursement Date</label>
+                <input
+                  type="date"
+                  value={targetSalaryDate}
+                  onChange={(e) => {
+                    setTargetSalaryDate(e.target.value);
+                    setTargetSalaryDateType('custom_date');
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-800 space-y-1">
+                <div className="font-bold">What happens when this date is changed?</div>
+                <div>
+                  This updates the official payment disbursement date for all employees in this run. Attendance, base salary, and deductions already calculated remain completely unchanged.
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSalaryDateModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingDate || !targetSalaryDate}
+                  className="px-5 py-2 text-xs font-bold bg-[#1e40af] hover:bg-[#1c399b] text-white rounded-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingDate ? 'Saving…' : 'Update Salary Date'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showExportModal && run && (
         <PayrollExportModal
           isOpen={showExportModal}
@@ -965,43 +1164,20 @@ function PayslipView({ payslip, onBack }) {
       <div id="printable-payslip" className="printable-payslip bg-white rounded-xl border border-gray-200 shadow-sm p-8 sm:p-10 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:m-0 text-gray-900 font-sans">
         
         {/* Hospital Header / Letterhead */}
-        <div className="pb-5 border-b-2 border-[#1e3a8a] flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4">
-          <div className="flex items-center gap-3.5 text-center sm:text-left">
-            {/* Hospital Crest Emblem */}
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1e40af] to-[#0f172a] text-white flex items-center justify-center font-extrabold text-xl shadow-md border-2 border-blue-200 shrink-0 print:border-[#1e40af]">
-              <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                <circle cx="12" cy="12" r="9" strokeWidth="1.5" strokeDasharray="2 2" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-[#1e3a8a] tracking-tight uppercase leading-none">
-                NEHA HOSPITAL
-              </h1>
-              {/* <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">
-                Advanced Multispeciality Healthcare &amp; Research Center
-              </p> */}
-              <p className="text-[10px] text-gray-600 leading-tight mt-1 max-w-lg">
-                47, South Park Street (Kambar Veethi, Ganga Nagar), Kutchery Medu, Gobichettipalayam, Tamil Nadu – 638452
-              </p>
-              <p className="text-[10px] text-gray-500 mt-0.5 font-medium">
-                (Opp. Palaniammal Girls HR SEC School, Near Dr. Ravindran Hospital) · 24 Hours Emergency &amp; Medical Facility
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right flex flex-col items-center sm:items-end justify-center">
-            <span className="inline-block bg-[#1e40af] text-white font-extrabold text-[11px] px-3.5 py-1 rounded-md uppercase tracking-wider print:bg-[#1e40af] print:text-white">
-              SALARY PAYSLIP
-            </span>
-            <span className="text-xs font-bold text-gray-800 mt-1">
-              {periodMonthName} {run.period_year}
-            </span>
-            <span className="text-[10px] text-gray-400 font-mono">
-              Pay Period: {periodStart} – {periodEnd}
-            </span>
-          </div>
-        </div>
+        <HospitalHeaderBanner
+          variant="payslip"
+          documentTitle="SALARY PAYSLIP"
+          documentMeta={
+            <>
+              <span className="text-xs font-bold text-gray-800 print:text-black mt-1">
+                {periodMonthName} {run.period_year}
+              </span>
+              <span className="text-[10px] text-gray-400 print:text-gray-600 font-mono">
+                Pay Period: {periodStart} – {periodEnd}
+              </span>
+            </>
+          }
+        />
 
         {/* Employee Details Master Box */}
         <div className="my-5 border border-gray-200 rounded-lg overflow-hidden bg-gray-50/40 text-xs">
@@ -2164,6 +2340,183 @@ function Config({ user, onError, onSuccess }) {
           </button>
         )}
       </form>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SALARY CALCULATION CYCLE & DISBURSEMENT POLICY
+═══════════════════════════════════════════════════════════════════════ */
+
+function SalaryCyclePolicy({ user, onError, onSuccess }) {
+  const [policy, setPolicy] = useState({
+    SALARY_CALCULATION_CYCLE: 'calendar_month',
+    SALARY_DATE_TYPE: 'last_day_of_month',
+    SALARY_DISBURSEMENT_DAY: '30',
+  });
+  const [originalPolicy, setOriginalPolicy] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await apiFetch('/salary/policy');
+      if (data) {
+        setPolicy(data);
+        setOriginalPolicy(data);
+      }
+    } catch (err) {
+      onError(err, 'Failed to load salary policy.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleChange = (key, val) => {
+    setPolicy((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const isChanged = Object.keys(policy).some(
+    (k) => String(policy[k]) !== String(originalPolicy[k])
+  );
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSaving(true);
+      await apiFetch('/salary/policy', {
+        method: 'PATCH',
+        body: JSON.stringify(policy),
+      });
+      onSuccess('Salary calculation cycle and disbursement policy saved successfully!');
+      setOriginalPolicy(policy);
+    } catch (err) {
+      onError(err, 'Failed to save salary policy.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xs p-6 space-y-5">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <span>Salary Calculation Cycle &amp; Disbursement Policy</span>
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+            Hospital-wide payroll date configuration and monthly calculation cycle rules for all employees.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div className="text-center text-xs text-gray-400 py-8">Loading policy configurations…</div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+              {/* Salary Calculation Cycle */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-gray-700 dark:text-slate-300">
+                  Salary Calculation Cycle (Attendance Window)
+                </label>
+                <select
+                  value={policy.SALARY_CALCULATION_CYCLE || 'calendar_month'}
+                  onChange={(e) => handleChange('SALARY_CALCULATION_CYCLE', e.target.value)}
+                  className="w-full p-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="calendar_month">Full Calendar Month: 1st to 30th/31st (Standard)</option>
+                  <option value="staggered_26_to_25">Staggered Cycle: 26th of Prev Month to 25th of Current Month</option>
+                  <option value="staggered_21_to_20">Staggered Cycle: 21st of Prev Month to 20th of Current Month</option>
+                </select>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                  Defines the start date and cut-off date used to compute attendance, LOP days, and shifts.
+                </p>
+              </div>
+
+              {/* Salary Payout / Disbursement Date */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-gray-700 dark:text-slate-300">
+                  Salary Disbursement Date (Payout Day for Whole Hospital)
+                </label>
+                <select
+                  value={policy.SALARY_DATE_TYPE || 'last_day_of_month'}
+                  onChange={(e) => handleChange('SALARY_DATE_TYPE', e.target.value)}
+                  className="w-full p-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="last_day_of_month">Last Day of Current Month (e.g. 30th / 31st)</option>
+                  <option value="first_of_next_month">1st Day of Next Month</option>
+                  <option value="5th_of_next_month">5th Day of Next Month</option>
+                  <option value="7th_of_next_month">7th Day of Next Month</option>
+                  <option value="10th_of_next_month">10th Day of Next Month</option>
+                  <option value="custom_day">Custom Day of Month…</option>
+                </select>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                  Target date when bank transfers or salary cheques are disbursed to staff.
+                </p>
+              </div>
+
+              {/* Custom Day input if selected */}
+              {policy.SALARY_DATE_TYPE === 'custom_day' && (
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block font-bold text-gray-700 dark:text-slate-300">
+                    Custom Monthly Payout Day (1 - 28)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={policy.SALARY_DISBURSEMENT_DAY || '5'}
+                    onChange={(e) => handleChange('SALARY_DISBURSEMENT_DAY', e.target.value)}
+                    className="w-full sm:w-48 p-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    placeholder="e.g. 5"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Comprehensive Policy & Handling Guide */}
+            <div className="bg-gray-50 dark:bg-slate-800/60 rounded-xl p-4 border border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 text-xs space-y-2">
+              <div className="font-bold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
+                <InformationCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>How Salary Calculations &amp; Date Changes Work:</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-1.5 text-gray-600 dark:text-slate-400 text-[11px]">
+                <li>
+                  <strong className="text-gray-800 dark:text-slate-200">End of Month (30/31) Calculation:</strong> When cycle is set to Full Calendar Month, calculation runs from the <strong>1st day of that month (`YYYY-MM-01`)</strong> up to the <strong>last day of that month (`YYYY-MM-30` or `31`)</strong>. Daily wage divisor is the exact calendar day count (30, 31, or 28/29). Attendance punches, LOP, and leaves within this window determine net pay.
+                </li>
+                <li>
+                  <strong className="text-gray-800 dark:text-slate-200">When Salary Date is Changed (Whole Hospital):</strong>
+                  <div className="pl-2 mt-0.5 space-y-0.5">
+                    <div>• <em>If Payout Day changes (e.g. from 31st to 5th):</em> The calculation window stays 1st–31st (100% full monthly earnings); only the disbursement date shifts. No salary is deducted or skipped.</div>
+                    <div>• <em>If Attendance Cut-off changes (e.g. to 26th–25th):</em> The transition month is prorated for days 1–25 (`(Base Salary ÷ Total Days) × 25`), after which normal 26th–25th monthly cycles take over seamlessly.</div>
+                  </div>
+                </li>
+                <li>
+                  <strong className="text-gray-800 dark:text-slate-200">Monthly Late Arrival Buffers:</strong> Configured per shift pool in <strong>Staff &amp; Salary → Shift &amp; Roster → Shift Timings</strong> (Day Shift, Night Shift, Day &amp; Night Duty Roster, and General Shift).
+                </li>
+              </ul>
+            </div>
+
+            {hasPermission(user, 'payroll.edit') && (
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSaving || !isChanged}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  <CheckIcon className="w-4 h-4" />
+                  <span>{isSaving ? 'Saving Policy…' : 'Save Salary Policy'}</span>
+                </button>
+              </div>
+            )}
+          </form>
+        )}
+      </div>
     </div>
   );
 }

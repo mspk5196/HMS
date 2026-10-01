@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../util/api';
+import HospitalHeaderBanner from './HospitalHeaderBanner';
 import { CheckIcon, DocumentTextIcon, XIcon } from './Icons';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -153,17 +154,11 @@ export default function HospitalReceipt({ type, data, onClose }) {
         {/* Printable Receipt Canvas */}
         <div id="printable-receipt" className="p-8 space-y-6 overflow-y-auto bg-white text-gray-800 text-xs">
           
-          {/* Hospital Header */}
-          <div className="border-b-2 border-blue-900 pb-4 text-center space-y-1">
-            <h1 className="text-xl font-extrabold text-blue-900 tracking-wider">NEHA HOSPITAL</h1>
-            <p className="text-[11px] text-gray-700 font-medium">
-              47, South Park Street (Kambar Veethi, Ganga Nagar), Kutchery Medu, Gobichettipalayam, Tamil Nadu - 638452
-            </p>
-            <p className="text-[10px] text-gray-500">
-              (Opp. Palaniammal Girls HR SEC School, Near Dr. Ravindran Hospital) | 24 Hours Emergency & Medical Facility
-            </p>
-            <div className="pt-2">
-              <span className={`inline-block ${isPaid ? 'bg-blue-900' : 'bg-amber-800'} text-white font-extrabold text-[11px] px-4 py-1 rounded-full uppercase tracking-wider shadow-sm`}>
+          {/* Hospital Header Banner */}
+          <div className="space-y-3">
+            <HospitalHeaderBanner variant="receipt" />
+            <div className="text-center pt-0.5">
+              <span className={`inline-block ${isPaid ? 'bg-slate-900 text-white print:bg-black print:text-white' : 'bg-amber-800 text-white print:bg-black print:text-white'} font-extrabold text-[11px] px-4 py-1 rounded-full uppercase tracking-wider shadow-xs`}>
                 {receiptTitle}
               </span>
             </div>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../util/api';
+import HospitalReceipt from '../../components/HospitalReceipt';
+import { PrintIcon } from '../../components/Icons';
 
 const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -23,6 +25,7 @@ function Section({ title, children }) {
 export default function PharmacyBillDetailView({ billId, onBack, onError }) {
   const [bill, setBill] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -49,16 +52,46 @@ export default function PharmacyBillDetailView({ billId, onBack, onError }) {
 
   return (
     <div className="space-y-6">
-      <BackHeader
-        onBack={onBack}
-        title={bill.bill_number}
-        subtitle={`${displayDate(bill.bill_date)} · ${bill.patient_name}`}
-        badge={
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
-            bill.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-          }`}>{bill.payment_status}</span>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <BackHeader
+          onBack={onBack}
+          title={bill.bill_number}
+          subtitle={`${displayDate(bill.bill_date)} · ${bill.patient_name}`}
+          badge={
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+              bill.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            }`}>{bill.payment_status}</span>
+          }
+        />
+
+        <button
+          onClick={() => setShowReceipt(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors"
+        >
+          <PrintIcon className="w-3.5 h-3.5" />
+          <span>Print Bill / Tax Invoice</span>
+        </button>
+      </div>
+
+      {showReceipt && (
+        <HospitalReceipt
+          type="pharmacy"
+          data={{
+            ...bill,
+            pharmacy_bill_id: bill.id,
+            bill_number: bill.bill_number,
+            patient_name: bill.patient_name,
+            total_amount: bill.total_amount,
+            discount_amount: bill.discount_amount,
+            tax_amount: bill.tax_amount,
+            net_amount: bill.net_amount,
+            amount_paid: bill.paid_amount,
+            balance_due: bill.balance_amount,
+            items: bill.items,
+          }}
+          onClose={() => setShowReceipt(false)}
+        />
+      )}
 
       <Section title={`Medicines (${bill.items?.length || 0})`}>
         {!bill.items || bill.items.length === 0 ? (

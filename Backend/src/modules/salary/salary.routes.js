@@ -53,6 +53,10 @@ router.get('/effective/:employeeId', canViewPayroll, ctrl.getEffectiveSalary);
 router.get('/config', canViewPayroll, ctrl.getConfig);
 router.patch('/config', gate('payroll.edit', ctrl.updateConfig));
 
+// Salary Calculation Cycle & Disbursement Policy
+router.get('/policy', canViewPayroll, ctrl.getSalaryPolicy);
+router.patch('/policy', gate('payroll.edit', ctrl.updateSalaryPolicy));
+
 // Night-shift rates
 router.get('/night-shift-rates/:shiftId', canViewPayroll, ctrl.listNightShiftRates);
 router.post('/night-shift-rates', gate('payroll.edit', ctrl.addNightShiftRate));
@@ -63,6 +67,7 @@ router.get('/payroll-runs/:id', canViewPayroll, ctrl.getRun);
 router.post('/payroll-runs', gate('payroll.create', ctrl.createRun));
 router.post('/payroll-runs/generate', gate('payroll.generate_payroll', ctrl.generatePayroll));
 router.post('/payroll-runs/:id/calculate', gate('payroll.edit', ctrl.calculateRun));
+router.patch('/payroll-runs/:id/salary-date', gate('payroll.edit', ctrl.updateRunSalaryDate));
 router.post('/payroll-runs/:id/lock', gate('payroll.approve_payroll', ctrl.lockRun));
 router.get('/payroll-runs/:id/items', canViewPayroll, ctrl.listItems);
 router.patch('/payroll-runs/:id/items/:itemId', gate('payroll.edit', ctrl.updatePayrollItemDeduction));

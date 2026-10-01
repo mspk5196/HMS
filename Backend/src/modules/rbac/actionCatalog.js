@@ -38,6 +38,7 @@ const MODULES = [
   // ─── Administration ───
   { code: 'users', name: 'Users & Authentication', group: 'Administration', order: 18 },
   { code: 'approval', name: 'Approvals Inbox', group: 'Administration', order: 19 },
+  { code: 'audit', name: 'Audit Logs', group: 'Administration', order: 20 },
 ];
 
 // action code -> { name, special (bool) }
@@ -148,6 +149,10 @@ const MODULE_ACTIONS = {
     'view',
     { code: 'approve_request', name: 'Approve Request', approvable: false },
     { code: 'reject_request', name: 'Reject Request', approvable: false },
+  ],
+  audit: [
+    'view',
+    { code: 'export', name: 'Export Audit Logs', approvable: false },
   ],
 };
 

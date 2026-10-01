@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../util/api';
+import { useHospitalProfile } from '../context/HospitalProfileContext';
 
 export default function Login({ onLogin }) {
+  const { hospitalName, hospitalLogo, hospitalSubtitle } = useHospitalProfile();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -42,17 +44,23 @@ export default function Login({ onLogin }) {
     <div className="min-h-screen bg-[#f1f4f8] flex flex-col justify-center items-center px-4 font-sans text-gray-800 antialiased">
       {/* Header section with Logo and Hospital Title */}
       <div className="flex flex-col items-center mb-6 text-center">
-        {/* Dark rounded badge logo */}
-        <div className="w-12 h-12 bg-[#181d27] rounded-xl flex items-center justify-center shadow-md mb-4">
-          <span className="text-white font-bold text-sm tracking-wider">NH</span>
+        {/* Hospital Logo or rounded badge logo */}
+        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-md mb-3 border border-slate-200/90 p-2 overflow-hidden">
+          {hospitalLogo ? (
+            <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain" />
+          ) : (
+            <div className="w-full h-full bg-[#181d27] rounded-xl flex items-center justify-center">
+              <span className="text-white font-black text-sm tracking-wider">NH</span>
+            </div>
+          )}
         </div>
         
         {/* Title and Subtitle */}
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight mb-1">
-          Neha Hospital
+        <h1 className="text-xl font-black text-gray-900 tracking-tight mb-1">
+          {hospitalName || 'Neha Hospital'}
         </h1>
-        <p className="text-xs font-normal text-gray-500">
-          Hospital Management System
+        <p className="text-xs font-medium text-gray-500 max-w-xs">
+          {hospitalSubtitle || 'Hospital Management System'}
         </p>
       </div>
 

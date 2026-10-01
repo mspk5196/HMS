@@ -66,6 +66,14 @@ const syncCatalogToDb = async () => {
         }
       }
 
+      // 4. Ensure Administrator (role id 1) has all permissions granted with skip_approval
+      await conn.execute(
+        `INSERT INTO role_permissions (role_id, permission_id, skip_approval)
+         SELECT 1, p.id, 1
+         FROM permissions p
+         ON DUPLICATE KEY UPDATE skip_approval = 1`
+      );
+
       await conn.commit();
       catalogSynced = true;
     } catch (e) {
@@ -105,6 +113,13 @@ const listRoles = async () => {
   const [rows] = await db.execute(
     `SELECT r.id, r.name, r.description, r.priority, r.can_access_settings,
             r.staff_role_id, d.id AS department_id, d.name AS department_name,
+            sr.is_doctor,
+            (CASE
+               WHEN r.staff_role_id IS NULL THEN 0
+               WHEN sr.is_doctor = 1 THEN 1
+               WHEN d.name IN ('Medical', 'Nursing', 'Nursing Training', 'Laboratory', 'Radiology & Scan', 'Security', 'House Keeping', 'Pharmacy') THEN 1
+               ELSE 0
+             END) AS is_clinical,
             (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id) AS user_count
      FROM roles r
      LEFT JOIN staff_roles sr ON sr.id = r.staff_role_id

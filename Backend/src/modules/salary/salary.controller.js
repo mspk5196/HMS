@@ -54,6 +54,47 @@ const updateStructure = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Salary structure updated'));
 });
 
+/* ─── SALARY CALCULATION CYCLE & DISBURSEMENT POLICY ─── */
+
+const getSalaryPolicy = asyncHandler(async (req, res) => {
+  const [rows] = await db.query(
+    `SELECT config_key, config_value FROM system_config
+     WHERE config_key IN ('SALARY_CALCULATION_CYCLE', 'SALARY_DATE_TYPE', 'SALARY_DISBURSEMENT_DAY')`
+  );
+  const map = Object.fromEntries(rows.map((r) => [r.config_key, r.config_value]));
+  return res.json(success({
+    SALARY_CALCULATION_CYCLE: map.SALARY_CALCULATION_CYCLE || 'calendar_month',
+    SALARY_DATE_TYPE: map.SALARY_DATE_TYPE || 'last_day_of_month',
+    SALARY_DISBURSEMENT_DAY: map.SALARY_DISBURSEMENT_DAY || '30',
+  }));
+});
+
+const updateSalaryPolicy = asyncHandler(async (req, res) => {
+  const { SALARY_CALCULATION_CYCLE, SALARY_DATE_TYPE, SALARY_DISBURSEMENT_DAY } = req.body || {};
+  if (SALARY_CALCULATION_CYCLE !== undefined) {
+    await db.query(
+      `INSERT INTO system_config (config_key, config_value) VALUES ('SALARY_CALCULATION_CYCLE', ?)
+       ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+      [String(SALARY_CALCULATION_CYCLE)]
+    );
+  }
+  if (SALARY_DATE_TYPE !== undefined) {
+    await db.query(
+      `INSERT INTO system_config (config_key, config_value) VALUES ('SALARY_DATE_TYPE', ?)
+       ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+      [String(SALARY_DATE_TYPE)]
+    );
+  }
+  if (SALARY_DISBURSEMENT_DAY !== undefined) {
+    await db.query(
+      `INSERT INTO system_config (config_key, config_value) VALUES ('SALARY_DISBURSEMENT_DAY', ?)
+       ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+      [String(SALARY_DISBURSEMENT_DAY)]
+    );
+  }
+  return res.json(success(null, 'Salary calculation cycle and disbursement policy updated successfully'));
+});
+
 /* ─── NIGHT-SHIFT RATES ─── */
 
 /** GET /api/salary/night-shift-rates/:shiftId */
@@ -87,6 +128,50 @@ const getRun = asyncHandler(async (req, res) => {
   return res.json(success(run));
 });
 
+const db = require('../../config/db');
+
+const getDisbursementDate = async (month, year, preferredType = null, preferredDate = null) => {
+  if (preferredDate) {
+    return {
+      salary_date: preferredDate,
+      salary_date_type: preferredType || 'custom_date',
+    };
+  }
+  let type = preferredType;
+  let customDay = null;
+  if (!type) {
+    const [cfgRows] = await db.query(
+      `SELECT config_key, config_value FROM system_config
+       WHERE config_key IN ('SALARY_DATE_TYPE', 'SALARY_DISBURSEMENT_DAY')`
+    );
+    const cfgMap = Object.fromEntries(cfgRows.map((r) => [r.config_key, r.config_value]));
+    type = cfgMap.SALARY_DATE_TYPE || 'last_day_of_month';
+    customDay = cfgMap.SALARY_DISBURSEMENT_DAY ? Number(cfgMap.SALARY_DISBURSEMENT_DAY) : null;
+  }
+
+  let d;
+  if (type === 'last_day_of_month') {
+    d = new Date(Date.UTC(year, month, 0)); // last day of that month
+  } else if (type === 'first_of_next_month') {
+    d = new Date(Date.UTC(year, month, 1));
+  } else if (type === '5th_of_next_month') {
+    d = new Date(Date.UTC(year, month, 5));
+  } else if (type === '7th_of_next_month') {
+    d = new Date(Date.UTC(year, month, 7));
+  } else if (type === '10th_of_next_month') {
+    d = new Date(Date.UTC(year, month, 10));
+  } else if (customDay && customDay >= 1 && customDay <= 31) {
+    d = new Date(Date.UTC(year, month, Math.min(28, customDay)));
+  } else {
+    d = new Date(Date.UTC(year, month, 0));
+  }
+
+  return {
+    salary_date: d.toISOString().slice(0, 10),
+    salary_date_type: type,
+  };
+};
+
 /**
  * POST /api/salary/payroll-runs
  * Body: { pay_month, pay_year, salary_date_type?, salary_date? }
@@ -100,19 +185,13 @@ const createRun = asyncHandler(async (req, res) => {
     return res.status(400).json(fail('period_month and period_year are required'));
   }
 
-  const type = salary_date_type ?? 'last_day_of_month';
-  let computedDate = salary_date;
-  if (!computedDate) {
-    // Build in UTC so the date does not shift by a day in a positive-offset zone.
-    const d = type === 'last_day_of_month'
-      ? new Date(Date.UTC(year, month, 0))
-      : new Date(Date.UTC(year, month, 1));
-    computedDate = d.toISOString().slice(0, 10);
-  }
+  const { salary_date: computedDate, salary_date_type: computedType } = await getDisbursementDate(
+    month, year, salary_date_type, salary_date
+  );
 
   const id = await svc.createPayrollRun({
     period_month: month, period_year: year,
-    salary_date_type: type, salary_date: computedDate,
+    salary_date_type: computedType, salary_date: computedDate,
   });
   return res.status(201).json(created({ id }, 'Payroll run created'));
 });
@@ -132,7 +211,7 @@ const calculateRun = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/salary/payroll-runs/generate
- * Body: { period_month, period_year }
+ * Body: { period_month, period_year, salary_date_type?, salary_date? }
  * Creates or retrieves draft run, calculates payroll, and returns the result.
  */
 const generatePayroll = asyncHandler(async (req, res) => {
@@ -144,12 +223,14 @@ const generatePayroll = asyncHandler(async (req, res) => {
 
   let run = await q.findPayrollRunByPeriod(month, year);
   if (!run) {
-    const d = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const { salary_date: computedDate, salary_date_type: computedType } = await getDisbursementDate(
+      month, year, req.body.salary_date_type, req.body.salary_date
+    );
     const runId = await q.createPayrollRun({
       period_month: month,
       period_year: year,
-      salary_date_type: 'last_day_of_month',
-      salary_date: d,
+      salary_date_type: computedType,
+      salary_date: computedDate,
     });
     run = await q.getPayrollRun(runId);
   }
@@ -162,6 +243,32 @@ const generatePayroll = asyncHandler(async (req, res) => {
     items: items.rows || [],
     total: items.total || 0,
   }, `Payroll generated for ${month}/${year}: ${calcResult.calculated} payslips calculated.`));
+});
+
+/**
+ * PATCH /api/salary/payroll-runs/:id/salary-date
+ * Body: { salary_date, salary_date_type? }
+ * Updates the hospital-wide salary disbursement date for this run.
+ */
+const updateRunSalaryDate = asyncHandler(async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = await q.getPayrollRun(runId);
+  if (!run) return res.status(404).json(fail('Payroll run not found'));
+  if (run.status === 'locked') {
+    return res.status(400).json(fail('Cannot change salary date on a locked payroll run'));
+  }
+  const { salary_date, salary_date_type } = req.body;
+  if (!salary_date) {
+    return res.status(400).json(fail('salary_date is required (YYYY-MM-DD)'));
+  }
+
+  await q.updatePayrollRunSalaryDate(runId, {
+    salary_date,
+    salary_date_type: salary_date_type || 'custom_date',
+  });
+
+  const updated = await q.getPayrollRun(runId);
+  return res.json(success(updated, 'Salary disbursement date updated successfully for this payroll run'));
 });
 
 /**
@@ -628,9 +735,9 @@ const exportPayrollRun = asyncHandler(async (req, res) => {
 
 module.exports = {
   listStructures, createStructure, updateStructure, getEffectiveSalary, addRevision,
-  getConfig, updateConfig,
+  getConfig, updateConfig, getSalaryPolicy, updateSalaryPolicy,
   listNightShiftRates, addNightShiftRate,
-  listRuns, getRun, createRun, calculateRun, generatePayroll, lockRun, getPayslip,
+  listRuns, getRun, createRun, calculateRun, generatePayroll, updateRunSalaryDate, lockRun, getPayslip,
   listItems, updatePayrollItemDeduction, getCalculationSummary, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,

@@ -3,6 +3,7 @@ import { apiFetch } from '../../../util/api';
 import { hasPermission } from '../../../util/permissions';
 import { Banner } from './PharmacyUI';
 import PageHeader from '../../../components/PageHeader';
+import TabBar from '../../../components/TabBar';
 import { XIcon, AlertTriangleIcon } from '../../../components/Icons';
 
 export default function MedicineCategories({ user }) {
@@ -179,24 +180,14 @@ export default function MedicineCategories({ user }) {
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200/80 shadow-sm w-fit">
-        <button
-          onClick={() => { setActiveTab('categories'); setSearch(''); }}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-            activeTab === 'categories' ? 'bg-[#1e40af] text-white shadow-xs' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          Medicine Categories ({categories.length})
-        </button>
-        <button
-          onClick={() => { setActiveTab('form-factors'); setSearch(''); }}
-          className={`px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-            activeTab === 'form-factors' ? 'bg-[#1e40af] text-white shadow-xs' : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          Form Factors ({formFactors.length})
-        </button>
-      </div>
+      <TabBar
+        tabs={[
+          { value: 'categories', label: 'Medicine Categories', count: categories.length },
+          { value: 'form-factors', label: 'Form Factors', count: formFactors.length },
+        ]}
+        active={activeTab}
+        onChange={(val) => { setActiveTab(val); setSearch(''); }}
+      />
 
       <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:w-72">

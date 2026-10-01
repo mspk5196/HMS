@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { canViewTab } from '../util/permissions';
+import { useHospitalProfile } from '../context/HospitalProfileContext';
 import ThemeToggle from './ThemeToggle';
 
 export default function Navbar({ activeTab, setActiveTab, onLogout, user, isCollapsed: externalCollapsed, setIsCollapsed: externalSetIsCollapsed }) {
+  const { hospitalName, hospitalLogo, hospitalSubtitle } = useHospitalProfile();
   const [navSearch, setNavSearch] = useState('');
   const [internalCollapsed, setInternalCollapsed] = useState(() => {
     try {
@@ -395,16 +397,20 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
       {/* ── Brand Header ── */}
       {isCollapsed ? (
         <div className="py-3.5 px-2 border-b border-slate-200/80 dark:border-white/[0.08] flex flex-col items-center justify-center gap-2">
-          {/* Medical Emblem (Clickable to Expand) */}
+          {/* Medical Emblem / Custom Logo (Clickable to Expand) */}
           <button
             onClick={() => setIsCollapsed(false)}
-            title="Expand Sidebar"
+            title={`Expand Sidebar • ${hospitalName}`}
             className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-400 p-[1.5px] shadow-sm cursor-pointer hover:scale-105 transition-transform"
           >
-            <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center">
-              <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
-              </svg>
+            <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center overflow-hidden p-0.5">
+              {hospitalLogo ? (
+                <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain" />
+              ) : (
+                <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
+                </svg>
+              )}
             </div>
           </button>
 
@@ -422,25 +428,29 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
       ) : (
         <div className="p-3.5 border-b border-slate-200/80 dark:border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-3 overflow-hidden">
-            {/* Medical Emblem (Clean Modern Emerald Gradient) */}
+            {/* Medical Emblem / Custom Logo */}
             <div className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-400 p-[1.5px] shadow-sm">
-              <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center relative overflow-hidden group">
-                <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
-                </svg>
+              <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center relative overflow-hidden p-0.5">
+                {hospitalLogo ? (
+                  <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain" />
+                ) : (
+                  <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
+                  </svg>
+                )}
               </div>
             </div>
 
             <div className="truncate animate-fade-in">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white leading-tight">
-                  Neha Hospital
+                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white leading-tight truncate" title={hospitalName}>
+                  {hospitalName}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold tracking-wider uppercase">
-                  Enterprise Care
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold tracking-wider uppercase truncate max-w-[140px]" title={hospitalSubtitle || 'Enterprise Care'}>
+                  {hospitalSubtitle || 'Enterprise Care'}
                 </span>
               </div>
             </div>

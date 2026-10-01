@@ -4,6 +4,7 @@ import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import EmployeePicker from '../../components/EmployeePicker';
 import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
+import HospitalHeaderBanner from '../../components/HospitalHeaderBanner';
 import {
   BoltIcon,
   PrintIcon,
@@ -450,14 +451,8 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
       <div id="printable-punch-report" className="space-y-6">
         
         {/* Printable Hospital Header (Only shows on print) */}
-        <div className="hidden print:block border-b-2 border-blue-900 pb-3 text-center space-y-0.5">
-          <h1 className="text-xl font-extrabold text-blue-900">NEHA HOSPITAL</h1>
-          <p className="text-[11px] text-gray-700">47, South Park Street, Gobichettipalayam, Tamil Nadu - 638452</p>
-          <div className="pt-1">
-            <span className="inline-block bg-blue-900 text-white text-[10px] font-bold px-3 py-0.5 rounded-full uppercase">
-              Official Biometric Punch Attendance Record
-            </span>
-          </div>
+        <div className="hidden print:block mb-4">
+          <HospitalHeaderBanner variant="report" documentTitle="OFFICIAL BIOMETRIC PUNCH ATTENDANCE RECORD" />
         </div>
 
         {/* Selected Employee Summary Card */}
@@ -834,30 +829,15 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
           ═══════════════════════════════════════════════════════════════ */}
       <div className="hidden print:block w-full text-black bg-white font-sans text-[8pt] leading-tight">
         {/* Hospital Official Letterhead */}
-        <div className="border-b-2 border-black pb-2 mb-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-extrabold uppercase tracking-wide text-black m-0 leading-none">
-                NEHA HOSPITALS
-              </h1>
-              <div className="text-[8pt] text-gray-800 font-semibold mt-1">
-                Multi-Speciality Hospital &amp; Research Centre · Sathyamangalam, Tamil Nadu - 638401
-              </div>
-              <div className="text-[7pt] text-gray-600">
-                Ph: +91 4295 226000 | Email: hr@nehahospitals.com | Web: www.nehahospital.com
-              </div>
+        <HospitalHeaderBanner
+          variant="report"
+          documentTitle="STAFF PUNCH LOG REPORT"
+          documentMeta={
+            <div className="text-[7pt] text-gray-600 print:text-black mt-1">
+              Printed: <strong className="text-black font-bold">{new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong>
             </div>
-            <div className="text-right">
-              <div className="border border-black px-3 py-1 text-center rounded bg-gray-50 inline-block">
-                <span className="block text-[7pt] uppercase font-bold text-gray-700 tracking-wider">Official Biometric Record</span>
-                <span className="block text-[9pt] font-extrabold text-black uppercase">Staff Punch Log Report</span>
-              </div>
-              <div className="text-[7pt] text-gray-600 mt-1">
-                Printed: <strong className="text-black font-bold">{new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* Employee Profile & Shift Details Box */}
         {timelineData?.employee && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import { ThemeProvider } from './context/ThemeContext';
+import { HospitalProfileProvider } from './context/HospitalProfileContext';
 
 function AppContent() {
   const [user, setUser] = useState(() => {
@@ -51,7 +52,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <HospitalProfileProvider>
+        <AppContent />
+      </HospitalProfileProvider>
     </ThemeProvider>
   );
 }
