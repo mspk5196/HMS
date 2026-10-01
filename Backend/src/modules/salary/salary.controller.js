@@ -188,6 +188,13 @@ const listItems = asyncHandler(async (req, res) => {
   return res.json(paginated(result.rows, result.total, page, limit));
 });
 
+/** PATCH /api/salary/payroll-runs/:id/items/:itemId — adjust or waive deduction before locking */
+const updatePayrollItemDeduction = asyncHandler(async (req, res) => {
+  const { id: runId, itemId } = req.params;
+  const result = await svc.updatePayrollItemDeduction(Number(runId), Number(itemId), req.body, req.user?.id);
+  return res.json(success(result, 'Payroll deduction adjusted successfully'));
+});
+
 /* ─── FINE TYPES ─── */
 
 const listFineTypes = asyncHandler(async (req, res) => res.json(success(await svc.listFineTypes())));
@@ -624,7 +631,7 @@ module.exports = {
   getConfig, updateConfig,
   listNightShiftRates, addNightShiftRate,
   listRuns, getRun, createRun, calculateRun, generatePayroll, lockRun, getPayslip,
-  listItems, getCalculationSummary, exportPayrollRun,
+  listItems, updatePayrollItemDeduction, getCalculationSummary, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,
   listOvertime, createOvertime,

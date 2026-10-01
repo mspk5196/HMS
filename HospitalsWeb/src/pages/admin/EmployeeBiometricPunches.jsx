@@ -563,28 +563,77 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
                   const dayName = dateObj.toLocaleDateString('en-IN', { weekday: 'short' });
                   const dateFormatted = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
+                  // Match any applied leave for this date
+                  const dayLeave = (timelineData?.leaves || []).find(
+                    (l) => l.from_date.slice(0, 10) <= dateStr && l.to_date.slice(0, 10) >= dateStr
+                  );
+
                   return (
                     <div key={dateStr} className="p-4 hover:bg-gray-50/70 transition-colors space-y-3">
                       {/* Day Header Row */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
                           <div className="bg-blue-50 text-blue-900 border border-blue-200 font-extrabold text-xs px-2.5 py-1 rounded-lg">
                             {dayName}, {dateFormatted}
                           </div>
-                          {summary && (
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
-                                summary.status === 'present'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : summary.status === 'late_present'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : summary.status === 'absent'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  : 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {summary.status?.replace(/_/g, ' ')}
-                              {summary.late_minutes > 0 ? ` (${summary.late_minutes}m Late)` : ''}
+
+                          {/* Dynamic Detailed Attendance & Leave Badge */}
+                          {summary ? (
+                            summary.status === 'present' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Present
+                              </span>
+                            ) : summary.status === 'late_present' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                Late Present ({summary.late_minutes}m Late)
+                              </span>
+                            ) : summary.status === 'on_leave' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                                <span>Applied Leave:</span>
+                                <strong>{dayLeave?.leave_type_name || 'Paid Leave'}</strong>
+                              </span>
+                            ) : summary.status === 'half_day_leave' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                                Half-Day Leave (0.5d Paid) {dayLeave ? `· ${dayLeave.leave_type_name}` : ''}
+                              </span>
+                            ) : summary.status === 'half_day_lop' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                Half-Day LOP (0.5d Unpaid)
+                              </span>
+                            ) : summary.status === 'lop' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                Loss of Pay (LOP) {dayLeave ? `· ${dayLeave.leave_type_name}` : ''}
+                              </span>
+                            ) : summary.status === 'week_off' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                Scheduled Week Off
+                              </span>
+                            ) : summary.status === 'holiday' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                                Hospital Holiday
+                              </span>
+                            ) : summary.status === 'absent' ? (
+                              dayLeave && dayLeave.result === 'pending' ? (
+                                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-yellow-50 text-yellow-800 border border-yellow-300">
+                                  Pending Leave Approval: {dayLeave.leave_type_name}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                  Absent (Unexplained / No Leave Applied)
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 capitalize">
+                                {summary.status.replace(/_/g, ' ')}
+                              </span>
+                            )
+                          ) : dayLeave ? (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                              Applied Leave: {dayLeave.leave_type_name} ({dayLeave.result})
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                              No Summary Record
                             </span>
                           )}
                         </div>

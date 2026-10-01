@@ -593,6 +593,39 @@ const countPaidExtraDays = async (employeeId, month, year) => {
   };
 };
 
+const getPayrollItemById = async (itemId) => {
+  const [rows] = await db.execute(`SELECT * FROM payroll_items WHERE id = ?`, [itemId]);
+  return rows[0] ?? null;
+};
+
+const updatePayrollItemDeductions = async (itemId, { lop_amount, buffer_late_deduction, fines_amount, net_pay }) => {
+  await db.execute(
+    `UPDATE payroll_items
+     SET lop_amount = ?, buffer_late_deduction = ?, fines_amount = ?, net_pay = ?
+     WHERE id = ?`,
+    [lop_amount, buffer_late_deduction, fines_amount, net_pay, itemId]
+  );
+};
+
+const syncPayrollRunTotals = async (runId) => {
+  const [rows] = await db.execute(
+    `SELECT COALESCE(SUM(net_pay), 0) AS total_net,
+            COUNT(*) AS item_count
+     FROM payroll_items
+     WHERE payroll_run_id = ?`,
+    [runId]
+  );
+  if (rows.length) {
+    const s = rows[0];
+    await db.execute(
+      `UPDATE payroll_runs
+       SET total_net = ?, item_count = ?
+       WHERE id = ?`,
+      [s.total_net, s.item_count, runId]
+    );
+  }
+};
+
 module.exports = {
   listSalaryStructures, getSalaryStructure, getEffectiveSalary,
   createSalaryStructure, addSalaryRevision, updateSalaryStructure,
@@ -601,6 +634,7 @@ module.exports = {
   listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
   updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
   getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem,
+  getPayrollItemById, updatePayrollItemDeductions, syncPayrollRunTotals,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,
   listFineTypes, createFineType, updateFineType, getFineTypeByTriggerRule,
   listOvertimeEntries, createOvertimeEntry, countPaidExtraDays,

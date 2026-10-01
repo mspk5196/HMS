@@ -118,6 +118,7 @@ export default function Attendance({ user }) {
     { value: 'register', label: 'Attendance Register & Summary', show: hasPermission(user, 'attendance.view') },
     { value: 'late_fines', label: 'Late Attendance Fines', show: hasPermission(user, 'fine.view') || hasPermission(user, 'attendance.view') },
     { value: 'punches', label: 'Employee Punch Logs', show: hasPermission(user, 'biometric.view') || hasPermission(user, 'attendance.view') },
+    { value: 'shift_overrides', label: 'Shift Overrides', show: hasPermission(user, 'attendance.edit') || hasPermission(user, 'hr.edit') || hasPermission(user, 'attendance.view') },
     { value: 'devices', label: 'Biometric Devices & Sync', show: hasPermission(user, 'biometric.manage_devices') || hasPermission(user, 'biometric.view') },
     { value: 'corrections', label: 'Corrections', show: hasPermission(user, 'attendance.view') },
     { value: 'buffer', label: 'Buffer Pool', show: hasPermission(user, 'attendance.manage_buffer') || hasPermission(user, 'attendance.view') },
@@ -203,6 +204,9 @@ export default function Attendance({ user }) {
       )}
       {tab === 'punches' && (
         <EmployeeBiometricPunches user={user} embedded={true} />
+      )}
+      {tab === 'shift_overrides' && (
+        <ShiftOverridesTab user={user} departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
       )}
       {tab === 'devices' && (
         <BiometricDevices user={user} onError={(e) => fail(e)} onSuccess={flash} />
@@ -2581,6 +2585,271 @@ function BiometricDevices({ onError, onSuccess }) {
           loadDevices();
         }}
       />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SHIFT OVERRIDES TAB (Centralized Single-Day Shift Scheduling)
+═══════════════════════════════════════════════════════════════════════ */
+
+function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
+  const [employeeId, setEmployeeId] = useState('');
+  const [overrides, setOverrides] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [shiftConfigs, setShiftConfigs] = useState(null);
+
+  const [form, setForm] = useState({
+    override_date: today(),
+    start_time: '08:00',
+    end_time: '18:00',
+    note: '',
+  });
+
+  useEffect(() => {
+    apiFetch('/hr/shift-configs')
+      .then((d) => setShiftConfigs(d))
+      .catch(() => setShiftConfigs({ day: { start: '08:00', end: '18:00' }, night: { start: '18:00', end: '08:00' } }));
+  }, []);
+
+  const loadOverrides = useCallback(async () => {
+    if (!employeeId) {
+      setOverrides([]);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const data = await apiFetch(`/hr/employees/${employeeId}/shift-overrides`);
+      setOverrides(Array.isArray(data) ? data : []);
+    } catch (err) {
+      onError(err, 'Failed to load shift overrides.');
+      setOverrides([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [employeeId, onError]);
+
+  useEffect(() => {
+    loadOverrides();
+  }, [loadOverrides]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!employeeId) {
+      onError(null, 'Please select a staff member first.');
+      return;
+    }
+    if (!form.override_date || !form.start_time || !form.end_time) {
+      onError(null, 'Date, start time, and end time are required.');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await apiFetch(`/hr/employees/${employeeId}/shift-overrides`, {
+        method: 'POST',
+        body: JSON.stringify({
+          override_date: form.override_date,
+          start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
+          end_time: form.end_time.length === 5 ? `${form.end_time}:00` : form.end_time,
+          note: form.note || null,
+        }),
+      });
+      onSuccess(`Shift override saved for ${form.override_date}.`);
+      setForm((f) => ({ ...f, note: '' }));
+      await loadOverrides();
+    } catch (err) {
+      onError(err, 'Failed to save shift override.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (date) => {
+    const formatted = typeof date === 'string' ? date.slice(0, 10) : date;
+    if (!window.confirm(`Remove shift override for ${formatted}?`)) return;
+    try {
+      setIsSaving(true);
+      await apiFetch(`/hr/employees/${employeeId}/shift-overrides/${formatted}`, {
+        method: 'DELETE',
+      });
+      onSuccess(`Shift override for ${formatted} removed.`);
+      await loadOverrides();
+    } catch (err) {
+      onError(err, 'Failed to remove shift override.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header Banner */}
+      <div className="p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Attendance Scheduling</span>
+          <h2 className="text-base font-extrabold text-white mt-0.5">Single-Day Shift Overrides</h2>
+          <p className="text-xs text-blue-200 mt-1 max-w-2xl">
+            Shift overrides take precedence over standard shifts when calculating biometric attendance, shift duration, and late punch-ins. Ideal for rotating rosters, emergency ICU/special coverage, and Sunday duty shifts.
+          </p>
+        </div>
+      </div>
+
+      {/* Select Staff Member Card */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="w-full sm:w-72">
+          <EmployeePicker
+            label="Select Staff Member"
+            value={employeeId}
+            onChange={setEmployeeId}
+            placeholder="Search staff to configure overrides…"
+          />
+        </div>
+      </div>
+
+      {employeeId ? (
+        <>
+          {/* Add Override Form */}
+          <form onSubmit={handleSubmit} className="bg-white p-5 border border-gray-200/80 rounded-xl shadow-sm space-y-4">
+            <div className="border-b border-gray-100 pb-2">
+              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Set Shift Override for a Date</h4>
+              <p className="text-[11px] text-gray-500">Assign temporary customized working hours for this employee.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Override Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={form.override_date}
+                  onChange={(e) => setForm((f) => ({ ...f, override_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Start Time *</label>
+                <input
+                  type="time"
+                  required
+                  value={form.start_time}
+                  onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">End Time *</label>
+                <input
+                  type="time"
+                  required
+                  value={form.end_time}
+                  onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Note / Reason</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Special duty coverage"
+                  value={form.note}
+                  onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.day?.start || '08:00', end_time: shiftConfigs?.day?.end || '18:00' }))}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
+                >
+                  Preset: Day ({shiftConfigs?.day?.start || '08:00'}–{shiftConfigs?.day?.end || '18:00'})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.night?.start || '18:00', end_time: shiftConfigs?.night?.end || '08:00' }))}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
+                >
+                  Preset: Night ({shiftConfigs?.night?.start || '18:00'}–{shiftConfigs?.night?.end || '08:00'})
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 bg-[#1e40af] hover:bg-[#1c399b] text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? 'Saving…' : 'Save Shift Override'}
+              </button>
+            </div>
+          </form>
+
+          {/* List of Existing Overrides */}
+          <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/70">
+              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Configured Shift Overrides ({overrides.length})</h4>
+            </div>
+            <table className="w-full text-left text-xs text-gray-700">
+              <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold border-b border-gray-100">
+                <tr>
+                  <th className="p-3">Override Date</th>
+                  <th className="p-3">Working Hours</th>
+                  <th className="p-3">Note / Reason</th>
+                  <th className="p-3">Created On</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading ? (
+                  <tr><td colSpan={5} className="p-6 text-center text-gray-400">Loading overrides...</td></tr>
+                ) : overrides.length === 0 ? (
+                  <tr><td colSpan={5} className="p-6 text-center text-gray-400">No shift overrides configured for this employee.</td></tr>
+                ) : (
+                  overrides.map((ov) => {
+                    const dateStr = String(ov.override_date).slice(0, 10);
+                    return (
+                      <tr key={ov.id || dateStr} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="p-3 font-bold text-gray-900">
+                          {new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="p-3 font-semibold text-blue-700">
+                          <span className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-mono">
+                            {String(ov.start_time).slice(0, 5)} – {String(ov.end_time).slice(0, 5)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-gray-600">{ov.note || '—'}</td>
+                        <td className="p-3 text-gray-400 text-[11px]">
+                          {ov.created_at ? new Date(ov.created_at).toLocaleDateString('en-IN') : '—'}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(dateStr)}
+                            disabled={isSaving}
+                            className="text-rose-600 hover:text-rose-800 font-bold hover:underline cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="bg-white p-8 rounded-xl border border-gray-200/80 text-center text-xs text-gray-500 shadow-sm">
+          Please select a staff member above to view and configure their single-day shift overrides.
+        </div>
+      )}
     </div>
   );
 }

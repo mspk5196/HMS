@@ -17,6 +17,7 @@ import {
   HospitalIcon,
   XIcon,
   CurrencyRupeeIcon,
+  EditIcon,
 } from '../../components/Icons';
 
 const MONTH_NAMES = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleString('en-IN', { month: 'long' }));
@@ -375,6 +376,44 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
     }
   };
 
+  const [adjustingItem, setAdjustingItem] = useState(null);
+  const [adjustForm, setAdjustForm] = useState({ lop_amount: 0, buffer_late_deduction: 0, fines_amount: 0, reason: '' });
+  const [isSavingAdjust, setIsSavingAdjust] = useState(false);
+
+  const openAdjustModal = (it) => {
+    setAdjustingItem(it);
+    setAdjustForm({
+      lop_amount: Number(it.lop_amount || 0),
+      buffer_late_deduction: Number(it.buffer_late_deduction || 0),
+      fines_amount: Number(it.fines_amount || 0),
+      reason: '',
+    });
+  };
+
+  const handleSaveAdjust = async (e) => {
+    e.preventDefault();
+    if (!adjustingItem) return;
+    try {
+      setIsSavingAdjust(true);
+      await apiFetch(`/salary/payroll-runs/${runId}/items/${adjustingItem.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          lop_amount: Number(adjustForm.lop_amount),
+          buffer_late_deduction: Number(adjustForm.buffer_late_deduction),
+          fines_amount: Number(adjustForm.fines_amount),
+          reason: adjustForm.reason.trim() || 'Management deduction adjustment',
+        }),
+      });
+      onSuccess(`Deductions updated for ${adjustingItem.full_name}. Net pay recalculated.`);
+      setAdjustingItem(null);
+      await loadRun();
+    } catch (err) {
+      onError(err, 'Failed to update deductions.');
+    } finally {
+      setIsSavingAdjust(false);
+    }
+  };
+
   const openPayslip = async (employeeId) => {
     try {
       setPayslipFor(employeeId);
@@ -579,13 +618,23 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
                     <td className="px-3 py-2.5 text-center font-mono font-extrabold text-emerald-800 bg-emerald-50/40">
                       {money(it.net_pay)}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap">
+                      {run.status === 'draft' && hasPermission(user, 'payroll.edit') && (
+                        <button
+                          onClick={() => openAdjustModal(it)}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-amber-200"
+                          title="Reduce or cancel/waive deductions before finalization"
+                        >
+                          <EditIcon className="w-3 h-3 text-amber-700" />
+                          <span>Adjust</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => openPayslip(it.employee_id)}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1.5 border border-blue-200"
                       >
                         <ReceiptIcon className="w-3.5 h-3.5 text-blue-600" />
-                        <span>View Payslip</span>
+                        <span>Payslip</span>
                       </button>
                     </td>
                   </tr>
@@ -595,6 +644,147 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
           </div>
         )}
       </div>
+
+      {/* Modal: Adjust / Reduce / Waive Deductions */}
+      {adjustingItem && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 border border-gray-100">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Adjust / Waive Deductions</h3>
+                <p className="text-[11px] text-gray-500 font-medium">
+                  {adjustingItem.full_name} ({adjustingItem.employee_code}) · Gross: <strong>{money(adjustingItem.gross_pay)}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustingItem(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdjust} className="space-y-3.5 text-xs">
+              <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-[11px] text-blue-800">
+                You can reduce or completely cancel (waive to ₹0) any attendance-based deduction before finalizing and locking this payroll run.
+              </div>
+
+              {/* LOP Deduction */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">LOP Deduction (₹)</label>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustForm((f) => ({ ...f, lop_amount: 0 }))}
+                    className="text-[10px] text-blue-700 hover:underline font-bold cursor-pointer"
+                  >
+                    Waive LOP (Set ₹0)
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={adjustForm.lop_amount}
+                  onChange={(e) => setAdjustForm((f) => ({ ...f, lop_amount: Math.max(0, Number(e.target.value)) }))}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono font-bold text-xs"
+                />
+              </div>
+
+              {/* Buffer Late Deduction */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Late Punch-In Deduction (₹)</label>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustForm((f) => ({ ...f, buffer_late_deduction: 0 }))}
+                    className="text-[10px] text-blue-700 hover:underline font-bold cursor-pointer"
+                  >
+                    Waive Late (Set ₹0)
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={adjustForm.buffer_late_deduction}
+                  onChange={(e) => setAdjustForm((f) => ({ ...f, buffer_late_deduction: Math.max(0, Number(e.target.value)) }))}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono font-bold text-xs"
+                />
+              </div>
+
+              {/* Fines Deduction */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Fines Deduction (₹)</label>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustForm((f) => ({ ...f, fines_amount: 0 }))}
+                    className="text-[10px] text-blue-700 hover:underline font-bold cursor-pointer"
+                  >
+                    Waive Fines (Set ₹0)
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={adjustForm.fines_amount}
+                  onChange={(e) => setAdjustForm((f) => ({ ...f, fines_amount: Math.max(0, Number(e.target.value)) }))}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg font-mono font-bold text-xs"
+                />
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Adjustment Reason</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Approved exemption by Medical Superintendent"
+                  value={adjustForm.reason}
+                  onChange={(e) => setAdjustForm((f) => ({ ...f, reason: e.target.value }))}
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs"
+                />
+              </div>
+
+              {/* Live Preview Summary */}
+              {(() => {
+                const gross = Number(adjustingItem.gross_pay || 0);
+                const ot = Number(adjustingItem.overtime_amount || 0);
+                const pf = Number(adjustingItem.pf_employee_amount || 0);
+                const esi = Number(adjustingItem.esi_employee_amount || 0);
+                const newDeds = Number(adjustForm.lop_amount) + Number(adjustForm.buffer_late_deduction) + Number(adjustForm.fines_amount) + pf + esi;
+                const calcNet = Math.max(0, Math.round((gross + ot - newDeds) * 100) / 100);
+
+                return (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs flex items-center justify-between font-medium">
+                    <span className="text-gray-500">Recalculated Net Pay:</span>
+                    <span className="font-extrabold text-emerald-700 font-mono text-sm">{money(calcNet)}</span>
+                  </div>
+                );
+              })()}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAdjustingItem(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAdjust}
+                  className="px-5 py-2 text-xs font-bold bg-[#1e40af] hover:bg-[#1c399b] text-white rounded-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingAdjust ? 'Saving…' : 'Save Adjustments'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showExportModal && run && (
         <PayrollExportModal

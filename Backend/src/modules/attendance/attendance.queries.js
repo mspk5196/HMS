@@ -265,7 +265,18 @@ const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
     [employeeId, fromDate, toDate]
   );
 
-  return { employee, punches, summaries };
+  // 4. Leave Applications in Date Range
+  const [leaves] = await db.query(
+    `SELECT lr.*, lt.name AS leave_type_name
+     FROM leave_requests lr
+     JOIN leave_types lt ON lt.id = lr.leave_type_id
+     WHERE lr.employee_id = ?
+       AND lr.from_date <= ? AND lr.to_date >= ?
+     ORDER BY lr.from_date ASC`,
+    [employeeId, toDate, fromDate]
+  );
+
+  return { employee, punches, summaries, leaves };
 };
 
 /* ─────────────────────────────────────────────

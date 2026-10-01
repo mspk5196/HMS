@@ -438,6 +438,52 @@ const addNightShiftRate = async (data, changedBy) => {
   return q.addNightShiftRate({ ...data, changed_by: changedBy });
 };
 
+/**
+ * Reduce, waive, or adjust deductions on a draft payroll item before finalizing.
+ */
+const updatePayrollItemDeduction = async (runId, itemId, { lop_amount, buffer_late_deduction, fines_amount, reason }, userId) => {
+  const run = await q.getPayrollRun(runId);
+  if (!run) throw new AppError('Payroll run not found', 404);
+  if (run.status !== 'draft') {
+    throw new AppError(`Cannot modify deductions on a ${run.status} payroll run. Only draft runs can be adjusted before locking.`, 400);
+  }
+
+  const item = await q.getPayrollItemById(itemId);
+  if (!item || Number(item.payroll_run_id) !== Number(runId)) {
+    throw new AppError('Payroll item not found in this run', 404);
+  }
+
+  const newLop = lop_amount !== undefined ? Math.max(0, Number(lop_amount)) : Number(item.lop_amount || 0);
+  const newLate = buffer_late_deduction !== undefined ? Math.max(0, Number(buffer_late_deduction)) : Number(item.buffer_late_deduction || 0);
+  const newFines = fines_amount !== undefined ? Math.max(0, Number(fines_amount)) : Number(item.fines_amount || 0);
+
+  const gross = Number(item.gross_pay || 0);
+  const pfEmp = Number(item.pf_employee_amount || 0);
+  const esiEmp = Number(item.esi_employee_amount || 0);
+  const ot = Number(item.overtime_amount || 0);
+
+  const totalDeductions = newLop + newLate + pfEmp + esiEmp + newFines;
+  const newNet = Math.max(0, Math.round((gross + ot - totalDeductions) * 100) / 100);
+
+  await q.updatePayrollItemDeductions(itemId, {
+    lop_amount: newLop,
+    buffer_late_deduction: newLate,
+    fines_amount: newFines,
+    net_pay: newNet,
+  });
+
+  await q.syncPayrollRunTotals(runId);
+
+  return {
+    itemId,
+    lop_amount: newLop,
+    buffer_late_deduction: newLate,
+    fines_amount: newFines,
+    net_pay: newNet,
+    reason: reason || 'Manual adjustment before finalization',
+  };
+};
+
 module.exports = {
   computeSalary,
   getAttendanceAggregates,
@@ -445,6 +491,7 @@ module.exports = {
   calculatePayrollForRun,
   lockPayrollRun,
   getPayslip,
+  updatePayrollItemDeduction,
   createOvertimeEntry,
   createFine,
   createFineType,

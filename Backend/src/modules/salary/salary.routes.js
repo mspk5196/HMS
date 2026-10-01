@@ -65,6 +65,7 @@ router.post('/payroll-runs/generate', gate('payroll.generate_payroll', ctrl.gene
 router.post('/payroll-runs/:id/calculate', gate('payroll.edit', ctrl.calculateRun));
 router.post('/payroll-runs/:id/lock', gate('payroll.approve_payroll', ctrl.lockRun));
 router.get('/payroll-runs/:id/items', canViewPayroll, ctrl.listItems);
+router.patch('/payroll-runs/:id/items/:itemId', gate('payroll.edit', ctrl.updatePayrollItemDeduction));
 router.get('/payroll-runs/:id/calculation-summary', canViewPayroll, ctrl.getCalculationSummary);
 router.get('/payroll-runs/:id/export', canViewPayroll, ctrl.exportPayrollRun);
 router.get('/payroll-runs/:id/payslip/:employeeId', canViewPayroll, ctrl.getPayslip);

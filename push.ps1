@@ -1,4 +1,4 @@
-$env:VERSION = "v1.2.4"
+$env:VERSION = "v1.2.5"
 $env:DOCKERHUB_USER = "pcdpbit"
 
 # ─── Frontend ─────────────────────────────────────────────────────────────────
