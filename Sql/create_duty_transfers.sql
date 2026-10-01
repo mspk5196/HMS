@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `duty_transfers` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `from_employee_id` BIGINT UNSIGNED NOT NULL,
+  `to_employee_id` BIGINT UNSIGNED NOT NULL,
+  `duty_date` DATE NOT NULL,
+  `shift_id` BIGINT UNSIGNED NULL,
+  `custom_start_time` TIME NULL,
+  `custom_end_time` TIME NULL,
+  `is_night_shift` TINYINT(1) NOT NULL DEFAULT 0,
+  `leave_request_id` BIGINT UNSIGNED NULL,
+  `reason` VARCHAR(255) NULL,
+  `transferred_by` BIGINT UNSIGNED NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_duty_transfers_date` (`duty_date`),
+  KEY `idx_duty_transfers_from` (`from_employee_id`),
+  KEY `idx_duty_transfers_to` (`to_employee_id`),
+  CONSTRAINT `fk_duty_transfers_from` FOREIGN KEY (`from_employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_duty_transfers_to` FOREIGN KEY (`to_employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

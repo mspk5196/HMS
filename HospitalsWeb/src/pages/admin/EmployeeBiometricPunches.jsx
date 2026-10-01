@@ -462,20 +462,20 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
 
         {/* Selected Employee Summary Card */}
         {timelineData?.employee && (
-          <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-lg space-y-4">
+          <div className="bg-white dark:bg-[#111726] rounded-2xl p-5 text-slate-800 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center font-bold text-lg text-emerald-400 shadow-inner">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 flex items-center justify-center font-bold text-lg text-emerald-700 dark:text-emerald-400 shadow-2xs">
                   {timelineData.employee.full_name?.charAt(0) || 'E'}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-extrabold text-base tracking-wide">{timelineData.employee.full_name}</h2>
-                    <span className="bg-emerald-500/20 text-emerald-300 font-mono text-[11px] px-2 py-0.5 rounded border border-emerald-400/30">
+                    <h2 className="font-extrabold text-base tracking-wide text-slate-900 dark:text-white">{timelineData.employee.full_name}</h2>
+                    <span className="bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-400/30">
                       Code: {timelineData.employee.employee_code || '—'}
                     </span>
                   </div>
-                  <div className="text-xs text-blue-200 mt-0.5 flex items-center gap-2">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
                     <span className="flex items-center gap-1">
                       <BuildingOfficeIcon className="w-3.5 h-3.5" />
                       <span>{timelineData.employee.department_name || 'Hospital Department'}</span>
@@ -490,14 +490,14 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
               </div>
 
               {/* Shift info badge */}
-              <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/15 text-xs text-right space-y-0.5">
-                <div className="text-blue-300 text-[10px] font-bold uppercase tracking-wider">Assigned Shift</div>
-                <div className="font-bold text-white">
+              <div className="bg-slate-50 dark:bg-[#0c121e] rounded-xl p-3 border border-slate-200 dark:border-slate-800 text-xs text-right space-y-0.5">
+                <div className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">Assigned Shift</div>
+                <div className="font-bold text-slate-900 dark:text-white">
                   {timelineData.employee.shift_name || 'Standard Shift'} (
                   {formatTime12(timelineData.employee.shift_start)} – {formatTime12(timelineData.employee.shift_end)})
                 </div>
                 {timelineData.employee.biometric_in_start && (
-                  <div className="text-[10px] text-blue-200/80">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
                     In Window: {timelineData.employee.biometric_in_start?.slice(0, 5)}–{timelineData.employee.biometric_in_end?.slice(0, 5)} | Out: {timelineData.employee.biometric_out_start?.slice(0, 5)}–{timelineData.employee.biometric_out_end?.slice(0, 5)}
                   </div>
                 )}
@@ -505,24 +505,24 @@ export default function EmployeeBiometricPunches({ embedded = false, user }) {
             </div>
 
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-white/10 text-xs">
-              <div className="bg-white/5 rounded-lg p-2.5 border border-white/10">
-                <span className="text-blue-300 text-[10px] font-bold uppercase block">Total Punches in Range</span>
-                <span className="text-xl font-extrabold text-white">{totalPunches}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-800 text-xs">
+              <div className="bg-slate-50 dark:bg-[#0c121e] rounded-lg p-2.5 border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase block">Total Punches in Range</span>
+                <span className="text-xl font-extrabold text-slate-900 dark:text-white">{totalPunches}</span>
               </div>
-              <div className="bg-white/5 rounded-lg p-2.5 border border-white/10">
-                <span className="text-blue-300 text-[10px] font-bold uppercase block">Days Present</span>
-                <span className="text-xl font-extrabold text-emerald-400">{presentDays} days</span>
+              <div className="bg-slate-50 dark:bg-[#0c121e] rounded-lg p-2.5 border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase block">Days Present</span>
+                <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{presentDays} days</span>
               </div>
-              <div className="bg-white/5 rounded-lg p-2.5 border border-white/10">
-                <span className="text-blue-300 text-[10px] font-bold uppercase block">Late Arrivals</span>
-                <span className={`text-xl font-extrabold ${lateDays > 0 ? 'text-amber-400' : 'text-white'}`}>
+              <div className="bg-slate-50 dark:bg-[#0c121e] rounded-lg p-2.5 border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase block">Late Arrivals</span>
+                <span className={`text-xl font-extrabold ${lateDays > 0 ? 'text-amber-500' : 'text-slate-900 dark:text-white'}`}>
                   {lateDays} {lateDays === 1 ? 'time' : 'times'}
                 </span>
               </div>
-              <div className="bg-white/5 rounded-lg p-2.5 border border-white/10">
-                <span className="text-blue-300 text-[10px] font-bold uppercase block">Date Range</span>
-                <span className="text-xs font-semibold text-gray-200 mt-1 block">
+              <div className="bg-slate-50 dark:bg-[#0c121e] rounded-lg p-2.5 border border-slate-200/80 dark:border-slate-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase block">Date Range</span>
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 block">
                   {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
               </div>

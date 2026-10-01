@@ -160,12 +160,12 @@ function Runs({ user, onError, onSuccess }) {
   return (
     <div className="space-y-6">
       {/* Quick Month Payroll Generator Card */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-lg space-y-4">
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 dark:from-[#0d1624] dark:via-[#111e32] dark:to-[#0d1624] rounded-2xl p-5 text-white shadow-lg space-y-4 border border-emerald-500/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Payroll Engine</span>
             <h2 className="text-base font-extrabold text-white mt-0.5">Generate Monthly Salary &amp; Payslips</h2>
-            <p className="text-xs text-blue-200 mt-1 max-w-xl">
+            <p className="text-xs text-emerald-200/90 dark:text-emerald-300 mt-1 max-w-xl">
               Calculates gross earnings, attendance-based Loss of Pay (LOP), late buffer deductions, fines, and statutory PF/ESI for every active staff member.
             </p>
           </div>
@@ -1814,12 +1814,12 @@ function SalaryPfEsiCalculation({ user, onError, onSuccess }) {
               </div>
 
               {/* Statutory Challan Breakdown Box (Matching EPFO Challan) */}
-              <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-5 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+              <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-slate-900 dark:from-[#0d1624] dark:to-[#111e32] text-white p-5 rounded-2xl shadow-md grid grid-cols-1 md:grid-cols-2 gap-6 text-xs border border-emerald-500/20">
                 {/* EPFO Challan Summary */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                    <span className="font-extrabold text-blue-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                      <LandmarkIcon className="w-4 h-4 text-blue-300 shrink-0" />
+                    <span className="font-extrabold text-emerald-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <LandmarkIcon className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>EPFO Statutory Challan Summary (5 Accounts)</span>
                     </span>
                     <span className="text-[10px] text-gray-400 font-semibold">{summary?.pf?.enrolledCount || 0} Subscribers</span>

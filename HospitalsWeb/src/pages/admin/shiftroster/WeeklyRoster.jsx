@@ -160,6 +160,14 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
   const [editingCellKey, setEditingCellKey] = useState(null);
   const [showTimingModal, setShowTimingModal] = useState(false);
 
+  // Duty Transfer / Replacement modal state
+  const [transferModal, setTransferModal] = useState(null); // { emp, date, cell }
+  const [replacements, setReplacements] = useState([]);
+  const [loadingReplacements, setLoadingReplacements] = useState(false);
+  const [selectedReplacementId, setSelectedReplacementId] = useState('');
+  const [transferReason, setTransferReason] = useState('Sudden absence / Leave coverage');
+  const [isTransferring, setIsTransferring] = useState(false);
+
   // Batch Apply Modal / Drawer state
   const [batchEmp, setBatchEmp] = useState(null);
   const [batchForm, setBatchForm] = useState({
@@ -535,6 +543,66 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     setSwapPick(null);
   };
 
+  /** Open Duty Transfer modal to reassign duty to replacement staff */
+  const openTransferModal = async (emp, date, cell) => {
+    setTransferModal({ emp, date, cell });
+    setSelectedReplacementId('');
+    setTransferReason('Sudden absence / Emergency duty cover');
+    setReplacements([]);
+    try {
+      setLoadingReplacements(true);
+      const params = new URLSearchParams({
+        dutyDate: date,
+        departmentId: emp.department_id ? String(emp.department_id) : '',
+        excludeEmployeeId: String(emp.employee_id),
+      });
+      const res = await apiFetch(`/hr/roster/transfer-duty/eligible-replacements?${params.toString()}`);
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setReplacements(list);
+      // Auto select first eligible colleague if available
+      if (list.length > 0) {
+        setSelectedReplacementId(String(list[0].employee_id));
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to load replacement staff');
+    } finally {
+      setLoadingReplacements(false);
+    }
+  };
+
+  /** Commit the duty transfer */
+  const handleTransferDutySubmit = async (e) => {
+    e.preventDefault();
+    if (!transferModal || !selectedReplacementId) {
+      setErrorMsg('Please select a replacement staff member.');
+      return;
+    }
+
+    try {
+      setIsTransferring(true);
+      setErrorMsg('');
+      const repEmp = replacements.find((r) => String(r.employee_id) === String(selectedReplacementId));
+
+      await apiFetch('/hr/roster/transfer-duty', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromEmployeeId: transferModal.emp.employee_id,
+          toEmployeeId: Number(selectedReplacementId),
+          dutyDate: transferModal.date,
+          reason: transferReason,
+        }),
+      });
+
+      flash(`Duty transferred from ${transferModal.emp.full_name} to ${repEmp?.full_name || 'replacement staff'} for ${monthLabel(transferModal.date)}.`);
+      setTransferModal(null);
+      await load();
+    } catch (err) {
+      setErrorMsg(err.message || 'Duty transfer failed.');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   const isEntireWeekPast = grid && grid.days[6] < today;
   const isCurrentWeek = grid && grid.days[0] <= today && grid.days[6] >= today;
   const editableDaysCount = grid ? grid.days.filter((d) => d >= today).length : 0;
@@ -609,7 +677,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving || isLoading || !grid?.employees?.length || isEntireWeekPast}
-                className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <CheckIcon className="w-4 h-4" />
                 <span>{isSaving ? 'Saving…' : isEntireWeekPast ? 'Week Locked' : 'Save Duty Roster'}</span>
@@ -620,25 +688,25 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       />
 
       {/* Roster Controls & Navigation Card */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-xs space-y-3.5">
+      <div className="bg-white dark:bg-[#111726] p-4 rounded-xl border border-gray-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Week Navigation */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-lg shadow-2xs border border-gray-200 bg-gray-50 p-0.5">
+            <div className="inline-flex rounded-lg shadow-2xs border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/60 p-0.5">
               <button
                 type="button"
                 onClick={() => setWeekStart((w) => addDays(w, -7))}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-white rounded-md transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
                 title="Previous Week"
               >
                 <ChevronLeftIcon className="w-3.5 h-3.5" />
                 <span>Prev Week</span>
               </button>
-              <div className="w-[1px] bg-gray-200 my-1"></div>
+              <div className="w-[1px] bg-gray-200 dark:bg-slate-700 my-1"></div>
               <button
                 type="button"
                 onClick={() => setWeekStart((w) => addDays(w, 7))}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-white rounded-md transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
                 title="Next Week"
               >
                 <span>Next Week</span>
@@ -646,13 +714,13 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1 bg-white">
+            <div className="flex items-center gap-1.5 border border-gray-200 dark:border-slate-700 rounded-lg px-2.5 py-1 bg-white dark:bg-slate-900/60">
               <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
               <input
                 type="date"
                 value={weekStart}
                 onChange={(e) => e.target.value && setWeekStart(startOfWeek(e.target.value))}
-                className="text-xs font-semibold text-gray-900 bg-transparent focus:outline-none cursor-pointer"
+                className="text-xs font-semibold text-gray-900 dark:text-slate-100 bg-transparent focus:outline-none cursor-pointer"
                 title="Pick week start date (Wednesday)"
               />
             </div>
@@ -660,9 +728,9 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
             <button
               type="button"
               onClick={() => setWeekStart(startOfWeek(today))}
-              className="px-3 py-1.5 bg-blue-50 text-[#1e40af] hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-blue-200 flex items-center gap-1"
+              className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 rounded-lg text-xs font-bold transition-colors cursor-pointer border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1"
             >
-              <ClockIcon className="w-3.5 h-3.5 text-[#1e40af]" />
+              <ClockIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Current Week</span>
             </button>
           </div>
@@ -775,12 +843,12 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
 
       {/* Day Quick Navigation & Horizontal Scroll Controls Bar */}
       {grid && grid.employees.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-2.5 px-4 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-white dark:bg-[#111726] text-slate-800 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 p-2.5 px-4 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 bg-white/10 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 px-2 py-0.5 rounded-md">
               ⚡ Quick Day Jump
             </span>
-            <span className="text-white/70 text-[11px] hidden sm:inline">
+            <span className="text-slate-500 dark:text-slate-400 text-[11px] hidden sm:inline">
               Jump instantly to configure any day without scrolling:
             </span>
           </div>
@@ -789,7 +857,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
             <button
               type="button"
               onClick={() => scrollToDay(0)}
-              className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/30 text-white font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-2xs border border-white/20"
+              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-white font-bold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-2xs border border-slate-200 dark:border-white/10"
               title="Jump to Start of Week (Wednesday)"
             >
               <span>⏮️ Start (Wed)</span>
@@ -805,8 +873,8 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                   onClick={() => scrollToDay(idx)}
                   className={`px-2 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer border ${
                     isToday
-                      ? 'bg-amber-400 text-gray-950 border-amber-300 shadow-xs'
-                      : 'bg-white/10 hover:bg-white/25 text-white border-white/15'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
                   }`}
                   title={`Jump to ${DAY_LABELS[idx]} (${monthLabel(d).slice(0, 6)})`}
                 >
@@ -816,22 +884,22 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
               );
             })}
 
-            {/* Jump to Last Day Button (Highlights Monday/Tuesday / End of Week) */}
+            {/* Jump to Last Day Button */}
             <button
               type="button"
               onClick={() => scrollToDay('end')}
-              className="px-3 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-extrabold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-xs border border-blue-300 ml-1"
+              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all cursor-pointer flex items-center gap-1 shadow-xs border border-emerald-700 ml-1"
               title="Jump immediately to Tuesday & Summary (Last Day of Week)"
             >
               <span>Last Day (Tue) ⏭️</span>
             </button>
 
             {/* Scroll Left & Right buttons */}
-            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+            <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200 dark:border-white/20">
               <button
                 type="button"
                 onClick={() => scrollTable('left')}
-                className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-white flex items-center justify-center cursor-pointer transition-colors border border-slate-200 dark:border-white/10"
                 title="Scroll Left"
               >
                 <ChevronLeftIcon className="w-4 h-4" />
@@ -839,7 +907,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
               <button
                 type="button"
                 onClick={() => scrollTable('right')}
-                className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-white flex items-center justify-center cursor-pointer transition-colors border border-slate-200 dark:border-white/10"
                 title="Scroll Right"
               >
                 <ChevronRightIcon className="w-4 h-4" />
@@ -885,17 +953,17 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                     return (
                       <th
                         key={d}
-                        className={`px-2 py-3 text-center min-w-[155px] transition-colors border-l border-gray-200/60 ${
+                        className={`px-2 py-3 text-center min-w-[155px] transition-colors border-l border-gray-200/60 dark:border-slate-800 ${
                           isToday
-                            ? 'bg-blue-50/90 border-b-2 border-b-blue-600'
+                            ? 'bg-emerald-50/90 dark:bg-emerald-950/30 border-b-2 border-b-emerald-600'
                             : isPast
-                            ? 'bg-slate-100/90 text-slate-500'
-                            : 'bg-gray-50/95 text-gray-700'
+                            ? 'bg-slate-100/90 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400'
+                            : 'bg-gray-50/95 dark:bg-slate-900/40 text-gray-700 dark:text-slate-300'
                         }`}
                       >
                         <div className="flex flex-col items-center">
                           {isToday && (
-                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full bg-blue-600 text-white tracking-wider mb-0.5">
+                            <span className="text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full bg-emerald-600 text-white tracking-wider mb-0.5 shadow-xs">
                               TODAY
                             </span>
                           )}
@@ -904,10 +972,10 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                               <LockClosedIcon className="w-2.5 h-2.5" /> Past
                             </span>
                           )}
-                          <div className={`font-extrabold text-[12px] ${isToday ? 'text-blue-900' : isPast ? 'text-slate-600' : 'text-gray-800'}`}>
+                          <div className={`font-extrabold text-[12px] ${isToday ? 'text-emerald-900 dark:text-emerald-300' : isPast ? 'text-slate-600 dark:text-slate-400' : 'text-gray-800 dark:text-slate-200'}`}>
                             {DAY_LABELS[i]}
                           </div>
-                          <div className="text-[10px] text-gray-400 font-semibold">{monthLabel(d).slice(0, 6)}</div>
+                          <div className="text-[10px] text-gray-400 dark:text-slate-500 font-semibold">{monthLabel(d).slice(0, 6)}</div>
 
                           {/* Day Shift Coverage Counters */}
                           <div className="mt-1 flex items-center gap-1.5 text-[9px] font-bold">
@@ -1265,20 +1333,35 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                                 )}
 
                                 {/* Shift Swap Action Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleSwapClick(emp.employee_id, d, emp.full_name)}
-                                  disabled={isSaving}
-                                  className={`mt-1.5 w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all disabled:opacity-40 ${
-                                    isPicked
-                                      ? 'bg-amber-500 text-white shadow-xs animate-pulse'
-                                      : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
-                                  }`}
-                                  title="Swap duty hours with another person on the same date"
-                                >
-                                  <ArrowsRightLeftIcon className="w-3 h-3" />
-                                  <span>{isPicked ? 'PICKED FOR SWAP' : 'Swap'}</span>
-                                </button>
+                                <div className="mt-1.5 flex flex-col gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSwapClick(emp.employee_id, d, emp.full_name)}
+                                    disabled={isSaving}
+                                    className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all disabled:opacity-40 ${
+                                      isPicked
+                                        ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                                        : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
+                                    }`}
+                                    title="Swap duty hours with another person on the same date"
+                                  >
+                                    <ArrowsRightLeftIcon className="w-3 h-3" />
+                                    <span>{isPicked ? 'PICKED FOR SWAP' : 'Swap'}</span>
+                                  </button>
+
+                                  {!cell.is_week_off && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openTransferModal(emp, d, cell)}
+                                      disabled={isSaving}
+                                      className="w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200/60"
+                                      title="Transfer duty or assign replacement staff if this employee takes leave or is absent"
+                                    >
+                                      <UserGroupIcon className="w-3 h-3 text-indigo-500" />
+                                      <span>Cover Duty</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </td>
@@ -1448,6 +1531,141 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                   className="px-5 py-2 text-xs font-bold text-white bg-[#1e40af] hover:bg-[#1c399b] rounded-lg shadow-sm transition-colors cursor-pointer"
                 >
                   Apply to Upcoming Days
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Duty Transfer / Shift Replacement Modal */}
+      {transferModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-gray-200/80 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                  <UserGroupIcon className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Transfer / Cover Duty</h3>
+                  <p className="text-[11px] text-gray-500">Reassign shift to another staff member when an employee takes leave or is absent.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferModal(null)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleTransferDutySubmit} className="space-y-4">
+              {/* Shift & Employee Context */}
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 font-medium">Scheduled Employee:</span>
+                  <span className="font-extrabold text-gray-900">
+                    {transferModal.emp.full_name} (#{transferModal.emp.employee_code})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 font-medium">Duty Date:</span>
+                  <span className="font-bold text-blue-800">{monthLabel(transferModal.date)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 font-medium">Duty Timing:</span>
+                  <span className="font-mono font-bold text-gray-800">
+                    {transferModal.cell.start_time || '08:30'} – {transferModal.cell.end_time || '18:30'}
+                    {transferModal.cell.is_night_shift ? ' (Night Shift)' : ' (Day Shift)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Select Replacement Staff */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase">
+                  Select Replacement Staff Member *
+                </label>
+                {loadingReplacements ? (
+                  <div className="p-3 text-center text-xs text-gray-400 border border-gray-200 rounded-xl bg-gray-50">
+                    Loading available colleagues…
+                  </div>
+                ) : replacements.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-amber-700 border border-amber-200 rounded-xl bg-amber-50">
+                    No colleagues available from this department on this date.
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedReplacementId}
+                    onChange={(e) => setSelectedReplacementId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    {replacements.map((r) => {
+                      const statusTag = r.is_on_leave ? '⚠️ On Approved Leave' : r.is_week_off ? '🏖️ On Week-Off (Eligible for Comp-Off / Extra Pay)' : 'Available (No Duty)';
+                      return (
+                        <option key={r.employee_id} value={r.employee_id}>
+                          {r.full_name} (#{r.employee_code}) — {statusTag}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase">
+                  Reason for Transfer / Coverage *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sudden medical emergency / Leave cover / Unannounced absent"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['Sudden Medical Leave', 'Unannounced Absence', 'Emergency Ward Coverage', 'Leave Cover'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTransferReason(preset)}
+                      className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-[10px] text-gray-600 font-semibold cursor-pointer"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Explanatory Notice */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-[11px] text-blue-800 leading-relaxed">
+                <strong>What happens automatically:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>{transferModal.emp.full_name} is relieved of duty for this day (marked leave/absent).</li>
+                  <li>The replacement staff member is assigned this shift timing on the duty roster.</li>
+                  <li>Their biometric punches will validate against this shift window.</li>
+                </ul>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTransferModal(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isTransferring || !selectedReplacementId}
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {isTransferring ? 'Transferring…' : 'Confirm & Transfer Duty'}
                 </button>
               </div>
             </form>

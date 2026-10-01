@@ -228,6 +228,198 @@ const swapRosterEntries = async (employeeA, employeeB, rosterDate, createdBy = n
   }
 };
 
+/** Get employees whose shift category is NOT day_and_night (Fixed Day, Fixed Night, General). */
+const getNonRosterEmployees = async (departmentId = null, shiftCategory = null) => {
+  const filters = ["e.status = 'active'", "e.shift_category IN ('day', 'night', 'general')"];
+  const params = [];
+
+  if (departmentId) {
+    filters.push('e.department_id = ?');
+    params.push(departmentId);
+  }
+  if (shiftCategory && ['day', 'night', 'general'].includes(shiftCategory)) {
+    filters.push('e.shift_category = ?');
+    params.push(shiftCategory);
+  }
+
+  const [rows] = await db.execute(
+    `SELECT e.id AS employee_id, e.full_name, e.employee_code,
+            e.department_id, e.designation_id, e.shift_category,
+            e.custom_shift_start, e.custom_shift_end, e.custom_buffer_minutes,
+            d.name AS department_name, sr.name AS role_name,
+            COALESCE(sr.weekly_off_count, 4) AS weekly_off_count
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE ${filters.join(' AND ')}
+     ORDER BY d.name, e.full_name`,
+    params
+  );
+  return rows;
+};
+
+/** Get week-off dates for an employee in a given month/year. */
+const getEmployeeWeekOffs = async (employeeId, month, year) => {
+  const [rows] = await db.execute(
+    `SELECT DATE_FORMAT(roster_date, '%Y-%m-%d') AS date, is_week_off, notes
+     FROM roster_entries
+     WHERE employee_id = ? AND MONTH(roster_date) = ? AND YEAR(roster_date) = ? AND is_week_off = 1
+     ORDER BY roster_date ASC`,
+    [employeeId, month, year]
+  );
+  return rows.map((r) => r.date);
+};
+
+/** Set or unset week-off for an employee on a specific date. */
+const setWeekOffEntry = async (employeeId, rosterDate, isWeekOff, createdBy = null) => {
+  if (isWeekOff) {
+    await db.execute(UPSERT_SQL, [
+      employeeId, rosterDate, 1, 0, 'Week Off',
+      null, null, null, 0, createdBy,
+    ]);
+  } else {
+    // If it was just a week-off entry, delete or set is_week_off = 0
+    await db.execute(
+      `DELETE FROM roster_entries WHERE employee_id = ? AND roster_date = ? AND is_week_off = 1`,
+      [employeeId, rosterDate]
+    );
+  }
+};
+
+/** Save a duty transfer record in duty_transfers table and update roster_entries atomically. */
+const executeDutyTransfer = async ({
+  fromEmployeeId,
+  toEmployeeId,
+  dutyDate,
+  shiftId = null,
+  customStartTime = null,
+  customEndTime = null,
+  isNightShift = 0,
+  leaveRequestId = null,
+  reason = null,
+  transferredBy = null,
+}) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Relieve fromEmployeeId on dutyDate
+    await conn.execute(UPSERT_SQL, [
+      fromEmployeeId,
+      dutyDate,
+      0, // not week off
+      0, // not holiday
+      `Duty transferred to #${toEmployeeId}`,
+      null, null, null, 0,
+      transferredBy,
+    ]);
+
+    // 2. Assign shift to toEmployeeId on dutyDate
+    await conn.execute(UPSERT_SQL, [
+      toEmployeeId,
+      dutyDate,
+      0, // not week off
+      0,
+      `Covering duty for #${fromEmployeeId}${reason ? ' (' + reason + ')' : ''}`,
+      customStartTime,
+      customEndTime,
+      10, // buffer
+      isNightShift ? 1 : 0,
+      transferredBy,
+    ]);
+
+    // 3. Insert audit into duty_transfers
+    const [ins] = await conn.execute(
+      `INSERT INTO duty_transfers
+         (from_employee_id, to_employee_id, duty_date, shift_id,
+          custom_start_time, custom_end_time, is_night_shift, leave_request_id,
+          reason, transferred_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        fromEmployeeId,
+        toEmployeeId,
+        dutyDate,
+        shiftId,
+        customStartTime,
+        customEndTime,
+        isNightShift ? 1 : 0,
+        leaveRequestId,
+        reason,
+        transferredBy,
+      ]
+    );
+
+    await conn.commit();
+    return ins.insertId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
+/** Query duty transfers for tracking / history. */
+const getDutyTransfers = async (month, year, departmentId = null) => {
+  const filters = ['MONTH(dt.duty_date) = ?', 'YEAR(dt.duty_date) = ?'];
+  const params = [month, year];
+
+  if (departmentId) {
+    filters.push('eFrom.department_id = ?');
+    params.push(departmentId);
+  }
+
+  const [rows] = await db.execute(
+    `SELECT dt.*,
+            DATE_FORMAT(dt.duty_date, '%Y-%m-%d') AS duty_date,
+            eFrom.full_name AS from_employee_name, eFrom.employee_code AS from_employee_code,
+            eTo.full_name AS to_employee_name, eTo.employee_code AS to_employee_code,
+            d.name AS department_name,
+            u.username AS transferred_by_username
+     FROM duty_transfers dt
+     JOIN employees eFrom ON eFrom.id = dt.from_employee_id
+     JOIN employees eTo ON eTo.id = dt.to_employee_id
+     LEFT JOIN departments d ON d.id = eFrom.department_id
+     LEFT JOIN users u ON u.id = dt.transferred_by
+     WHERE ${filters.join(' AND ')}
+     ORDER BY dt.duty_date DESC, dt.created_at DESC`,
+    params
+  );
+  return rows;
+};
+
+/** Get potential replacement staff for a given date. */
+const getEligibleReplacements = async (dutyDate, departmentId = null, excludeEmployeeId = null) => {
+  const filters = ["e.status = 'active'"];
+  const params = [dutyDate];
+
+  if (departmentId) {
+    filters.push('e.department_id = ?');
+    params.push(departmentId);
+  }
+  if (excludeEmployeeId) {
+    filters.push('e.id != ?');
+    params.push(excludeEmployeeId);
+  }
+
+  const [rows] = await db.execute(
+    `SELECT e.id AS employee_id, e.full_name, e.employee_code, e.shift_category,
+            d.name AS department_name, sr.name AS role_name,
+            COALESCE(re.is_week_off, 0) AS is_week_off,
+            re.custom_start_time, re.custom_end_time, re.is_night_shift,
+            (SELECT COUNT(*) FROM leave_requests lr
+             WHERE lr.employee_id = e.id AND ? BETWEEN lr.from_date AND lr.to_date AND lr.result = 'approved') AS is_on_leave
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ?
+     WHERE ${filters.join(' AND ')}
+     ORDER BY is_week_off DESC, e.full_name ASC`,
+    [dutyDate, ...params]
+  );
+  return rows;
+};
+
 module.exports = {
   getRosterForWeek,
   getRosterForMonth,
@@ -238,4 +430,11 @@ module.exports = {
   upsertEmployeeShift,
   bulkUpsertShifts,
   swapRosterEntries,
+  getNonRosterEmployees,
+  getEmployeeWeekOffs,
+  setWeekOffEntry,
+  executeDutyTransfer,
+  getDutyTransfers,
+  getEligibleReplacements,
 };
+

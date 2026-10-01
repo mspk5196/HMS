@@ -281,7 +281,7 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
   return (
     <div className="space-y-6">
       {/* Policy Notice & Info Banner */}
-      <div className="bg-gradient-to-r from-blue-900 to-indigo-950 p-5 rounded-2xl text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 dark:from-[#0d1624] dark:via-[#111e32] dark:to-[#0d1624] p-5 rounded-2xl text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border border-emerald-500/20">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="bg-amber-400 text-gray-950 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
@@ -289,12 +289,12 @@ export default function LateAttendanceFines({ departments = [], onError, onSucce
             </span>
             <h2 className="text-base font-extrabold tracking-wide">Late Attendance Fine Management</h2>
           </div>
-          <p className="text-xs text-blue-200 max-w-2xl leading-relaxed">
+          <p className="text-xs text-emerald-200/90 dark:text-emerald-300 max-w-2xl leading-relaxed">
             Staff who kept biometric late and crossed their monthly grace buffer are listed below. You have total control to select who gets fined, adjust chargeable days, and set custom amounts (per day or flat).
           </p>
         </div>
         <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-xl border border-white/15 text-xs text-right space-y-0.5 shrink-0">
-          <div className="text-blue-300 text-[10px] font-bold uppercase tracking-wider">Zero Automatic Fines</div>
+          <div className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider">Zero Automatic Fines</div>
           <div className="font-bold text-emerald-400 flex items-center justify-end gap-1">
             <CheckIcon className="w-4 h-4 text-emerald-400" />
             <span>Strict Manual Approval</span>

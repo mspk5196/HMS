@@ -94,6 +94,19 @@ const resolveInitialTab = (user, permittedTabs) => {
 export default function AdminDashboard({ user, onLogout }) {
   const permittedTabs = ALL_TABS.filter((id) => canViewTab(user, id));
   const [activeTab, setActiveTab] = useState(() => resolveInitialTab(user, permittedTabs));
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('nh_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nh_sidebar_collapsed', isCollapsed);
+    } catch (e) {}
+  }, [isCollapsed]);
 
   // Switch tab and sync with URL hash & localStorage
   const handleTabChange = (tabId) => {
@@ -255,20 +268,22 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   return (
-    <div className="flex h-screen bg-[#f1f4f8] overflow-hidden antialiased font-sans text-gray-800">
+    <div className="flex h-screen bg-[#f8fafc] dark:bg-[#0b0e14] overflow-hidden antialiased font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       {/* Sidebar / Navbar Component */}
       <Navbar 
         activeTab={activeTab} 
         setActiveTab={handleTabChange} 
         onLogout={handleLogoutClick} 
         user={user}
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto space-y-4">
+      <main className={`flex-1 overflow-y-auto transition-all duration-200 ${isCollapsed ? 'p-3 sm:p-4 lg:p-5' : 'p-6 lg:p-8'} [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full`}>
+        <div className={`${isCollapsed ? 'max-w-[1680px]' : 'max-w-7xl'} mx-auto space-y-4 transition-all duration-200`}>
           {approvalNotice && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center justify-between animate-fade-in">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center justify-between animate-fade-in">
               <div className="flex items-center gap-2">
                 <span className="text-amber-500 font-bold">⏳</span>
                 <span>{approvalNotice}</span>

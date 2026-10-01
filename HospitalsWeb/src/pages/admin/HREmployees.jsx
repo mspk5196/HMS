@@ -97,7 +97,7 @@ export default function HREmployees({ user }) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
 
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -516,9 +516,9 @@ export default function HREmployees({ user }) {
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 bg-white"
               >
+                <option value="active">Active Only</option>
                 <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="inactive">Inactive Only</option>
               </select>
             </div>
           </div>
@@ -538,14 +538,14 @@ export default function HREmployees({ user }) {
                     onClick={() => { setSelectedId(emp.id); setRightTab('profile'); }}
                     className={`p-3 text-xs cursor-pointer transition-colors flex items-center justify-between ${
                       isSelected
-                        ? 'bg-blue-50/80 border-l-4 border-blue-600 font-semibold text-gray-900'
-                        : 'hover:bg-gray-50 text-gray-700'
+                        ? 'bg-emerald-50/80 dark:bg-emerald-500/15 border-l-4 border-emerald-600 dark:border-emerald-400 font-semibold text-slate-900 dark:text-white'
+                        : 'hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-gray-900">{emp.full_name}</span>
-                        <span className="text-[10px] font-bold text-blue-600">({emp.employee_code})</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{emp.full_name}</span>
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">({emp.employee_code})</span>
                       </div>
                       <div className="text-[11px] text-gray-400 mt-0.5">
                         {emp.department_name || 'No Dept'} · {emp.designation_name || 'No Role'}
@@ -617,43 +617,43 @@ export default function HREmployees({ user }) {
           ) : (
             <>
               {/* Selected Employee Identity & Action Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-white/[0.08]">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0">
                     {(detail.full_name || '?').charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base font-bold text-gray-900 tracking-tight">{detail.full_name}</h2>
-                      <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-mono">
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">{detail.full_name}</h2>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-full font-mono">
                         #{detail.employee_code}
                       </span>
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                        detail.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        detail.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20' : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20'
                       }`}>
                         {detail.status === 'active' ? 'Active' : 'Inactive'}
                       </span>
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                         (detail.payment_mode || 'account') === 'cash'
-                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20'
                       }`}>
                         {(detail.payment_mode || 'account') === 'cash' ? (
-                          <CurrencyRupeeIcon className="w-3.5 h-3.5 text-amber-600" />
+                          <CurrencyRupeeIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                         ) : (
-                          <LandmarkIcon className="w-3.5 h-3.5 text-blue-600" />
+                          <LandmarkIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         )}
                         {(detail.payment_mode || 'account') === 'cash' ? 'Cash Payment' : 'Bank Transfer'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-700">{detail.department_name || 'No Dept'}</span>
-                      <span className="text-gray-300">•</span>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{detail.department_name || 'No Dept'}</span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
                       <span>{detail.designation_name || 'No Role'}</span>
                       {detail.date_of_joining && (
                         <>
-                          <span className="text-gray-300">•</span>
-                          <span className="text-gray-400">Joined {displayDate(detail.date_of_joining)}</span>
+                          <span className="text-slate-300 dark:text-slate-600">•</span>
+                          <span className="text-slate-400 dark:text-slate-500">Joined {displayDate(detail.date_of_joining)}</span>
                         </>
                       )}
                     </p>
@@ -665,7 +665,7 @@ export default function HREmployees({ user }) {
                   {rightTab === 'profile' && !isEditing && (
                     <button
                       onClick={startEditing}
-                      className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
                     >
                       <EditIcon className="w-3.5 h-3.5" />
                       <span>Edit Profile</span>
@@ -675,7 +675,7 @@ export default function HREmployees({ user }) {
               </div>
 
               {/* Dedicated Full-Width Tab Strip */}
-              <div className="bg-gray-100/70 p-1 rounded-xl border border-gray-200/80">
+              <div className="bg-slate-100/80 dark:bg-white/[0.04] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08]">
                 <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth">
                   {[
                     { id: 'profile', label: 'Profile', icon: UserIcon },
@@ -693,11 +693,11 @@ export default function HREmployees({ user }) {
                         onClick={() => setRightTab(tab.id)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                           isActive
-                            ? 'bg-[#1e40af] text-white shadow-xs'
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                            ? 'bg-emerald-600 dark:bg-emerald-500 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/[0.08]'
                         }`}
                       >
-                        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
                         <span>{tab.label}</span>
                       </button>
                     );

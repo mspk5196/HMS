@@ -182,6 +182,52 @@ const swapRosterShifts = asyncHandler(async (req, res) => {
   return res.json(success(data, 'Shifts swapped'));
 });
 
+/* ─── NON-ROSTER WEEK-OFFS ─── */
+
+const listNonRosterEmployees = asyncHandler(async (req, res) => {
+  const { departmentId, shiftCategory, month, year } = req.query;
+  const data = await rosterSvc.listNonRosterEmployees(departmentId, shiftCategory, month, year);
+  return res.json(success(data));
+});
+
+const getEmployeeWeekOffCalendar = asyncHandler(async (req, res) => {
+  const { employeeId } = req.params;
+  const { month, year } = req.query;
+  const data = await rosterSvc.getEmployeeWeekOffCalendar(employeeId, month, year);
+  return res.json(success(data));
+});
+
+const setEmployeeWeekOffDate = asyncHandler(async (req, res) => {
+  const { employeeId } = req.params;
+  const { date, is_week_off } = req.body;
+  const data = await rosterSvc.setEmployeeWeekOffDate(employeeId, date, is_week_off, req.user?.id ?? null);
+  return res.json(success(data, 'Week off updated'));
+});
+
+const setGroupWeekOffs = asyncHandler(async (req, res) => {
+  const data = await rosterSvc.setGroupWeekOffs(req.body, req.user?.id ?? null);
+  return res.json(success(data, `Applied week-offs to ${data.employee_count} employees`));
+});
+
+/* ─── DUTY TRANSFER / COVERAGE ─── */
+
+const transferDutyShift = asyncHandler(async (req, res) => {
+  const data = await rosterSvc.transferDuty(req.body, req.user?.id ?? null);
+  return res.json(success(data, 'Duty successfully transferred to replacement staff'));
+});
+
+const getEligibleReplacements = asyncHandler(async (req, res) => {
+  const { dutyDate, departmentId, excludeEmployeeId } = req.query;
+  const data = await rosterSvc.getEligibleReplacements(dutyDate, departmentId, excludeEmployeeId);
+  return res.json(success(data));
+});
+
+const listDutyTransfers = asyncHandler(async (req, res) => {
+  const { month, year, departmentId } = req.query;
+  const data = await rosterSvc.listDutyTransfers(month, year, departmentId);
+  return res.json(success(data));
+});
+
 /* ─── REMAPPING & SALARY LOGGING ─── */
 
 const remapEmployee = asyncHandler(async (req, res) => {
@@ -274,6 +320,8 @@ module.exports = {
   listShifts, createShift, updateShift, updateShiftTimings, deleteShift,
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   getRoster, getRosterWeek, getEmployeesForRoster, saveRosterDay, bulkSaveRoster, swapRosterShifts,
+  listNonRosterEmployees, getEmployeeWeekOffCalendar, setEmployeeWeekOffDate, setGroupWeekOffs,
+  transferDutyShift, getEligibleReplacements, listDutyTransfers,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
   getShiftOverrides, upsertShiftOverride, deleteShiftOverride,
   listEmployeeAuditLogs, listEmployeePayoutLogs,

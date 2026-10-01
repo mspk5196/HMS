@@ -28,7 +28,7 @@ const listSummaries = asyncHandler(async (req, res) => {
     status: status || null,
     page: Number(page), limit: Number(limit),
   });
-  return res.json(paginated(result.rows, result.total, page, limit));
+  return res.json(paginated(result.rows, result.total, page, limit, { dayStats: result.dayStats ?? null }));
 });
 
 /** GET /api/attendance/register?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD */

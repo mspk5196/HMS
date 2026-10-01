@@ -6,6 +6,7 @@ import EmployeeBiometricPunches from './EmployeeBiometricPunches';
 import AttendanceRegister from './AttendanceRegister';
 import LateAttendanceFines from './LateAttendanceFines';
 import EmployeePicker from '../../components/EmployeePicker';
+import WeekOffScheduler from './WeekOffScheduler';
 import BulkPunchesImportModal, { downloadPunchesExcelTemplate } from './BulkPunchesImportModal';
 import SyncHistoricalPunchesModal from './SyncHistoricalPunchesModal';
 import {
@@ -118,6 +119,7 @@ export default function Attendance({ user }) {
     { value: 'register', label: 'Attendance Register & Summary', show: hasPermission(user, 'attendance.view') },
     { value: 'late_fines', label: 'Late Attendance Fines', show: hasPermission(user, 'fine.view') || hasPermission(user, 'attendance.view') },
     { value: 'punches', label: 'Employee Punch Logs', show: hasPermission(user, 'biometric.view') || hasPermission(user, 'attendance.view') },
+    { value: 'week_offs', label: 'Week-Off Scheduler', show: hasPermission(user, 'hr_roster.view') || hasPermission(user, 'attendance.view') },
     { value: 'shift_overrides', label: 'Shift Overrides', show: hasPermission(user, 'attendance.edit') || hasPermission(user, 'hr.edit') || hasPermission(user, 'attendance.view') },
     { value: 'devices', label: 'Biometric Devices & Sync', show: hasPermission(user, 'biometric.manage_devices') || hasPermission(user, 'biometric.view') },
     { value: 'corrections', label: 'Corrections', show: hasPermission(user, 'attendance.view') },
@@ -204,6 +206,9 @@ export default function Attendance({ user }) {
       )}
       {tab === 'punches' && (
         <EmployeeBiometricPunches user={user} embedded={true} />
+      )}
+      {tab === 'week_offs' && (
+        <WeekOffScheduler user={user} departments={departments} />
       )}
       {tab === 'shift_overrides' && (
         <ShiftOverridesTab user={user} departments={departments} onError={(e) => fail(e)} onSuccess={flash} />
@@ -304,11 +309,16 @@ function DailyLog({ departments, onError, onSuccess }) {
     }
   };
 
-  // Quick summary stats calculation from loaded rows
-  const presentCount = rows.filter((r) => r.status === 'present').length;
-  const lateCount = rows.filter((r) => r.status === 'late_present' || Number(r.late_minutes) > 0).length;
-  const absentCount = rows.filter((r) => r.status === 'absent').length;
-  const leaveCount = rows.filter((r) => r.status === 'on_leave' || r.status === 'lop').length;
+  // Day overview stats: prioritises backend computed dayStats (whole day, independent of pagination & status filter)
+  const dayStats = meta?.dayStats || {
+    total: meta?.total || rows.length,
+    present: rows.filter((r) => r.status === 'present').length,
+    late: rows.filter((r) => r.status === 'late_present' || Number(r.late_minutes) > 0).length,
+    absent: rows.filter((r) => r.status === 'absent').length,
+    on_leave: rows.filter((r) => r.status === 'on_leave' || r.status === 'half_day_leave').length,
+    lop: rows.filter((r) => r.status === 'lop' || r.status === 'half_day_lop').length,
+    week_off: rows.filter((r) => r.status === 'week_off').length,
+  };
   const totalPages = Math.max(1, Math.ceil((meta.total || 0) / pageSize));
 
   return (
@@ -437,24 +447,98 @@ function DailyLog({ departments, onError, onSuccess }) {
           </div>
         </div>
 
-        {/* Quick Summary Badges */}
+        {/* Quick Summary Badges (Full Day Overview - independent of status filter) */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 text-xs">
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Day Overview:</span>
-          <span className="bg-gray-100 text-gray-700 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
-            Total: {meta.total || rows.length}
-          </span>
-          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
-            Present: {presentCount}
-          </span>
-          <span className="bg-amber-50 text-amber-700 border border-amber-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
-            Late: {lateCount}
-          </span>
-          <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
-            Absent: {absentCount}
-          </span>
-          <span className="bg-blue-50 text-blue-700 border border-blue-200 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
-            Leaves/LOP: {leaveCount}
-          </span>
+          
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(''); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer ${
+              !statusFilter ? 'bg-gray-800 text-white shadow-xs ring-2 ring-gray-600/30' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            title="Show all active staff for this date"
+          >
+            Total: {dayStats.total}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'present' ? '' : 'present'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'present'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-500/30'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            }`}
+            title="Filter by Present staff"
+          >
+            Present: {dayStats.present}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'late_present' ? '' : 'late_present'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'late_present'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/30'
+                : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+            }`}
+            title="Filter by Late Present staff"
+          >
+            Late: {dayStats.late}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'absent' ? '' : 'absent'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'absent'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-xs ring-2 ring-rose-500/30'
+                : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+            }`}
+            title="Filter by Absent staff"
+          >
+            Absent: {dayStats.absent}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'on_leave' ? '' : 'on_leave'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'on_leave'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/30'
+                : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+            }`}
+            title="Filter by staff On Leave"
+          >
+            On Leave: {dayStats.on_leave}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'lop' ? '' : 'lop'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'lop'
+                ? 'bg-orange-600 text-white border-orange-600 shadow-xs ring-2 ring-orange-500/30'
+                : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+            }`}
+            title="Filter by Loss of Pay (LOP)"
+          >
+            LOP: {dayStats.lop}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStatusFilter(statusFilter === 'week_off' ? '' : 'week_off'); setPage(1); }}
+            className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+              statusFilter === 'week_off'
+                ? 'bg-slate-700 text-white border-slate-700 shadow-xs ring-2 ring-slate-500/30'
+                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+            }`}
+            title="Filter by Week Off"
+          >
+            Week Off: {dayStats.week_off}
+          </button>
         </div>
       </div>
 
@@ -2189,14 +2273,14 @@ function BiometricDevices({ onError, onSuccess }) {
       {linkingUser && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-5 py-4 bg-slate-50 dark:bg-[#0c121e] text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <UsersIcon className="w-4 h-4 text-blue-400" />
+                <UsersIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="font-bold text-sm">Map Hardware PIN to Hospital Employee</h3>
               </div>
               <button
                 onClick={() => setLinkingUser(null)}
-                className="text-gray-400 hover:text-white transition-colors cursor-pointer text-base"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer text-base"
               >
                 ✕
               </button>
@@ -2284,14 +2368,14 @@ function BiometricDevices({ onError, onSuccess }) {
       {showEnrollModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-5 py-4 bg-slate-50 dark:bg-[#0c121e] text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 <h3 className="font-bold text-sm">Register Biometric Staff in Database</h3>
               </div>
               <button
                 onClick={() => setShowEnrollModal(false)}
-                className="text-gray-400 hover:text-white transition-colors cursor-pointer text-base"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer text-base"
               >
                 ✕
               </button>
@@ -2461,11 +2545,11 @@ function BiometricDevices({ onError, onSuccess }) {
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 bg-gray-900 text-white flex items-center justify-between">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-[#0c121e] text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-sm">
                 {editingDevice ? `Edit Device: ${editingDevice.name}` : 'Add Local eSSL Biometric Device'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors">
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
                 <XIcon className="w-4 h-4" />
               </button>
             </div>
@@ -2685,11 +2769,11 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
   return (
     <div className="space-y-5">
       {/* Header Banner */}
-      <div className="p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 dark:from-[#0d1624] dark:via-[#111e32] dark:to-[#0d1624] rounded-2xl text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-emerald-500/20">
         <div>
           <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Attendance Scheduling</span>
           <h2 className="text-base font-extrabold text-white mt-0.5">Single-Day Shift Overrides</h2>
-          <p className="text-xs text-blue-200 mt-1 max-w-2xl">
+          <p className="text-xs text-emerald-200/90 dark:text-emerald-300 mt-1 max-w-2xl">
             Shift overrides take precedence over standard shifts when calculating biometric attendance, shift duration, and late punch-ins. Ideal for rotating rosters, emergency ICU/special coverage, and Sunday duty shifts.
           </p>
         </div>

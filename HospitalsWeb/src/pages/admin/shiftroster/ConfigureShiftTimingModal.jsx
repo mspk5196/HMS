@@ -370,7 +370,7 @@ export default function ConfigureShiftTimingModal({ isOpen, onClose, onSuccess }
             <button
               type="submit"
               disabled={isSaving || isLoading}
-              className="px-5 py-2 text-xs font-semibold text-white bg-[#1e40af] hover:bg-[#1c399b] rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
             >
               {isSaving ? 'Saving Configurations...' : 'Save Shift Timings & Buffers'}
             </button>

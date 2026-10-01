@@ -108,23 +108,23 @@ export default function HospitalReceipt({ type, data, onClose }) {
 
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Action Header bar (hidden on print) */}
-        <div className="no-print bg-gray-900 text-white px-6 py-4 flex items-center justify-between">
+        <div className="no-print bg-slate-50 dark:bg-[#0c121e] text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {isPaid ? (
               <>
-                <span className="text-emerald-400 font-bold text-sm flex items-center gap-1.5">
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm flex items-center gap-1.5">
                   <CheckIcon className="w-4 h-4" />
                   <span>Payment Completed</span>
                 </span>
-                <span className="text-gray-400 text-xs">| {receiptNo}</span>
+                <span className="text-slate-400 text-xs">| {receiptNo}</span>
               </>
             ) : (
               <>
-                <span className="text-amber-400 font-bold text-sm flex items-center gap-1.5">
+                <span className="text-amber-600 dark:text-amber-400 font-bold text-sm flex items-center gap-1.5">
                   <DocumentTextIcon className="w-4 h-4" />
                   <span>Payment Pending / Bill</span>
                 </span>
-                <span className="text-gray-400 text-xs">| {billNo}</span>
+                <span className="text-slate-400 text-xs">| {billNo}</span>
               </>
             )}
           </div>

@@ -15,8 +15,8 @@ const success = (data = null, message = 'OK', meta = null) => ({
 const created = (data = null, message = 'Created successfully') =>
   success(data, message);
 
-const paginated = (rows, total, page, limit) =>
-  success(rows, 'OK', { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit) });
+const paginated = (rows, total, page, limit, extra = {}) =>
+  success(rows, 'OK', { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit), ...extra });
 
 const fail = (message = 'Something went wrong', errors = null) => ({
   success: false,

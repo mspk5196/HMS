@@ -1,11 +1,38 @@
-/* Clean base reset for Tailwind CSS */
+/* Clean base reset for Tailwind CSS with modern theme tokens */
 @layer base {
+  :root {
+    color-scheme: light;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --body-bg: #f8fafc;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --input-bg: #ffffff;
+    --input-border: #cbd5e1;
+    --primary-btn-bg: #059669;
+    --primary-btn-hover: #047857;
+  }
+  html.dark {
+    color-scheme: dark;
+    --card-bg: #111726;
+    --card-border: #1e293b;
+    --body-bg: #0b0e14;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --input-bg: #0e1422;
+    --input-border: #243048;
+    --primary-btn-bg: #059669;
+    --primary-btn-hover: #10b981;
+  }
   body {
     margin: 0;
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background-color: #f1f4f8;
-    color: #1f2937;
+    background-color: var(--body-bg);
+    color: var(--text-primary);
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
@@ -14,6 +41,322 @@
   min-height: 100vh;
   margin: 0;
   padding: 0;
+}
+
+/* ── Modern Theme Overrides: Primary Brand Colors ── */
+/* Replaces legacy royal blue with Modern Direction B Emerald/Forest & Slate */
+.bg-\[\#1e40af\],
+.bg-\[\#1c399b\],
+.bg-\[\#1b3b82\],
+.bg-blue-600,
+.bg-blue-700 {
+  background-color: var(--primary-btn-bg) !important;
+  color: #ffffff !important;
+}
+.bg-\[\#1e40af\]:hover,
+.bg-\[\#1c399b\]:hover,
+.bg-\[\#1b3b82\]:hover,
+.bg-blue-600:hover,
+.bg-blue-700:hover {
+  background-color: var(--primary-btn-hover) !important;
+}
+
+.text-\[\#1e40af\],
+.text-blue-600,
+.text-blue-700 {
+  color: #059669 !important;
+}
+html.dark .text-\[\#1e40af\],
+html.dark .text-blue-600,
+html.dark .text-blue-700 {
+  color: #34d399 !important;
+}
+
+.border-blue-600,
+.border-blue-500 {
+  border-color: #059669 !important;
+}
+html.dark .border-blue-600,
+html.dark .border-blue-500 {
+  border-color: #10b981 !important;
+}
+
+/* Soft Blue badges, cards and alerts remapped to modern emerald tints (both light & dark) */
+.bg-blue-50,
+[class*="bg-blue-50/"] {
+  background-color: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+}
+html.dark .bg-blue-50,
+html.dark [class*="bg-blue-50/"] {
+  background-color: rgba(5, 150, 105, 0.15) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+
+.border-blue-100,
+.border-blue-200,
+[class*="border-blue-100/"],
+[class*="border-blue-200/"] {
+  border-color: #a7f3d0 !important;
+}
+html.dark .border-blue-100,
+html.dark .border-blue-200,
+html.dark [class*="border-blue-100/"],
+html.dark [class*="border-blue-200/"] {
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+
+.text-blue-800,
+.text-blue-900,
+.text-blue-700 {
+  color: #065f46 !important;
+}
+html.dark .text-blue-800,
+html.dark .text-blue-900,
+html.dark .text-blue-700,
+html.dark .text-blue-600 {
+  color: #6ee7b7 !important;
+}
+
+/* Secondary dark action buttons mapped to modern emerald/slate buttons */
+button.bg-gray-800,
+button.bg-gray-900,
+a.bg-gray-800,
+a.bg-gray-900 {
+  background-color: var(--primary-btn-bg) !important;
+  color: #ffffff !important;
+}
+button.bg-gray-800:hover,
+button.bg-gray-900:hover,
+a.bg-gray-800:hover,
+a.bg-gray-900:hover {
+  background-color: var(--primary-btn-hover) !important;
+}
+
+/* ── Dark Banners (Payroll, Attendance, Fines) adapted to modern Emerald & Obsidian theme ── */
+.bg-gradient-to-r[class*="from-blue-900"],
+.bg-gradient-to-r[class*="from-slate-900"],
+[class*="from-blue-900"][class*="to-indigo-950"],
+[class*="from-slate-900"][class*="to-indigo-950"] {
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #0f172a 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #ffffff !important;
+}
+html.dark .bg-gradient-to-r[class*="from-blue-900"],
+html.dark .bg-gradient-to-r[class*="from-slate-900"],
+html.dark [class*="from-blue-900"][class*="to-indigo-950"],
+html.dark [class*="from-slate-900"][class*="to-indigo-950"] {
+  background: linear-gradient(135deg, #09121e 0%, #0f1b2d 50%, #09121e 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #f8fafc !important;
+}
+
+.bg-gradient-to-r[class*="from-blue-900"] .text-blue-200,
+.bg-gradient-to-r[class*="from-blue-900"] .text-blue-300,
+.bg-gradient-to-r[class*="from-slate-900"] .text-blue-200,
+.bg-gradient-to-r[class*="from-slate-900"] .text-blue-300,
+[class*="to-indigo-950"] .text-blue-200,
+[class*="to-indigo-950"] .text-blue-300 {
+  color: #a7f3d0 !important;
+}
+html.dark .bg-gradient-to-r[class*="from-blue-900"] .text-blue-200,
+html.dark .bg-gradient-to-r[class*="from-blue-900"] .text-blue-300,
+html.dark .bg-gradient-to-r[class*="from-slate-900"] .text-blue-200,
+html.dark .bg-gradient-to-r[class*="from-slate-900"] .text-blue-300,
+html.dark [class*="to-indigo-950"] .text-blue-200,
+html.dark [class*="to-indigo-950"] .text-blue-300 {
+  color: #6ee7b7 !important;
+}
+
+/* Light header gradients remapped cleanly */
+.bg-gradient-to-r[class*="from-gray-50"],
+.bg-gradient-to-r[class*="from-blue-50"] {
+  background: linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%) !important;
+  border-color: #d1fae5 !important;
+}
+html.dark .bg-gradient-to-r[class*="from-gray-50"],
+html.dark .bg-gradient-to-r[class*="from-blue-50"] {
+  background: linear-gradient(135deg, #0d1424 0%, #111a2e 100%) !important;
+  border-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+/* ── Comprehensive Dark Mode Adaptation for All Modals, Cards & Surfaces ── */
+html.dark main,
+html.dark div:not([class*="bg-"]):not([class*="dark:"]) {
+  color: var(--text-primary);
+}
+
+/* Cards, Panes & Surfaces */
+html.dark .bg-white,
+html.dark [class*="bg-white/"]:not([class*="dark:bg-"]):not([class*="hover:"]) {
+  background-color: #111726 !important;
+  border-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+html.dark .bg-gray-50,
+html.dark [class*="bg-gray-50/"]:not([class*="dark:bg-"]),
+html.dark .bg-slate-50,
+html.dark [class*="bg-slate-50/"]:not([class*="dark:bg-"]) {
+  background-color: #0c121e !important;
+  border-color: #1a2436 !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .bg-gray-100,
+html.dark [class*="bg-gray-100/"]:not([class*="dark:bg-"]),
+html.dark .bg-slate-100,
+html.dark [class*="bg-slate-100/"]:not([class*="dark:bg-"]) {
+  background-color: #151e30 !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+/* Hover States in Dark Mode */
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover,
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover,
+html.dark [class*="hover:bg-gray-50"]:hover,
+html.dark [class*="hover:bg-gray-100"]:hover,
+html.dark [class*="hover:bg-white"]:hover {
+  background-color: #172133 !important;
+  color: #ffffff !important;
+}
+
+/* Typography in Dark Mode */
+html.dark .text-gray-900:not([class*="dark:text-"]),
+html.dark .text-slate-900:not([class*="dark:text-"]) {
+  color: #f8fafc !important;
+}
+
+html.dark .text-gray-800:not([class*="dark:text-"]),
+html.dark .text-slate-800:not([class*="dark:text-"]) {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-gray-700:not([class*="dark:text-"]),
+html.dark .text-slate-700:not([class*="dark:text-"]) {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-gray-600:not([class*="dark:text-"]),
+html.dark .text-slate-600:not([class*="dark:text-"]) {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-gray-500:not([class*="dark:text-"]),
+html.dark .text-slate-500:not([class*="dark:text-"]) {
+  color: #64748b !important;
+}
+
+html.dark .text-gray-400:not([class*="dark:text-"]),
+html.dark .text-slate-400:not([class*="dark:text-"]) {
+  color: #64748b !important;
+}
+
+/* Borders and Dividers in Dark Mode */
+html.dark .border-gray-100,
+html.dark [class*="border-gray-100/"]:not([class*="dark:border-"]),
+html.dark .border-gray-200,
+html.dark [class*="border-gray-200/"]:not([class*="dark:border-"]),
+html.dark .border-gray-300,
+html.dark [class*="border-gray-300/"]:not([class*="dark:border-"]),
+html.dark .border-slate-100,
+html.dark [class*="border-slate-100/"]:not([class*="dark:border-"]),
+html.dark .border-slate-200,
+html.dark [class*="border-slate-200/"]:not([class*="dark:border-"]),
+html.dark .border-slate-300,
+html.dark [class*="border-slate-300/"]:not([class*="dark:border-"]),
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b !important;
+}
+
+/* Inputs, Selects, Dropdowns & Textareas */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #0e1422 !important;
+  border-color: #243048 !important;
+  color: #f1f5f9 !important;
+}
+html.dark select option {
+  background-color: #0e1422 !important;
+  color: #f1f5f9 !important;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #10b981 !important;
+  outline: none !important;
+}
+
+/* Table Headers & Rows in Dark Mode */
+html.dark thead,
+html.dark th {
+  background-color: #0c121e !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+
+html.dark td {
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark tbody tr:hover {
+  background-color: #141c2c !important;
+}
+
+/* ── Universal Dark Modal Backdrop & Modal Card Adaptation ── */
+html.dark .fixed.inset-0 {
+  background-color: rgba(3, 7, 18, 0.82) !important;
+  backdrop-filter: blur(6px) !important;
+}
+
+/* Modal Content Containers */
+html.dark .fixed.inset-0 > div:not([class*="fixed"]),
+html.dark .fixed.inset-0 .bg-white {
+  background-color: #111726 !important;
+  border-color: #243048 !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Inner panels & headers in modals */
+html.dark .fixed.inset-0 .border-b,
+html.dark .fixed.inset-0 .border-t,
+html.dark .fixed.inset-0 [class*="border-gray-"],
+html.dark .fixed.inset-0 [class*="border-slate-"] {
+  border-color: #1e293b !important;
+}
+
+html.dark .fixed.inset-0 [class*="bg-gray-50"],
+html.dark .fixed.inset-0 [class*="bg-slate-50"],
+html.dark .fixed.inset-0 [class*="bg-gray-100"],
+html.dark .fixed.inset-0 [class*="bg-slate-100"] {
+  background-color: #0c121e !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+/* Modal Close & Ghost Buttons */
+html.dark .fixed.inset-0 button:not([class*="bg-"]):not([class*="text-"]) {
+  color: #94a3b8;
+}
+html.dark .fixed.inset-0 button:not([class*="bg-"]):not([class*="text-"]):hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Universal Print Styles for Records & Reports ── */

@@ -111,8 +111,9 @@ export default function AuditLogs({ user }) {
   const fetchStats = useCallback(async () => {
     try {
       const res = await apiFetch('/audit/stats');
-      if (res?.success && res.data) {
-        setStats(res.data);
+      const statsData = res?.data || res;
+      if (statsData) {
+        setStats(statsData);
       }
     } catch (_) {
       // Ignore background stats failures
@@ -134,12 +135,13 @@ export default function AuditLogs({ user }) {
       if (endDate) params.set('endDate', endDate);
 
       const res = await apiFetch(`/audit/logs?${params.toString()}`);
-      if (res?.success && res.data) {
-        setLogs(res.data.logs || []);
-        setTotalCount(res.data.total || 0);
-        setTotalPages(res.data.totalPages || 1);
+      const data = res?.data || res;
+      if (data && Array.isArray(data.logs)) {
+        setLogs(data.logs);
+        setTotalCount(data.total || 0);
+        setTotalPages(data.totalPages || 1);
       } else {
-        setErrorMsg(res?.message || 'Failed to load request audit logs');
+        setErrorMsg('Failed to load request audit logs');
       }
     } catch (e) {
       setErrorMsg(e.message || 'Error fetching audit logs');
@@ -432,7 +434,7 @@ export default function AuditLogs({ user }) {
               {isLoading && logs.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-gray-400">
-                    <RefreshIcon className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    <SyncIcon className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                     <span>Loading request audit logs…</span>
                   </td>
                 </tr>

@@ -236,6 +236,148 @@ const swapShifts = async ({ employeeA, employeeB, rosterDate }, userId) => {
   return result;
 };
 
+/* ─── Non-Roster Week-Off Services ─── */
+
+const listNonRosterEmployees = async (departmentId, shiftCategory, month, year) => {
+  const m = Number(month) || (new Date().getMonth() + 1);
+  const y = Number(year) || new Date().getFullYear();
+
+  const emps = await q.getNonRosterEmployees(departmentId, shiftCategory);
+  if (!emps.length) return [];
+
+  const empIds = emps.map((e) => e.employee_id);
+  const weekOffCounts = await q.countWeekOffsInMonth(empIds, `${y}-${String(m).padStart(2, '0')}-01`);
+
+  return emps.map((e) => ({
+    ...e,
+    month: m,
+    year: y,
+    week_offs_taken: weekOffCounts[e.employee_id] ?? 0,
+    week_offs_entitled: e.weekly_off_count ?? 4,
+  }));
+};
+
+const getEmployeeWeekOffCalendar = async (employeeId, month, year) => {
+  const empId = Number(employeeId);
+  if (!empId) throw new AppError('Valid employeeId is required', 400);
+
+  const m = Number(month) || (new Date().getMonth() + 1);
+  const y = Number(year) || new Date().getFullYear();
+
+  const dates = await q.getEmployeeWeekOffs(empId, m, y);
+  return { employee_id: empId, month: m, year: y, week_off_dates: dates };
+};
+
+const setEmployeeWeekOffDate = async (employeeId, date, isWeekOff, userId) => {
+  const empId = Number(employeeId);
+  if (!empId) throw new AppError('Valid employeeId is required', 400);
+  if (!isValidDate(date)) throw new AppError('date must be YYYY-MM-DD', 400);
+
+  await q.setWeekOffEntry(empId, date, Boolean(isWeekOff), userId);
+  return { employee_id: empId, date, is_week_off: Boolean(isWeekOff) };
+};
+
+const setGroupWeekOffs = async ({ employeeIds, dates, isWeekOff = true }, userId) => {
+  if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
+    throw new AppError('employeeIds must be a non-empty array', 400);
+  }
+  if (!Array.isArray(dates) || dates.length === 0) {
+    throw new AppError('dates must be a non-empty array of YYYY-MM-DD', 400);
+  }
+
+  for (const d of dates) {
+    if (!isValidDate(d)) throw new AppError(`Invalid date: ${d}`, 400);
+  }
+
+  let totalApplied = 0;
+  for (const empId of employeeIds) {
+    for (const d of dates) {
+      await q.setWeekOffEntry(Number(empId), d, Boolean(isWeekOff), userId);
+      totalApplied++;
+    }
+  }
+
+  return { total_applied: totalApplied, employee_count: employeeIds.length, date_count: dates.length };
+};
+
+/* ─── Duty Transfer / Replacement Services ─── */
+
+const transferDuty = async ({
+  fromEmployeeId,
+  toEmployeeId,
+  dutyDate,
+  reason,
+  leaveRequestId,
+}, userId) => {
+  const fromId = Number(fromEmployeeId);
+  const toId = Number(toEmployeeId);
+
+  if (!fromId || !toId) throw new AppError('Both fromEmployeeId and toEmployeeId are required', 400);
+  if (fromId === toId) throw new AppError('Cannot transfer duty to the same employee', 400);
+  if (!isValidDate(dutyDate)) throw new AppError('dutyDate must be YYYY-MM-DD', 400);
+
+  // Check fromEmployee duty on dutyDate
+  const entry = await q.getRosterEntry(fromId, dutyDate);
+  let startTime = entry?.custom_start_time || null;
+  let endTime = entry?.custom_end_time || null;
+  let isNight = entry?.is_night_shift ? 1 : 0;
+
+  // If no specific roster entry, fallback to standard shifts or employee category
+  if (!startTime || !endTime) {
+    const [empRows] = await db.execute(
+      `SELECT shift_category, custom_shift_start, custom_shift_end FROM employees WHERE id = ?`,
+      [fromId]
+    );
+    const emp = empRows[0];
+    if (emp?.shift_category === 'night') {
+      startTime = '20:00:00';
+      endTime = '08:00:00';
+      isNight = 1;
+    } else {
+      startTime = emp?.custom_shift_start || '08:30:00';
+      endTime = emp?.custom_shift_end || '18:30:00';
+      isNight = 0;
+    }
+  }
+
+  const transferId = await q.executeDutyTransfer({
+    fromEmployeeId: fromId,
+    toEmployeeId: toId,
+    dutyDate,
+    shiftId: null,
+    customStartTime: startTime,
+    customEndTime: endTime,
+    isNightShift: isNight,
+    leaveRequestId: leaveRequestId ? Number(leaveRequestId) : null,
+    reason: reason || 'Shift replacement / cover',
+    transferredBy: userId,
+  });
+
+  return {
+    transfer_id: transferId,
+    from_employee_id: fromId,
+    to_employee_id: toId,
+    duty_date: dutyDate,
+    shift_details: {
+      start_time: startTime,
+      end_time: endTime,
+      is_night_shift: isNight,
+    },
+    reason,
+  };
+};
+
+const getEligibleReplacements = async (dutyDate, departmentId, excludeEmployeeId) => {
+  if (!isValidDate(dutyDate)) throw new AppError('dutyDate must be YYYY-MM-DD', 400);
+  return q.getEligibleReplacements(dutyDate, departmentId, excludeEmployeeId);
+};
+
+const listDutyTransfers = async (month, year, departmentId) => {
+  const m = Number(month) || (new Date().getMonth() + 1);
+  const y = Number(year) || new Date().getFullYear();
+  return q.getDutyTransfers(m, y, departmentId);
+};
+
 module.exports = {
   getWeek,
   getRoster,
@@ -243,5 +385,13 @@ module.exports = {
   saveRosterDay,
   bulkSaveRoster,
   swapShifts,
+  listNonRosterEmployees,
+  getEmployeeWeekOffCalendar,
+  setEmployeeWeekOffDate,
+  setGroupWeekOffs,
+  transferDuty,
+  getEligibleReplacements,
+  listDutyTransfers,
   MAX_CONSECUTIVE_WORKED_DAYS,
 };
+

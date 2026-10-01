@@ -65,9 +65,19 @@ router.delete('/shifts/:id', gate('hr_shift.delete', ctrl.deleteShift));
 // Roster — static segments must precede any parameterised ones
 router.get('/roster/week', canViewRoster, ctrl.getRosterWeek);
 router.get('/roster/employees', canViewRoster, ctrl.getEmployeesForRoster);
+router.get('/roster/transfers', canViewRoster, ctrl.listDutyTransfers);
+router.get('/roster/transfer-duty/eligible-replacements', canViewRoster, ctrl.getEligibleReplacements);
+router.post('/roster/transfer-duty', requirePermissions(['hr_roster.swap_shift', 'hr_roster.save_day']), ctrl.transferDutyShift);
 router.get('/roster', canViewRoster, ctrl.getRoster);
 router.post('/roster/day', requirePermissions(['hr_roster.save_day']), ctrl.saveRosterDay);
 router.post('/roster/bulk', gate('hr_roster.bulk_save', ctrl.bulkSaveRoster));
 router.post('/roster/swap', requirePermissions(['hr_roster.swap_shift']), ctrl.swapRosterShifts);
 
+// Non-Roster Week-Off Management (Day, Night, General)
+router.get('/week-offs/non-roster-employees', canViewRoster, ctrl.listNonRosterEmployees);
+router.get('/week-offs/employee/:employeeId', canViewRoster, ctrl.getEmployeeWeekOffCalendar);
+router.post('/week-offs/employee/:employeeId', requirePermissions(['hr_roster.set_week_off']), ctrl.setEmployeeWeekOffDate);
+router.post('/week-offs/group', requirePermissions(['hr_roster.set_week_off']), ctrl.setGroupWeekOffs);
+
 module.exports = router;
+

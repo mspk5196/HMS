@@ -430,7 +430,55 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
       [fromDate, ...params.slice(1)]
     );
 
-    return { rows, total };
+    // Calculate day overview breakdown across all employees for this date
+    // Note: status filter is intentionally excluded so changing status dropdown does not zero out overview counts
+    const statsFilters = ["e.status = 'active'"];
+    const statsParams = [fromDate];
+
+    if (employeeId) {
+      statsFilters.push('e.id = ?');
+      statsParams.push(employeeId);
+    }
+    if (departmentId) {
+      statsFilters.push('e.department_id = ?');
+      statsParams.push(departmentId);
+    }
+    if (search && String(search).trim()) {
+      statsFilters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
+      statsParams.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+    }
+
+    const statsWhere = statsFilters.join(' AND ');
+    const [[statsRow]] = await db.query(
+      `SELECT
+         COUNT(*) AS total,
+         COALESCE(SUM(CASE WHEN ads.status = 'present' THEN 1 ELSE 0 END), 0) AS present,
+         COALESCE(SUM(CASE WHEN ads.status = 'late_present' OR ads.late_minutes > 0 THEN 1 ELSE 0 END), 0) AS late,
+         COALESCE(SUM(CASE WHEN ads.status = 'absent' OR ads.status IS NULL THEN 1 ELSE 0 END), 0) AS absent,
+         COALESCE(SUM(CASE WHEN ads.status IN ('on_leave', 'half_day_leave') THEN 1 ELSE 0 END), 0) AS on_leave,
+         COALESCE(SUM(CASE WHEN ads.status IN ('lop', 'half_day_lop') THEN 1 ELSE 0 END), 0) AS lop,
+         COALESCE(SUM(CASE WHEN ads.status = 'week_off' THEN 1 ELSE 0 END), 0) AS week_off,
+         COALESCE(SUM(CASE WHEN ads.status = 'holiday' THEN 1 ELSE 0 END), 0) AS holiday,
+         COALESCE(SUM(CASE WHEN ads.is_missed_punch = 1 THEN 1 ELSE 0 END), 0) AS missed_punch
+       FROM employees e
+       LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       WHERE ${statsWhere}`,
+      statsParams
+    );
+
+    const dayStats = {
+      total: Number(statsRow?.total ?? 0),
+      present: Number(statsRow?.present ?? 0),
+      late: Number(statsRow?.late ?? 0),
+      absent: Number(statsRow?.absent ?? 0),
+      on_leave: Number(statsRow?.on_leave ?? 0),
+      lop: Number(statsRow?.lop ?? 0),
+      week_off: Number(statsRow?.week_off ?? 0),
+      holiday: Number(statsRow?.holiday ?? 0),
+      missed_punch: Number(statsRow?.missed_punch ?? 0),
+    };
+
+    return { rows, total, dayStats };
   }
 
   // Multi-day range query:
