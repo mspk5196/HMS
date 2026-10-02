@@ -60,11 +60,26 @@ function formatStatusBadge(status) {
   return { label: `${code}`, cls: 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700' };
 }
 
+function parseISTDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  let str = String(v).trim();
+  // If string format is "YYYY-MM-DD HH:mm:ss" without offset, treat as IST
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(str)) {
+    if (!str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
+      str = str.replace(' ', 'T') + '+05:30';
+    }
+  }
+  const d = new Date(str);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function formatDateTime(v) {
   if (!v) return '—';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return '—';
+  const d = parseISTDate(v);
+  if (!d) return '—';
   return d.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -77,9 +92,11 @@ function formatDateTime(v) {
 
 function timeAgo(v) {
   if (!v) return '';
-  const diff = Date.now() - new Date(v).getTime();
+  const d = parseISTDate(v);
+  if (!d) return '';
+  const diff = Date.now() - d.getTime();
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 60) return `${Math.max(0, sec)}s ago`;
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m ago`;
   const hr = Math.floor(min / 60);

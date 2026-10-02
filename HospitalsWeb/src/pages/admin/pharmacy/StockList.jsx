@@ -23,6 +23,7 @@ export default function StockList({ user }) {
 
   const [deletingMedicine, setDeletingMedicine] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [stockFilter, setStockFilter] = useState('ALL'); // 'ALL' | 'LOW' | 'OUT'
 
   const flash = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); };
 
@@ -104,10 +105,21 @@ export default function StockList({ user }) {
 
   const statusFor = (m) => {
     const stock = Number(m.total_stock || 0);
-    if (stock <= 0) return { label: 'Out of Stock', tone: 'bg-rose-50 text-rose-600' };
-    if (stock <= Number(m.reorder_level || 0)) return { label: 'Low Stock', tone: 'bg-amber-50 text-amber-600' };
-    return { label: 'In Stock', tone: 'bg-emerald-50 text-emerald-600' };
+    if (stock <= 0) return { label: 'Out of Stock', tone: 'bg-rose-50 text-rose-600 border-rose-200' };
+    if (stock <= Number(m.reorder_level || 0)) return { label: '⚠ Low Stock', tone: 'bg-amber-50 text-amber-700 border-amber-200' };
+    return { label: 'In Stock', tone: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
   };
+
+  const lowStockCount = medicines.filter((m) => Number(m.total_stock || 0) > 0 && Number(m.total_stock || 0) <= Number(m.reorder_level || 0)).length;
+  const outOfStockCount = medicines.filter((m) => Number(m.total_stock || 0) <= 0).length;
+
+  const filteredMedicines = medicines.filter((m) => {
+    const stock = Number(m.total_stock || 0);
+    const reorder = Number(m.reorder_level || 0);
+    if (stockFilter === 'LOW') return stock > 0 && stock <= reorder;
+    if (stockFilter === 'OUT') return stock <= 0;
+    return true;
+  });
 
   if (showMedicineForm) {
     return (
@@ -131,19 +143,63 @@ export default function StockList({ user }) {
       {successMsg && <Banner>{successMsg}</Banner>}
       {errorMsg && <Banner tone="error">{errorMsg}</Banner>}
 
-      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-72">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search medicine, generic name or barcode..."
-            className="w-full pl-8 pr-3.5 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 placeholder-gray-300"
-          />
-          <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
+      <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search medicine, generic name or barcode..."
+              className="w-full pl-8 pr-3.5 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 placeholder-gray-300"
+            />
+            <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setStockFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                stockFilter === 'ALL' ? 'bg-[#1e40af] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All ({medicines.length})
+            </button>
+            <button
+              onClick={() => setStockFilter('LOW')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
+                stockFilter === 'LOW'
+                  ? 'bg-amber-600 text-white'
+                  : lowStockCount > 0
+                  ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <span>⚠ Low Stock</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${stockFilter === 'LOW' ? 'bg-amber-700 text-white' : 'bg-amber-200 text-amber-900'}`}>
+                {lowStockCount}
+              </span>
+            </button>
+            <button
+              onClick={() => setStockFilter('OUT')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
+                stockFilter === 'OUT'
+                  ? 'bg-rose-600 text-white'
+                  : outOfStockCount > 0
+                  ? 'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <span>Out of Stock</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${stockFilter === 'OUT' ? 'bg-rose-700 text-white' : 'bg-rose-200 text-rose-900'}`}>
+                {outOfStockCount}
+              </span>
+            </button>
+          </div>
         </div>
+
         {hasPermission(user, 'pharmacy.create') && (
           <button
             onClick={() => { setEditingMedicine(null); setShowMedicineForm(true); }}
@@ -170,9 +226,9 @@ export default function StockList({ user }) {
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
               <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading…</td></tr>
-            ) : medicines.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-gray-400">No medicines found.</td></tr>
-            ) : medicines.map((m) => {
+            ) : filteredMedicines.length === 0 ? (
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">No medicines match the selected filter.</td></tr>
+            ) : filteredMedicines.map((m) => {
               const status = statusFor(m);
               const isExpanded = expandedMedicineId === m.id;
               return (

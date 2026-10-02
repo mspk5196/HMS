@@ -45,8 +45,26 @@ const saveConsultation = async (req, res, next) => {
   }
 };
 
+const listAddenda = async (req, res, next) => {
+  try {
+    const data = await service.getAddenda(req.params.id);
+    res.json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
+const addAddendum = async (req, res, next) => {
+  try {
+    const employeeId = req.user?.employee_id;
+    if (!employeeId) return res.status(403).json({ success: false, message: 'Only registered employees can add addenda.' });
+    const data = await service.addAddendum(req.params.id, employeeId, req.body.note);
+    res.status(201).json({ success: true, data });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   getConsultation,
   getConsultationById,
-  saveConsultation
+  saveConsultation,
+  listAddenda,
+  addAddendum,
 };

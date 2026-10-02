@@ -349,13 +349,42 @@ function PatientForm({ initial, onBack, onSaved, onError }) {
             </select>
           </Field>
           <Field label="Age (years)" error={errors.age_years}>
-            <input type="number" value={form.age_years} onChange={(e) => setField('age_years')(e.target.value)} className={inputCls(errors.age_years)} />
+            <input
+              type="number"
+              value={form.age_years}
+              onChange={(e) => setField('age_years')(e.target.value)}
+              className={inputCls(errors.age_years)}
+              placeholder="e.g. 35"
+            />
           </Field>
           <Field label="Date of Birth">
-            <input type="date" value={form.date_of_birth} onChange={(e) => setField('date_of_birth')(e.target.value)} className={inputCls()} />
+            <input
+              type="date"
+              value={form.date_of_birth}
+              onChange={(e) => {
+                const dob = e.target.value;
+                setField('date_of_birth')(dob);
+                if (dob) {
+                  const diff = Date.now() - new Date(dob).getTime();
+                  const computed = Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+                  if (!form.age_years) setField('age_years')(String(computed));
+                }
+              }}
+              className={inputCls()}
+            />
           </Field>
           <Field label="Blood Group">
-            <input type="text" placeholder="e.g. O+" value={form.blood_group} onChange={(e) => setField('blood_group')(e.target.value)} className={inputCls()} />
+            <select value={form.blood_group} onChange={(e) => setField('blood_group')(e.target.value)} className={inputCls()}>
+              <option value="">-- Unknown --</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
           </Field>
           <div className="md:col-span-2">
             <Field label="Address">

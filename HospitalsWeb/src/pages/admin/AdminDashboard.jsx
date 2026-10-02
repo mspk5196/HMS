@@ -11,6 +11,7 @@ import Payroll from './Payroll';
 import PatientRecords from './PatientRecords';
 import Appointments from './Appointments';
 import ConsultationRx from './ConsultationRx';
+import VisitingDoctors from './VisitingDoctors';
 import PharmacyStock from './pharmacy/StockList';
 import PharmacyCategories from './pharmacy/MedicineCategories';
 import PharmacyDispense from './pharmacy/DispenseCounter';
@@ -44,6 +45,7 @@ const ALL_TABS = [
   'patient-records',
   'appointments',
   'consultation-rx',
+  'visiting-doctors',
   'admission-beds',
   'discharge',
   'collect-payment',
@@ -226,6 +228,8 @@ export default function AdminDashboard({ user, onLogout }) {
         return <Appointments user={user} />;
       case 'consultation-rx':
         return <ConsultationRx user={user} />;
+      case 'visiting-doctors':
+        return <VisitingDoctors user={user} />;
       case 'pharmacy-stock':
         return <PharmacyStock user={user} />;
       case 'pharmacy-categories':

@@ -102,6 +102,7 @@ export default function PurchaseOrders({ user }) {
               <th className="p-3.5">PO Number</th>
               <th className="p-3.5">Supplier</th>
               <th className="p-3.5">Order Date</th>
+              <th className="p-3.5">Expected By</th>
               <th className="p-3.5">Ordered / Received</th>
               <th className="p-3.5">Status</th>
               <th className="p-3.5 text-right">Actions</th>
@@ -109,14 +110,15 @@ export default function PurchaseOrders({ user }) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
-              <tr><td colSpan={6} className="p-8 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading…</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-gray-400">No purchase orders yet.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">No purchase orders yet.</td></tr>
             ) : orders.map((o) => (
               <tr key={o.id} className="hover:bg-gray-50/80">
                 <td className="p-3.5 font-bold text-blue-600">{o.po_number}</td>
                 <td className="p-3.5">{o.supplier_name}</td>
                 <td className="p-3.5">{formatDate(o.order_date)}</td>
+                <td className="p-3.5 text-gray-600">{formatDate(o.expected_date) || '—'}</td>
                 <td className="p-3.5">{o.total_received_qty} / {o.total_ordered_qty}</td>
                 <td className="p-3.5"><StatusBadge status={o.status} /></td>
                 <td className="p-3.5 text-right space-x-2 whitespace-nowrap">

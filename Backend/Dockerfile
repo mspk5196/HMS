@@ -2,8 +2,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install native build tools needed for packages like bcrypt
-RUN apk add --no-cache python3 make g++
+# Install native build tools needed for packages like bcrypt and tzdata for IST timezone
+RUN apk add --no-cache python3 make g++ tzdata
+
+# Set timezone to Asia/Kolkata (IST)
+ENV TZ=Asia/Kolkata
 
 # Copy package manifests
 COPY package*.json ./
@@ -18,6 +21,7 @@ COPY . .
 EXPOSE 5000
 
 ENV PORT=5000 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    TZ=Asia/Kolkata
 
 CMD ["node", "server.js"]

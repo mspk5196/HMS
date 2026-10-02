@@ -1775,12 +1775,21 @@ function EmployeeAuditLogsSection({ employeeId }) {
               <tr><td colSpan={6} className="p-6 text-center text-gray-400">No activity logged for this filter.</td></tr>
             ) : (
               logs.map((log) => {
-                const dateStr = log.created_at
-                  ? new Date(log.created_at).toLocaleString('en-IN', {
-                      day: '2-digit', month: 'short', year: 'numeric',
-                      hour: '2-digit', minute: '2-digit', hour12: true
-                    })
-                  : '—';
+                let dateStr = '—';
+                if (log.created_at) {
+                  let raw = String(log.created_at).trim();
+                  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(raw) && !raw.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(raw)) {
+                    raw = raw.replace(' ', 'T') + '+05:30';
+                  }
+                  const d = new Date(raw);
+                  dateStr = !Number.isNaN(d.getTime())
+                    ? d.toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', hour12: true
+                      })
+                    : '—';
+                }
 
                 return (
                   <tr key={log.id} className="hover:bg-gray-50/80">

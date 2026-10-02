@@ -76,6 +76,8 @@ export function canViewTab(user, tabId) {
       return hasPermission(user, 'appointment.view');
     case 'consultation-rx':
       return hasPermission(user, 'consultation.view');
+    case 'visiting-doctors':
+      return hasPermission(user, 'visiting_doctor.view');
     case 'admission-beds':
       return hasPermission(user, 'admission.view') || hasPermission(user, 'facility.view');
     case 'discharge':

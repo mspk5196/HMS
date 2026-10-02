@@ -3,6 +3,7 @@ import { apiFetch } from '../../util/api';
 import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import { CheckIcon } from '../../components/Icons';
+import HospitalPrescription from '../../components/HospitalPrescription';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -41,7 +42,14 @@ export default function ConsultationRx({ user }) {
     }
   }, [date]);
 
-  useEffect(() => { loadQueue(); }, [loadQueue]);
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    loadQueue();
+    const timer = setInterval(() => {
+      loadQueue();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [loadQueue]);
 
   return (
     <div className="space-y-6">
@@ -129,6 +137,16 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
   const [items, setItems] = useState([{ ...emptyItem }]);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Vitals
+  const [bpSystolic, setBpSystolic] = useState('');
+  const [bpDiastolic, setBpDiastolic] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [pulse, setPulse] = useState('');
+  const [spo2, setSpo2] = useState('');
+  const [weight, setWeight] = useState('');
+  const [height, setHeight] = useState('');
+  const [bloodSugar, setBloodSugar] = useState('');
+
   useEffect(() => {
     (async () => {
       try {
@@ -180,6 +198,14 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
           complaints: complaints.trim() || null,
           doctor_notes: doctorNotes.trim() || null,
           follow_up_date: followUpDate || null,
+          bp_systolic: bpSystolic ? Number(bpSystolic) : null,
+          bp_diastolic: bpDiastolic ? Number(bpDiastolic) : null,
+          temperature: temperature ? Number(temperature) : null,
+          pulse: pulse ? Number(pulse) : null,
+          spo2: spo2 ? Number(spo2) : null,
+          weight: weight ? Number(weight) : null,
+          height: height ? Number(height) : null,
+          blood_sugar: bloodSugar ? Number(bloodSugar) : null,
           prescription_items: validItems.map((it) => ({
             medicine_id: it.medicine_id,
             dose_morning: Number(it.dose_morning) || 0,
@@ -199,35 +225,97 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
     }
   };
 
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+
   if (isLoading) {
     return <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-8 text-center text-xs text-gray-400">Loading…</div>;
   }
 
   if (existing) {
+    const hasVitals = existing.bp_systolic || existing.temperature || existing.pulse || existing.spo2 || existing.weight;
     return (
-      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-4">
-        <h2 className="text-sm font-bold text-gray-900">
-          Consultation Already Recorded — <span className="text-blue-600">{appointment.patient_name}</span>
-        </h2>
-        <div className="text-xs text-gray-600 space-y-1">
-          <div><span className="font-semibold text-gray-800">Diagnosis:</span> {existing.diagnosis || '—'}</div>
-          <div><span className="font-semibold text-gray-800">Complaints:</span> {existing.complaints || '—'}</div>
-          <div><span className="font-semibold text-gray-800">Doctor:</span> {existing.doctor_name || '—'}</div>
-          {existing.follow_up_date && <div><span className="font-semibold text-gray-800">Follow-up:</span> {String(existing.follow_up_date).slice(0, 10)}</div>}
-        </div>
-        {existing.prescription_items?.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Prescribed</div>
-            <div className="flex flex-wrap gap-1.5">
-              {existing.prescription_items.map((it, i) => (
-                <span key={i} className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md text-xs font-medium">
-                  {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d ({it.food_instruction.replace(/_/g, ' ')})
-                </span>
-              ))}
+      <>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">
+                Consultation Recorded — <span className="text-blue-600">{appointment.patient_name}</span>
+              </h2>
+              <p className="text-[11px] text-gray-400">Token #{String(appointment.token_number).padStart(2, '0')}</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowPrescriptionModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.656h10.5z" />
+              </svg>
+              Print Prescription (Rx)
+            </button>
           </div>
+
+          <div className="text-xs text-gray-600 space-y-1">
+            <div><span className="font-semibold text-gray-800">Diagnosis:</span> {existing.diagnosis || '—'}</div>
+            <div><span className="font-semibold text-gray-800">Complaints:</span> {existing.complaints || '—'}</div>
+            <div><span className="font-semibold text-gray-800">Doctor:</span> {existing.doctor_name || '—'}</div>
+            {existing.doctor_notes && <div><span className="font-semibold text-gray-800">Notes:</span> {existing.doctor_notes}</div>}
+            {existing.follow_up_date && <div><span className="font-semibold text-gray-800">Follow-up:</span> {String(existing.follow_up_date).slice(0, 10)}</div>}
+          </div>
+
+          {hasVitals && (
+            <div className="bg-gray-50 rounded-lg p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+              {existing.bp_systolic && <span className="font-semibold text-gray-700">BP: <span className="font-normal">{existing.bp_systolic}/{existing.bp_diastolic} mmHg</span></span>}
+              {existing.temperature && <span className="font-semibold text-gray-700">Temp: <span className="font-normal">{existing.temperature}°C</span></span>}
+              {existing.pulse && <span className="font-semibold text-gray-700">Pulse: <span className="font-normal">{existing.pulse} bpm</span></span>}
+              {existing.spo2 && <span className="font-semibold text-gray-700">SpO₂: <span className="font-normal">{existing.spo2}%</span></span>}
+              {existing.weight && <span className="font-semibold text-gray-700">Weight: <span className="font-normal">{existing.weight} kg</span></span>}
+              {existing.height && <span className="font-semibold text-gray-700">Height: <span className="font-normal">{existing.height} cm</span></span>}
+              {existing.blood_sugar && <span className="font-semibold text-gray-700">Sugar: <span className="font-normal">{existing.blood_sugar} mg/dL</span></span>}
+            </div>
+          )}
+
+          {existing.prescription_items?.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Prescribed</div>
+              <div className="flex flex-wrap gap-1.5">
+                {existing.prescription_items.map((it, i) => (
+                  <span key={i} className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md text-xs font-medium">
+                    {it.medicine_name} — M{it.dose_morning}/A{it.dose_afternoon}/N{it.dose_night} × {it.duration_days}d ({it.food_instruction?.replace(/_/g, ' ')})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {showPrescriptionModal && (
+          <HospitalPrescription
+            data={{
+              token_number: appointment.token_number,
+              patient_name: appointment.patient_name,
+              age_years: appointment.age_years,
+              gender: appointment.gender,
+              doctor_name: existing.doctor_name || appointment.doctor_name,
+              date: existing.created_at ? new Date(existing.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'),
+              diagnosis: existing.diagnosis,
+              complaints: existing.complaints,
+              notes: existing.doctor_notes,
+              follow_up_date: existing.follow_up_date ? String(existing.follow_up_date).slice(0, 10) : '',
+              bp_systolic: existing.bp_systolic,
+              bp_diastolic: existing.bp_diastolic,
+              temperature: existing.temperature,
+              pulse: existing.pulse,
+              spo2: existing.spo2,
+              weight: existing.weight,
+              height: existing.height,
+              blood_sugar: existing.blood_sugar,
+              items: existing.prescription_items || [],
+            }}
+            onClose={() => setShowPrescriptionModal(false)}
+          />
         )}
-      </div>
+      </>
     );
   }
 
@@ -240,6 +328,47 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
         <span className="text-xs font-bold text-blue-600">Token #{String(appointment.token_number).padStart(2, '0')}</span>
       </div>
 
+      {/* ── Vitals ───────────────────────────────────────────────────── */}
+      <div className="space-y-3 pt-1">
+        <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">Patient Vitals <span className="font-normal text-gray-400">(optional)</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">BP Systolic</label>
+            <div className="flex items-center gap-1">
+              <input type="number" min="50" max="300" value={bpSystolic} onChange={(e) => setBpSystolic(e.target.value)} placeholder="120" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+              <span className="text-[9px] text-gray-400">/</span>
+              <input type="number" min="30" max="200" value={bpDiastolic} onChange={(e) => setBpDiastolic(e.target.value)} placeholder="80" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+            </div>
+            <div className="text-[9px] text-gray-400 text-center">mmHg (Sys / Dia)</div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">Temp (°C)</label>
+            <input type="number" step="0.1" min="30" max="45" value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder="37.0" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">Pulse (bpm)</label>
+            <input type="number" min="30" max="250" value={pulse} onChange={(e) => setPulse(e.target.value)} placeholder="72" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">SpO₂ (%)</label>
+            <input type="number" min="70" max="100" value={spo2} onChange={(e) => setSpo2(e.target.value)} placeholder="98" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">Weight (kg)</label>
+            <input type="number" step="0.1" min="1" max="300" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="65" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">Height (cm)</label>
+            <input type="number" min="50" max="250" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="165" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-400 uppercase">Blood Sugar (mg/dL)</label>
+            <input type="number" min="20" max="600" value={bloodSugar} onChange={(e) => setBloodSugar(e.target.value)} placeholder="90" className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-center font-semibold" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Clinical ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>

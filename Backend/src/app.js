@@ -6,6 +6,16 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.set('trust proxy', 1);
+app.set('etag', false); // Disable ETag to prevent conditional 304 Not Modified responses on dynamic API routes
+
+// Ensure API responses are not cached and always return 200 OK
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
 
 // Set up global rate limiter: maximum of 1000 requests per 15 minutes
 const globalLimiter = rateLimit({
@@ -73,6 +83,7 @@ app.use('/api/attendance', require('./modules/attendance/attendance.routes'));
 app.use('/api/salary',     require('./modules/salary/salary.routes'));
 app.use('/api/pharmacy',   require('./modules/pharmacy/pharmacy.routes'));
 app.use('/api/consultation', require('./modules/consultation/consultation.routes'));
+app.use('/api/visiting-doctors', require('./modules/visiting_doctor/visiting_doctor.routes'));
 app.use('/api/bed', require('./modules/bed/bed.routes'));
 app.use('/api/payment', require('./modules/payment/payment.routes'));
 app.use('/api/rbac', require('./modules/rbac/rbac.routes'));

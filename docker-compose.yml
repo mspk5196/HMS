@@ -4,7 +4,9 @@ services:
     image: mysql:8.0
     container_name: nehahospital-mysql
     restart: unless-stopped
+    command: --default-time-zone=+05:30
     environment:
+      TZ: Asia/Kolkata
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-nehahospitals}
       MYSQL_USER: ${MYSQL_USER:-neha_user}
@@ -39,6 +41,7 @@ services:
       - path: .env
         required: false
     environment:
+      TZ: Asia/Kolkata
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-5000}
       DB_HOST: ${DB_HOST:-nehahospital-mysql}

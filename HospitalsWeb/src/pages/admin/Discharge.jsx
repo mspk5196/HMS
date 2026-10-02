@@ -11,6 +11,7 @@ const displayDate = (v) => {
 };
 
 import TabBar from '../../components/TabBar';
+import HospitalDischargeSummary from '../../components/HospitalDischargeSummary';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -312,6 +313,7 @@ function ProcessDischarge({ user, admission, onBack, onDone, onError }) {
 function DischargedList({ onError, onSuccess }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -327,31 +329,71 @@ function DischargedList({ onError, onSuccess }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const viewSummary = (a) => {
+    setSummaryData({
+      patient_name: a.patient_name,
+      age_years: a.age_years,
+      gender: a.gender,
+      admission_date: displayDate(a.admission_datetime),
+      discharge_date: displayDate(a.discharge_datetime || a.updated_at),
+      doctor_name: a.doctor_name,
+      bed_number: a.bed_number,
+      room_name: a.room_name,
+      discharge_condition: a.discharge_condition || 'Recovered',
+      diagnosis_summary: a.diagnosis_summary || a.provisional_diagnosis,
+      treatment_summary: a.treatment_summary,
+      doctor_advice: a.doctor_advice,
+      discharge_notes: a.discharge_notes,
+      follow_up_date: a.follow_up_date ? displayDate(a.follow_up_date) : '',
+    });
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-bold text-gray-900">Discharged Patients ({rows.length})</h2>
-        <p className="text-[11px] text-gray-400 mt-0.5">Payments are collected via the Collect Payment page.</p>
-      </div>
-      {isLoading ? (
-        <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="p-8 text-center text-xs text-gray-500">No discharged patients yet.</div>
-      ) : (
-        <div className="divide-y divide-gray-100">
-          {rows.map((a) => (
-            <div key={a.id} className="p-4 flex items-center justify-between gap-3">
-              <div>
-                <div className="font-bold text-gray-900 text-xs">{a.patient_name}</div>
-                <div className="text-[11px] text-gray-500 mt-0.5">
-                  Dr. {a.doctor_name || '—'} · Admitted {displayDate(a.admission_datetime)}
+    <>
+      <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <h2 className="text-sm font-bold text-gray-900">Discharged Patients ({rows.length})</h2>
+          <p className="text-[11px] text-gray-400 mt-0.5">Discharge summaries and payment collection records.</p>
+        </div>
+        {isLoading ? (
+          <div className="p-8 text-center text-xs text-gray-400">Loading…</div>
+        ) : rows.length === 0 ? (
+          <div className="p-8 text-center text-xs text-gray-500">No discharged patients yet.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {rows.map((a) => (
+              <div key={a.id} className="p-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-gray-900 text-xs">{a.patient_name}</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">
+                    Dr. {a.doctor_name || '—'} · Admitted {displayDate(a.admission_datetime)} · Discharged {displayDate(a.discharge_datetime || a.updated_at)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => viewSummary(a)}
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.656h10.5z" />
+                    </svg>
+                    Print Summary
+                  </button>
+                  <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-semibold">Discharged</span>
                 </div>
               </div>
-              <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-semibold">Discharged</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {summaryData && (
+        <HospitalDischargeSummary
+          data={summaryData}
+          onClose={() => setSummaryData(null)}
+        />
       )}
-    </div>
+    </>
   );
 }

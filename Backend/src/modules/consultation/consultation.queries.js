@@ -80,11 +80,21 @@ const getConsultationById = async (id) => {
 };
 
 const createConsultation = async (data, connection = db) => {
-  const { appointment_id, doctor_id, diagnosis, complaints, doctor_notes, follow_up_date } = data;
+  const {
+    appointment_id, doctor_id, diagnosis, complaints, doctor_notes, follow_up_date,
+    bp_systolic, bp_diastolic, temperature, pulse, spo2, weight, height, blood_sugar,
+  } = data;
   const [result] = await connection.execute(
-    `INSERT INTO consultations (appointment_id, doctor_id, diagnosis, complaints, doctor_notes, follow_up_date)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [appointment_id, doctor_id, diagnosis ?? null, complaints ?? null, doctor_notes ?? null, follow_up_date ?? null]
+    `INSERT INTO consultations
+     (appointment_id, doctor_id, diagnosis, complaints, doctor_notes, follow_up_date,
+      bp_systolic, bp_diastolic, temperature, pulse, spo2, weight, height, blood_sugar)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      appointment_id, doctor_id,
+      diagnosis ?? null, complaints ?? null, doctor_notes ?? null, follow_up_date ?? null,
+      bp_systolic ?? null, bp_diastolic ?? null, temperature ?? null,
+      pulse ?? null, spo2 ?? null, weight ?? null, height ?? null, blood_sugar ?? null,
+    ]
   );
   return result.insertId;
 };
@@ -132,11 +142,33 @@ const updateAppointmentStatus = async (appointmentId, status, connection = db) =
   );
 };
 
+const getAddenda = async (consultationId) => {
+  const [rows] = await db.execute(
+    `SELECT a.*, e.full_name AS author_name
+     FROM consultation_addenda a
+     LEFT JOIN employees e ON e.id = a.added_by
+     WHERE a.consultation_id = ?
+     ORDER BY a.created_at ASC`,
+    [consultationId]
+  );
+  return rows;
+};
+
+const createAddendum = async (consultationId, addedBy, note) => {
+  const [result] = await db.execute(
+    `INSERT INTO consultation_addenda (consultation_id, added_by, note) VALUES (?, ?, ?)`,
+    [consultationId, addedBy, note]
+  );
+  return result.insertId;
+};
+
 module.exports = {
   getConsultationByAppointment,
   getConsultationById,
   createConsultation,
   createPrescription,
   createPrescriptionItems,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  getAddenda,
+  createAddendum,
 };

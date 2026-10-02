@@ -25,9 +25,10 @@ const MODULES = [
   { code: 'patient', name: 'Patients', group: 'Patients & Clinical', order: 10 },
   { code: 'appointment', name: 'Appointments', group: 'Patients & Clinical', order: 11 },
   { code: 'consultation', name: 'Consultations & Rx', group: 'Patients & Clinical', order: 12 },
-  { code: 'admission', name: 'Admissions & Beds', group: 'Patients & Clinical', order: 13 },
-  { code: 'discharge', name: 'Discharge & Billing', group: 'Patients & Clinical', order: 14 },
-  { code: 'facility', name: 'Beds & Rooms Setup', group: 'Patients & Clinical', order: 15 },
+  { code: 'visiting_doctor', name: 'Visiting / External Doctors', group: 'Patients & Clinical', order: 13 },
+  { code: 'admission', name: 'Admissions & Beds', group: 'Patients & Clinical', order: 14 },
+  { code: 'discharge', name: 'Discharge & Billing', group: 'Patients & Clinical', order: 15 },
+  { code: 'facility', name: 'Beds & Rooms Setup', group: 'Patients & Clinical', order: 16 },
 
   // ─── Financial ───
   { code: 'payment', name: 'Payments & Fee Rates', group: 'Financial', order: 16 },
@@ -100,18 +101,30 @@ const MODULE_ACTIONS = {
   appointment: [
     'view', 'create', 'edit', 'delete',
     { code: 'close_visit', name: 'Close Visit', approvable: true },
+    { code: 'override_fee', name: 'Override Doctor Fee on Booking', approvable: true },
+    { code: 'convert_to_ipd', name: 'Convert OPD to IPD Admission', approvable: true },
   ],
-  consultation: ['view', 'create', 'edit'],
+  consultation: [
+    'view', 'create', 'edit',
+    { code: 'record_vitals', name: 'Record Patient Vitals', approvable: false },
+    { code: 'addendum', name: 'Add Consultation Addendum', approvable: true },
+    { code: 'print_rx', name: 'Print Prescription', approvable: false },
+  ],
+  visiting_doctor: [
+    'view', 'create', 'edit', 'delete',
+  ],
   admission: [
     'view', 'create', 'edit',
     { code: 'assign_bed', name: 'Assign Bed', approvable: true },
     { code: 'release_bed', name: 'Release Bed', approvable: true },
     { code: 'add_note', name: 'Add Daily Note', approvable: false },
+    { code: 'override_fee', name: 'Override Doctor Fee on Admission', approvable: true },
   ],
   discharge: [
     'view',
     { code: 'discharge_patient', name: 'Discharge Patient', approvable: true },
     { code: 'record_payment', name: 'Record Payment', approvable: true },
+    { code: 'print_summary', name: 'Print Discharge Summary', approvable: false },
   ],
   facility: [
     'view',

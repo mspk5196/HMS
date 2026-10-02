@@ -1,3 +1,4 @@
+process.env.TZ = 'Asia/Kolkata';
 require('dotenv').config();
 
 const app = require('./src/app');

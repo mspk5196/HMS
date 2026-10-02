@@ -22,6 +22,9 @@ export default function DispenseCounter({ user }) {
   const [isSaving, setIsSaving] = useState(false);
   const [generatedBill, setGeneratedBill] = useState(null);
 
+  const [recentRx, setRecentRx] = useState(null);
+  const [isLoadingRx, setIsLoadingRx] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
@@ -50,6 +53,69 @@ export default function DispenseCounter({ user }) {
     }, 300);
     return () => clearTimeout(timer);
   }, [patientQuery]);
+
+  // When patient is selected, check for recent consultation prescriptions
+  useEffect(() => {
+    if (!patient) {
+      setRecentRx(null);
+      return;
+    }
+    let isCurrent = true;
+    (async () => {
+      try {
+        setIsLoadingRx(true);
+        const history = await apiFetch(`/patient/patients/${patient.id}/history`);
+        if (!isCurrent) return;
+        if (history && Array.isArray(history.prescriptions) && history.prescriptions.length > 0) {
+          // Find the newest consultation or prescription
+          const latestConsult = history.consultations?.[0];
+          const rxItems = latestConsult
+            ? history.prescriptions.filter((p) => p.consultation_id === latestConsult.id)
+            : history.prescriptions;
+
+          if (rxItems.length > 0) {
+            setRecentRx({
+              doctor_id: latestConsult?.doctor_id,
+              doctor_name: latestConsult?.doctor_name,
+              created_at: latestConsult?.created_at || rxItems[0]?.created_at,
+              items: rxItems,
+            });
+          } else {
+            setRecentRx(null);
+          }
+        } else {
+          setRecentRx(null);
+        }
+      } catch {
+        if (isCurrent) setRecentRx(null);
+      } finally {
+        if (isCurrent) setIsLoadingRx(false);
+      }
+    })();
+    return () => { isCurrent = false; };
+  }, [patient]);
+
+  const loadPrescriptionItems = () => {
+    if (!recentRx?.items?.length) return;
+    if (recentRx.doctor_id) {
+      setDoctorId(String(recentRx.doctor_id));
+    }
+    const newLines = recentRx.items.map((it) => {
+      const morning = Number(it.dose_morning || 0);
+      const afternoon = Number(it.dose_afternoon || 0);
+      const night = Number(it.dose_night || 0);
+      const days = Number(it.duration_days || 1);
+      const dailyQty = morning + afternoon + night;
+      const totalQty = dailyQty > 0 ? dailyQty * days : 1;
+      return {
+        medicine_id: String(it.medicine_id),
+        unit_type: 'tablet',
+        quantity: String(totalQty),
+        discount_percent: '',
+      };
+    });
+    setLines(newLines);
+  };
 
   const medicineById = useMemo(() => Object.fromEntries(medicines.map((m) => [String(m.id), m])), [medicines]);
 
@@ -222,6 +288,32 @@ export default function DispenseCounter({ user }) {
             </select>
           </div>
         </div>
+
+        {/* Digital Prescription Auto-Detection Alert */}
+        {recentRx && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-blue-950">
+                <span>📋 Doctor's Prescription Available</span>
+                {recentRx.doctor_name && (
+                  <span className="text-[11px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-md">
+                    Dr. {recentRx.doctor_name}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-blue-800">
+                Found <strong>{recentRx.items.length} prescribed medicine{recentRx.items.length === 1 ? '' : 's'}</strong>: {recentRx.items.map((i) => i.medicine_name).join(', ')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadPrescriptionItems}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              ⚡ Load Into Bill
+            </button>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Doctor's Prescription (optional)</span>
