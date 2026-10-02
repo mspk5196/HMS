@@ -417,7 +417,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
            WHEN e.shift_category = 'day_and_night' AND re.is_holiday = 1 THEN 'Holiday'
            WHEN e.shift_category = 'day_and_night' AND re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
            WHEN e.shift_category = 'day_and_night' AND re.shift_id IS NOT NULL AND re_s.name IS NOT NULL THEN re_s.name
-           WHEN e.shift_category = 'day_and_night' THEN 'Day & Night (No shift configured)'
+           WHEN e.shift_category = 'day_and_night' THEN 'Day & Night'
            WHEN re.is_week_off = 1 THEN 'Week Off'
            WHEN re.is_holiday = 1 THEN 'Holiday'
            WHEN re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
@@ -539,7 +539,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
         WHEN e.shift_category = 'day_and_night' AND re.is_holiday = 1 THEN 'Holiday'
         WHEN e.shift_category = 'day_and_night' AND re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
         WHEN e.shift_category = 'day_and_night' AND re.shift_id IS NOT NULL AND re_s.name IS NOT NULL THEN re_s.name
-        WHEN e.shift_category = 'day_and_night' THEN 'Day & Night (No shift configured)'
+        WHEN e.shift_category = 'day_and_night' THEN 'Day & Night'
         WHEN re.is_week_off = 1 THEN 'Week Off'
         WHEN re.is_holiday = 1 THEN 'Holiday'
         WHEN re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
@@ -610,16 +610,40 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
   const sumWhere = sumFilters.join(' AND ');
 
   const [summaries] = await db.query(
-    `SELECT ads.employee_id, ads.attendance_date, ads.status, ads.first_in_time, ads.last_out_time,
+    `SELECT ads.employee_id, ads.attendance_date,
+            CASE
+              WHEN ads.is_manually_marked = 1 THEN ads.status
+              WHEN ads.status = 'on_leave' OR ads.status = 'half_day_leave' THEN ads.status
+              WHEN e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0)) THEN 'shift_not_configured'
+              ELSE ads.status
+            END AS status,
+            ads.first_in_time, ads.last_out_time,
             ads.worked_minutes, ads.late_minutes, ads.early_leave_minutes, ads.is_missed_punch,
             COALESCE(ads.is_manually_marked, 0) AS is_manually_marked,
             ads.manually_marked_by,
             ads.manually_marked_at,
             ads.manual_marking_reason,
             COALESCE(u_emp.full_name, u.username, 'Admin') AS marked_by_user_name,
-            s.name AS shift_name
+            CASE
+              WHEN e.shift_category = 'day_and_night' AND re.is_week_off = 1 THEN 'Week Off'
+              WHEN e.shift_category = 'day_and_night' AND re.is_holiday = 1 THEN 'Holiday'
+              WHEN e.shift_category = 'day_and_night' AND re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+              WHEN e.shift_category = 'day_and_night' AND re.shift_id IS NOT NULL AND re_s.name IS NOT NULL THEN re_s.name
+              WHEN e.shift_category = 'day_and_night' THEN 'Day & Night'
+              WHEN re.is_week_off = 1 THEN 'Week Off'
+              WHEN re.is_holiday = 1 THEN 'Holiday'
+              WHEN re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+              WHEN re_s.name IS NOT NULL THEN re_s.name
+              WHEN e.shift_category = 'day' THEN 'Day Shift'
+              WHEN e.shift_category = 'night' THEN 'Night Shift'
+              WHEN e.shift_category = 'general' THEN 'General Shift'
+              WHEN s.name IS NOT NULL THEN s.name
+              ELSE COALESCE(e.shift_category, 'General Duty')
+            END AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
+     LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ads.attendance_date
+     LEFT JOIN shifts re_s ON re_s.id = re.shift_id
      LEFT JOIN users u ON u.id = ads.manually_marked_by
      LEFT JOIN employees u_emp ON u_emp.id = u.employee_id
      LEFT JOIN shifts s ON s.id = ads.shift_id
@@ -652,6 +676,7 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
     let pCount = 0;
     let lCount = 0;
     let aCount = 0;
+    let sncCount = 0;
     let leaveCount = 0;
     let lopCount = 0;
     let woCount = 0;
@@ -664,6 +689,7 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
       if (rec.status === 'present') pCount++;
       else if (rec.status === 'late_present') { pCount++; lCount++; }
       else if (rec.status === 'absent') aCount++;
+      else if (rec.status === 'shift_not_configured') sncCount++;
       else if (rec.status === 'on_leave') leaveCount++;
       else if (rec.status === 'lop') lopCount++;
       else if (rec.status === 'week_off') woCount++;
@@ -678,6 +704,7 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
       if (status === 'present' && pCount === 0) continue;
       if (status === 'absent' && aCount === 0) continue;
       if (status === 'late_present' && lCount === 0) continue;
+      if (status === 'shift_not_configured' && sncCount === 0) continue;
       if (status === 'on_leave' && (leaveCount === 0 && lopCount === 0)) continue;
       if (status === 'missed_punch' && mpCount === 0) continue;
     }
@@ -700,6 +727,7 @@ const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, s
         present_days: pCount,
         late_days: lCount,
         absent_days: aCount,
+        shift_not_configured_days: sncCount,
         leave_days: leaveCount,
         lop_days: lopCount,
         week_off_days: woCount,

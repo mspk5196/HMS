@@ -257,7 +257,7 @@ const getShiftForDate = async (employeeId, date, dayPunches = []) => {
     if (emp.shift_category === 'day_and_night') {
       return {
         shift_id: null,
-        shift_name: 'Day & Night (No shift configured)',
+        shift_name: 'Day & Night',
         is_unconfigured_roster: true,
         start_time: null,
         end_time: null,

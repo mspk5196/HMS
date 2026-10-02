@@ -21,6 +21,7 @@ const STATUS_OPTIONS = [
   { value: 'present', label: 'Present (Full Day)' },
   { value: 'late_present', label: 'Late Present' },
   { value: 'absent', label: 'Absent' },
+  { value: 'shift_not_configured', label: '⚠️ Shift Time Not Configured' },
   { value: 'on_leave', label: 'On Leave (Approved)' },
   { value: 'lop', label: 'Loss of Pay (LOP)' },
   { value: 'week_off', label: 'Week Off' },
@@ -524,6 +525,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
               <option value="present">Present Only</option>
               <option value="late_present">Late Present Only</option>
               <option value="absent">Absent Only</option>
+              <option value="shift_not_configured">⚠️ Shift Time Not Configured</option>
               <option value="on_leave">On Leave / LOP</option>
               <option value="missed_punch">Missed Punches</option>
             </select>
@@ -578,6 +580,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-emerald-500 text-white font-bold flex items-center justify-center text-[10px]">P</span> Present</span>
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-amber-500 text-white font-bold flex items-center justify-center text-[10px]">L</span> Late</span>
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-rose-500 text-white font-bold flex items-center justify-center text-[10px]">A</span> Absent</span>
+          <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold flex items-center justify-center text-[9px]">NC</span> Shift Time Not Configured</span>
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-blue-500 text-white font-bold flex items-center justify-center text-[10px]">LV</span> Leave/LOP</span>
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-gray-300 text-gray-700 font-bold flex items-center justify-center text-[10px]">WO</span> Week Off</span>
           <span className="flex items-center gap-1"><span className="w-4 h-4 rounded bg-purple-500 text-white font-bold flex items-center justify-center text-[10px]">HD</span> Holiday</span>
@@ -683,6 +686,9 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
                       } else if (dayRec.status === 'absent') {
                         bg = 'bg-rose-500 text-white';
                         label = 'A';
+                      } else if (dayRec.status === 'shift_not_configured') {
+                        bg = 'bg-amber-100 text-amber-900 border border-amber-300';
+                        label = 'NC';
                       } else if (dayRec.status === 'on_leave' || dayRec.status === 'lop') {
                         bg = 'bg-blue-500 text-white';
                         label = 'LV';
@@ -697,7 +703,8 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
                       const inTimeStr = fmtTime12(dayRec.first_in_time);
                       const outTimeStr = fmtTime12(dayRec.last_out_time);
                       const isManual = !!dayRec.is_manually_marked;
-                      let tooltip = `${r.full_name} (${d})\nStatus: ${dayRec.status}\nIn: ${inTimeStr}\nOut: ${outTimeStr}\nWorked: ${(Number(dayRec.worked_minutes || 0) / 60).toFixed(1)}h`;
+                      const statusDisplay = dayRec.status === 'shift_not_configured' ? '⚠️ Shift Time Not Configured' : dayRec.status;
+                      let tooltip = `${r.full_name} (${d})\nShift: ${dayRec.shift_name || (r.shift_category === 'day_and_night' ? 'Day & Night' : '—')}\nStatus: ${statusDisplay}\nIn: ${inTimeStr}\nOut: ${outTimeStr}\nWorked: ${(Number(dayRec.worked_minutes || 0) / 60).toFixed(1)}h`;
                       if (isManual) {
                         tooltip += `\n[MANUALLY MARKED by ${dayRec.marked_by_user_name || 'Admin'}${dayRec.manually_marked_at ? ' on ' + new Date(dayRec.manually_marked_at).toLocaleDateString('en-IN') : ''}]\nReason: ${dayRec.manual_marking_reason || 'N/A'}`;
                       }
