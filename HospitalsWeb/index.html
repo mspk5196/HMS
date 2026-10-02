@@ -29,13 +29,26 @@
       }
     </script>
     <script>
-      // Prevent theme flash on page load
+      // Prevent theme flash on page load & initialize cached logo favicon
       try {
         const savedTheme = localStorage.getItem('nh_theme');
         if (savedTheme === 'dark') {
           document.documentElement.classList.add('dark');
         } else {
           document.documentElement.classList.remove('dark');
+        }
+
+        const cachedProfile = localStorage.getItem('nh_hospital_profile');
+        if (cachedProfile) {
+          const p = JSON.parse(cachedProfile);
+          const logo = p.HOSPITAL_LOGO_DATA || p.HOSPITAL_LOGO_PATH;
+          if (logo) {
+            const link = document.querySelector("link[rel~='icon']");
+            if (link) link.href = logo;
+          }
+          if (p.HOSPITAL_NAME) {
+            document.title = `${p.HOSPITAL_NAME} - Management System`;
+          }
         }
       } catch (e) {}
     </script>

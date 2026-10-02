@@ -100,6 +100,35 @@ export function HospitalProfileProvider({ children }) {
     return '';
   }, [profile.HOSPITAL_LOGO_DATA, profile.HOSPITAL_LOGO_PATH]);
 
+  // Synchronize browser tab favicon and document title with hospital profile
+  useEffect(() => {
+    if (hospitalLogo) {
+      try {
+        let link = document.querySelector("link[rel~='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          document.head.appendChild(link);
+        }
+        link.href = hospitalLogo;
+
+        let appleLink = document.querySelector("link[rel='apple-touch-icon']");
+        if (!appleLink) {
+          appleLink = document.createElement('link');
+          appleLink.rel = 'apple-touch-icon';
+          document.head.appendChild(appleLink);
+        }
+        appleLink.href = hospitalLogo;
+      } catch (_) {}
+    }
+
+    if (profile.HOSPITAL_NAME) {
+      try {
+        document.title = `${profile.HOSPITAL_NAME} - Management System`;
+      } catch (_) {}
+    }
+  }, [hospitalLogo, profile.HOSPITAL_NAME]);
+
   const value = useMemo(() => ({
     profile,
     isLoading,
