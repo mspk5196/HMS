@@ -93,12 +93,6 @@ const validateRows = async (rows, { weekStart } = {}) => {
     if (!isValidDate(rosterDate)) {
       throw new AppError(`Row ${i + 1}: roster_date must be YYYY-MM-DD`, 400);
     }
-    if (rosterDate < today) {
-      throw new AppError(
-        `Row ${i + 1}: Cannot create or modify duty for previous date (${rosterDate}). Duties for past days are locked.`,
-        400
-      );
-    }
     if (weekStart) {
       const weekEnd = addDays(weekStart, 6);
       if (rosterDate < weekStart || rosterDate > weekEnd) {
@@ -149,6 +143,27 @@ const validateRows = async (rows, { weekStart } = {}) => {
   const missingEmployee = employeeIds.find((id) => !knownEmployees.has(id));
   if (missingEmployee) {
     throw new AppError(`Employee ${missingEmployee} does not exist`, 400);
+  }
+
+  // Check if any date falls into a locked payroll month/year
+  const dates = normalised.map((r) => r.roster_date);
+  const monthYears = [...new Set(dates.map((d) => {
+    const parts = d.split('-');
+    return `${Number(parts[1])}|${Number(parts[0])}`;
+  }))];
+
+  for (const my of monthYears) {
+    const [mStr, yStr] = my.split('|');
+    const [lockedRuns] = await db.query(
+      `SELECT id FROM payroll_runs WHERE status = 'locked' AND period_month = ? AND period_year = ? LIMIT 1`,
+      [Number(mStr), Number(yStr)]
+    );
+    if (lockedRuns.length > 0) {
+      throw new AppError(
+        `Cannot modify duty roster for ${mStr}/${yStr} as the salary calculation cycle for this period is locked.`,
+        400
+      );
+    }
   }
 
   return normalised;
@@ -219,10 +234,14 @@ const swapShifts = async ({ employeeA, employeeB, rosterDate }, userId) => {
   if (a === b) throw new AppError('Cannot swap an employee with themselves', 400);
   if (!isValidDate(rosterDate)) throw new AppError('rosterDate must be YYYY-MM-DD', 400);
 
-  const today = getTodayISO();
-  if (rosterDate < today) {
+  const parts = rosterDate.split('-');
+  const [lockedRuns] = await db.query(
+    `SELECT id FROM payroll_runs WHERE status = 'locked' AND period_month = ? AND period_year = ? LIMIT 1`,
+    [Number(parts[1]), Number(parts[0])]
+  );
+  if (lockedRuns.length > 0) {
     throw new AppError(
-      `Cannot swap duty for past date (${rosterDate}). Duties for previous days are locked.`,
+      `Cannot swap duty for ${rosterDate} as the salary calculation cycle for this period is locked.`,
       400
     );
   }

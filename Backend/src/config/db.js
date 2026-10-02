@@ -46,6 +46,16 @@ const db = mysql.createPool({
   try {
     const connection = await db.getConnection();
     console.log("✅ Connected to MySQL database");
+
+    // Ensure system_config.config_value is MEDIUMTEXT so large base64/JSON settings never fail
+    try {
+      await connection.query(`
+        ALTER TABLE system_config MODIFY COLUMN config_value MEDIUMTEXT NULL
+      `);
+    } catch (migErr) {
+      // Table might not exist yet or already altered
+    }
+
     connection.release();
   } catch (err) {
     console.error("❌ Database connection error:", err);

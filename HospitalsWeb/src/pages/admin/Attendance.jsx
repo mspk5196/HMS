@@ -34,6 +34,7 @@ const STATUS_OPTIONS = [
   { value: 'present', label: 'Present' },
   { value: 'late_present', label: 'Late Present' },
   { value: 'absent', label: 'Absent' },
+  { value: 'shift_not_configured', label: '⚠️ Shift Not Configured' },
   { value: 'on_leave', label: 'On Leave' },
   { value: 'lop', label: 'LOP' },
   { value: 'week_off', label: 'Week Off' },
@@ -44,6 +45,7 @@ const STATUS_STYLE = {
   present: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   late_present: 'bg-amber-50 text-amber-700 border-amber-200',
   absent: 'bg-rose-50 text-rose-700 border-rose-200',
+  shift_not_configured: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
   on_leave: 'bg-blue-50 text-blue-700 border-blue-200',
   lop: 'bg-orange-50 text-orange-700 border-orange-200',
   week_off: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -421,14 +423,6 @@ function DailyLog({ departments, onError, onSuccess }) {
                 </span>
               )}
             </button>
-            <button
-              onClick={handleProcess}
-              disabled={isProcessing || isSyncing}
-              className="bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50"
-              title="Read raw biometric punches for this date and compute the daily summary"
-            >
-              {isProcessing ? 'Processing…' : 'Process Punches'}
-            </button>
           </div>
         </div>
 
@@ -472,6 +466,21 @@ function DailyLog({ departments, onError, onSuccess }) {
           >
             Late: {dayStats.late}
           </button>
+
+          {Number(dayStats.shift_not_configured || 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => { setStatusFilter(statusFilter === 'shift_not_configured' ? '' : 'shift_not_configured'); setPage(1); }}
+              className={`font-bold px-2.5 py-0.5 rounded-full text-[11px] transition-all cursor-pointer border ${
+                statusFilter === 'shift_not_configured'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/30'
+                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+              }`}
+              title="Filter by Day & Night staff with unconfigured shift in duty roster"
+            >
+              ⚠️ Shift Not Configured: {dayStats.shift_not_configured}
+            </button>
+          )}
 
           <button
             type="button"
@@ -583,7 +592,15 @@ function DailyLog({ departments, onError, onSuccess }) {
                       <div className="font-bold text-gray-900">{r.full_name}</div>
                       <div className="text-[10px] text-gray-400">{r.employee_code} · {r.department_name || '—'}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.shift_name || '—'}</td>
+                    <td className="px-3 py-2.5">
+                      {r.shift_name === 'Day & Night (No shift configured)' || (r.shift_category === 'day_and_night' && (!r.shift_name || r.shift_name.includes('No shift configured'))) ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                          ⚠️ No shift configured
+                        </span>
+                      ) : (
+                        <span className="text-gray-700 font-medium">{r.shift_name || '—'}</span>
+                      )}
+                    </td>
 
                     {/* In Time */}
                     <td className="px-3 py-2.5 text-center font-semibold text-gray-800 font-mono">
@@ -604,8 +621,8 @@ function DailyLog({ departments, onError, onSuccess }) {
                     {/* Status */}
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                          {r.status}
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {r.status === 'shift_not_configured' ? '⚠️ Shift Not Configured' : r.status?.replace(/_/g, ' ')}
                         </span>
                         {!!r.is_missed_punch && (
                           <span className="text-[9px] font-semibold text-rose-500">missed punch</span>

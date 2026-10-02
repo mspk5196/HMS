@@ -29,7 +29,7 @@ export default function HospitalProfile() {
 
   const [configs, setConfigs] = useState({
     HOSPITAL_NAME: 'Neha Hospitals',
-    HOSPITAL_SUBTITLE: 'Advanced Multispeciality Healthcare & Research Centre',
+    HOSPITAL_SUBTITLE: 'Speciality Hospital for Gynecology & Maternity · Pediatrics, Orthopedics & Gut Care',
     HOSPITAL_ADDRESS: '47, South Park Street (Kambar Veethi, Ganga Nagar), Kutchery Medu, Gobichettipalayam, Tamil Nadu - 638452',
     HOSPITAL_PHONE: '04285 - 222333',
     HOSPITAL_EMERGENCY: '+91 97894 94444',
@@ -40,9 +40,6 @@ export default function HospitalProfile() {
     HOSPITAL_HEADER_NOTE: '24x7 Emergency, Trauma, Critical Care & Pharmacy Services',
     HOSPITAL_LOGO_PATH: '',
     HOSPITAL_LOGO_DATA: '',
-    SALARY_CALCULATION_CYCLE: 'calendar_month',
-    SALARY_DATE_TYPE: 'last_day_of_month',
-    SALARY_DISBURSEMENT_DAY: '30',
     FUTURE_BOOKING_ENABLED: '0',
     TOKEN_SCOPE: 'hospital',
   });
@@ -391,7 +388,7 @@ export default function HospitalProfile() {
                   type="text"
                   value={configs.HOSPITAL_SUBTITLE || ''}
                   onChange={(e) => handleChange('HOSPITAL_SUBTITLE', e.target.value)}
-                  placeholder="e.g. Advanced Multispeciality Healthcare & Research Centre"
+                  placeholder="e.g. Speciality Hospital for Gynecology & Maternity · Pediatrics, Orthopedics & Gut Care"
                   className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
               </div>

@@ -33,6 +33,8 @@ services:
     restart: unless-stopped
     ports:
       - "5006:5000"
+    volumes:
+      - /srv/nehahospital/uploads:/app/uploads
     env_file:
       - path: .env
         required: false

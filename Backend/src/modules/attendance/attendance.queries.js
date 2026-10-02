@@ -370,8 +370,10 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
     if (status && status !== 'all') {
       if (status === 'missed_punch') {
         filters.push('ads.is_missed_punch = 1');
+      } else if (status === 'shift_not_configured') {
+        filters.push("(ads.status = 'shift_not_configured' OR (ads.is_manually_marked = 0 AND (ads.status IS NULL OR ads.status = 'absent' OR ads.status = 'late_present' OR ads.status = 'present') AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))))");
       } else if (status === 'absent') {
-        filters.push("(ads.status = 'absent' OR ads.status IS NULL)");
+        filters.push("(ads.status = 'absent' AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))))");
       } else {
         filters.push('ads.status = ?');
         params.push(status);
@@ -386,7 +388,12 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          e.id AS employee_id,
          ? AS attendance_date,
          ads.shift_id,
-         COALESCE(ads.status, 'absent') AS status,
+         CASE
+           WHEN ads.is_manually_marked = 1 THEN ads.status
+           WHEN ads.status = 'on_leave' OR ads.status = 'half_day_leave' THEN ads.status
+           WHEN e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0)) THEN 'shift_not_configured'
+           ELSE COALESCE(ads.status, 'absent')
+         END AS status,
          ads.first_in_time AS first_punch_in,
          ads.last_out_time AS last_punch_out,
          ads.first_in_time,
@@ -403,10 +410,28 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          COALESCE(u_emp.full_name, u.username, 'Admin') AS marked_by_user_name,
          e.full_name,
          e.employee_code,
+         e.shift_category,
          d.name AS department_name,
-         COALESCE(s.name, e.shift_category, 'General Duty') AS shift_name
+         CASE
+           WHEN e.shift_category = 'day_and_night' AND re.is_week_off = 1 THEN 'Week Off'
+           WHEN e.shift_category = 'day_and_night' AND re.is_holiday = 1 THEN 'Holiday'
+           WHEN e.shift_category = 'day_and_night' AND re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+           WHEN e.shift_category = 'day_and_night' AND re.shift_id IS NOT NULL AND re_s.name IS NOT NULL THEN re_s.name
+           WHEN e.shift_category = 'day_and_night' THEN 'Day & Night (No shift configured)'
+           WHEN re.is_week_off = 1 THEN 'Week Off'
+           WHEN re.is_holiday = 1 THEN 'Holiday'
+           WHEN re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+           WHEN re_s.name IS NOT NULL THEN re_s.name
+           WHEN e.shift_category = 'day' THEN 'Day Shift'
+           WHEN e.shift_category = 'night' THEN 'Night Shift'
+           WHEN e.shift_category = 'general' THEN 'General Shift'
+           WHEN s.name IS NOT NULL THEN s.name
+           ELSE COALESCE(e.shift_category, 'General Duty')
+         END AS shift_name
        FROM employees e
        LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ?
+       LEFT JOIN shifts re_s ON re_s.id = re.shift_id
        LEFT JOIN users u ON u.id = ads.manually_marked_by
        LEFT JOIN employees u_emp ON u_emp.id = u.employee_id
        LEFT JOIN departments d ON d.id = e.department_id
@@ -419,21 +444,22 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          d.name ASC,
          e.full_name ASC
        LIMIT ? OFFSET ?`,
-      [fromDate, fromDate, ...params.slice(1), lim, offset]
+      [fromDate, fromDate, fromDate, ...params.slice(1), lim, offset]
     );
 
     const [[{ total }]] = await db.execute(
       `SELECT COUNT(*) AS total
        FROM employees e
        LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ?
        WHERE ${where}`,
-      [fromDate, ...params.slice(1)]
+      [fromDate, fromDate, ...params.slice(1)]
     );
 
     // Calculate day overview breakdown across all employees for this date
     // Note: status filter is intentionally excluded so changing status dropdown does not zero out overview counts
     const statsFilters = ["e.status = 'active'"];
-    const statsParams = [fromDate];
+    const statsParams = [fromDate, fromDate];
 
     if (employeeId) {
       statsFilters.push('e.id = ?');
@@ -452,16 +478,18 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
     const [[statsRow]] = await db.query(
       `SELECT
          COUNT(*) AS total,
-         COALESCE(SUM(CASE WHEN ads.status = 'present' THEN 1 ELSE 0 END), 0) AS present,
-         COALESCE(SUM(CASE WHEN ads.status = 'late_present' OR ads.late_minutes > 0 THEN 1 ELSE 0 END), 0) AS late,
-         COALESCE(SUM(CASE WHEN ads.status = 'absent' OR ads.status IS NULL THEN 1 ELSE 0 END), 0) AS absent,
+         COALESCE(SUM(CASE WHEN ads.status = 'present' AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS present,
+         COALESCE(SUM(CASE WHEN ads.status = 'late_present' AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS late,
+         COALESCE(SUM(CASE WHEN (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) OR ads.status = 'shift_not_configured' THEN 1 ELSE 0 END), 0) AS shift_not_configured,
+         COALESCE(SUM(CASE WHEN (ads.status = 'absent' OR (ads.status IS NULL AND NOT (e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))))) AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS absent,
          COALESCE(SUM(CASE WHEN ads.status IN ('on_leave', 'half_day_leave') THEN 1 ELSE 0 END), 0) AS on_leave,
          COALESCE(SUM(CASE WHEN ads.status IN ('lop', 'half_day_lop') THEN 1 ELSE 0 END), 0) AS lop,
-         COALESCE(SUM(CASE WHEN ads.status = 'week_off' THEN 1 ELSE 0 END), 0) AS week_off,
-         COALESCE(SUM(CASE WHEN ads.status = 'holiday' THEN 1 ELSE 0 END), 0) AS holiday,
+         COALESCE(SUM(CASE WHEN ads.status = 'week_off' OR (re.is_week_off = 1 AND ads.status IS NULL) THEN 1 ELSE 0 END), 0) AS week_off,
+         COALESCE(SUM(CASE WHEN ads.status = 'holiday' OR (re.is_holiday = 1 AND ads.status IS NULL) THEN 1 ELSE 0 END), 0) AS holiday,
          COALESCE(SUM(CASE WHEN ads.is_missed_punch = 1 THEN 1 ELSE 0 END), 0) AS missed_punch
        FROM employees e
        LEFT JOIN attendance_daily_summary ads ON ads.employee_id = e.id AND ads.attendance_date = ?
+       LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ?
        WHERE ${statsWhere}`,
       statsParams
     );
@@ -470,6 +498,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
       total: Number(statsRow?.total ?? 0),
       present: Number(statsRow?.present ?? 0),
       late: Number(statsRow?.late ?? 0),
+      shift_not_configured: Number(statsRow?.shift_not_configured ?? 0),
       absent: Number(statsRow?.absent ?? 0),
       on_leave: Number(statsRow?.on_leave ?? 0),
       lop: Number(statsRow?.lop ?? 0),
@@ -504,9 +533,27 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
   const where = filters.join(' AND ');
 
   const [rows] = await db.query(
-    `SELECT ads.*, ads.first_in_time AS first_punch_in, ads.last_out_time AS last_punch_out, e.full_name, e.employee_code, d.name AS department_name, s.name AS shift_name
+    `SELECT ads.*, ads.first_in_time AS first_punch_in, ads.last_out_time AS last_punch_out, e.full_name, e.employee_code, e.shift_category, d.name AS department_name,
+      CASE
+        WHEN e.shift_category = 'day_and_night' AND re.is_week_off = 1 THEN 'Week Off'
+        WHEN e.shift_category = 'day_and_night' AND re.is_holiday = 1 THEN 'Holiday'
+        WHEN e.shift_category = 'day_and_night' AND re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+        WHEN e.shift_category = 'day_and_night' AND re.shift_id IS NOT NULL AND re_s.name IS NOT NULL THEN re_s.name
+        WHEN e.shift_category = 'day_and_night' THEN 'Day & Night (No shift configured)'
+        WHEN re.is_week_off = 1 THEN 'Week Off'
+        WHEN re.is_holiday = 1 THEN 'Holiday'
+        WHEN re.custom_start_time IS NOT NULL AND re.custom_end_time IS NOT NULL THEN CONCAT(DATE_FORMAT(re.custom_start_time, '%H:%i'), ' - ', DATE_FORMAT(re.custom_end_time, '%H:%i'), ' (Roster)')
+        WHEN re_s.name IS NOT NULL THEN re_s.name
+        WHEN e.shift_category = 'day' THEN 'Day Shift'
+        WHEN e.shift_category = 'night' THEN 'Night Shift'
+        WHEN e.shift_category = 'general' THEN 'General Shift'
+        WHEN s.name IS NOT NULL THEN s.name
+        ELSE COALESCE(e.shift_category, 'General Duty')
+      END AS shift_name
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
+     LEFT JOIN roster_entries re ON re.employee_id = e.id AND re.roster_date = ads.attendance_date
+     LEFT JOIN shifts re_s ON re_s.id = re.shift_id
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN shifts s ON s.id = ads.shift_id
      WHERE ${where}

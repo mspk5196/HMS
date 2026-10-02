@@ -253,32 +253,23 @@ const getShiftForDate = async (employeeId, date, dayPunches = []) => {
       });
     }
 
-    // Day & Night (Duty Roster): Automatically infers Day vs Night based on punches if no manual roster entry
+    // Day & Night (Duty Roster): If no override and no roster entry exists, DO NOT default to fixed timings
     if (emp.shift_category === 'day_and_night') {
-      let isNight = false;
-      if (Array.isArray(dayPunches) && dayPunches.length > 0) {
-        const firstP = String(dayPunches[0].punch_time || '');
-        const timePart = firstP.includes(' ') ? firstP.split(' ')[1] : firstP.slice(11, 16);
-        if (timePart >= '17:00:00' || (timePart && timePart < '06:30:00')) {
-          isNight = true;
-        }
-      }
-      const [shiftRows] = await db.execute(
-        `SELECT id, name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = ? ORDER BY id ASC LIMIT 1`,
-        [isNight ? 1 : 0]
-      );
-      const configured = shiftRows[0];
-      const start = configured?.start_time || (isNight ? '20:00:00' : '08:30:00');
-      const end = configured?.end_time || (isNight ? '08:00:00' : '18:30:00');
-      const grace = configured?.grace_period_minutes ?? 10;
-      return buildResolvedShift({
-        shift_id: configured?.id ?? null,
-        shift_name: configured?.name || (isNight ? 'Duty Roster (Night)' : 'Duty Roster (Day)'),
-        start_time: start,
-        end_time: end,
-        is_night_shift: isNight ? 1 : 0,
-        grace_period_minutes: grace,
-      });
+      return {
+        shift_id: null,
+        shift_name: 'Day & Night (No shift configured)',
+        is_unconfigured_roster: true,
+        start_time: null,
+        end_time: null,
+        is_night_shift: 0,
+        grace_period_minutes: 0,
+        biometric_in_start: null,
+        biometric_in_end: null,
+        biometric_out_start: null,
+        biometric_out_end: null,
+        is_week_off: 0,
+        is_holiday: 0,
+      };
     }
 
     // General shift: configured for each employee (individual timing and buffer)
@@ -556,6 +547,47 @@ const processDailyAttendance = async (date) => {
 
     const shift = await getShiftForDate(employeeId, date, eligiblePunches);
     const override = await q.getBiometricWindow(date, employee.designation_id ?? null);
+
+    // If employee is on Day & Night duty roster and no shift is configured for this date:
+    // Record raw punches if present, highlight as shift_not_configured, do not mark present/absent
+    if (shift.is_unconfigured_roster) {
+      const existing = await q.getDailySummary(employeeId, date);
+      if (existing?.is_manually_marked || existing?.status === 'on_leave') {
+        processed++;
+        continue;
+      }
+
+      const dayPunches = eligiblePunches.filter((p) => String(p.punch_time).startsWith(date));
+      let firstIn = null;
+      let lastOut = null;
+      if (dayPunches.length > 0) {
+        firstIn = dayPunches[0].punch_time;
+        if (dayPunches.length > 1) {
+          const potOut = dayPunches[dayPunches.length - 1].punch_time;
+          if (potOut !== firstIn) {
+            lastOut = potOut;
+          }
+        }
+      }
+      const span = firstIn && lastOut ? minutesBetween(firstIn, lastOut) : 0;
+      await q.upsertDailySummary({
+        employee_id: employeeId,
+        attendance_date: date,
+        shift_id: null,
+        status: 'shift_not_configured',
+        first_punch_in: firstIn,
+        last_punch_out: lastOut,
+        worked_minutes: span,
+        break_minutes: 0,
+        late_minutes: 0,
+        early_leave_minutes: 0,
+        is_missed_punch: firstIn && !lastOut ? 1 : 0,
+        biometric_window_extended: false,
+        overtime_minutes: 0,
+      });
+      processed++;
+      continue;
+    }
 
     let firstIn = null;
     let lastOut = null;

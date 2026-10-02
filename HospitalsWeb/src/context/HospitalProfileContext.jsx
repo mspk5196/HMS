@@ -3,7 +3,7 @@ import { apiFetch } from '../util/api';
 
 const DEFAULT_PROFILE = {
   HOSPITAL_NAME: 'Neha Hospitals',
-  HOSPITAL_SUBTITLE: 'Advanced Multispeciality Healthcare & Research Centre',
+  HOSPITAL_SUBTITLE: 'Speciality Hospital for Gynecology & Maternity · Pediatrics, Orthopedics & Gut Care',
   HOSPITAL_ADDRESS: '47, South Park Street (Kambar Veethi, Ganga Nagar), Kutchery Medu, Gobichettipalayam, Tamil Nadu - 638452',
   HOSPITAL_PHONE: '04285 - 222333',
   HOSPITAL_EMERGENCY: '+91 97894 94444',

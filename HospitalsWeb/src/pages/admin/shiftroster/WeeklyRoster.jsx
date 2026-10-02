@@ -59,6 +59,12 @@ const SparklesIcon = ({ className = 'w-4 h-4', ...props }) => (
   </svg>
 );
 
+const BoltIcon = ({ className = 'w-4 h-4', ...props }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+  </svg>
+);
+
 const CheckIcon = ({ className = 'w-4 h-4', ...props }) => (
   <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -240,11 +246,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     };
 
   const updateCell = (employeeId, date, updates) => {
-    // Prevent updating previous days
-    if (date < today) {
-      setErrorMsg('Cannot modify duty roster for previous days. Past assignments are locked.');
-      return;
-    }
     setDraft((prev) => {
       const current = prev[`${employeeId}|${date}`] || {
         is_week_off: false,
@@ -282,7 +283,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
   };
 
   /**
-   * Apply custom duty hours across all current & future days for an employee
+   * Apply custom duty hours across all days for an employee
    */
   const handleApplyBatch = (e) => {
     e.preventDefault();
@@ -297,7 +298,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        if (d < today) continue; // NEVER modify past days
         next[`${batchEmp.employee_id}|${d}`] = {
           is_week_off: false,
           start_time: batchForm.start_time,
@@ -310,12 +310,12 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     });
 
     const shiftName = batchForm.is_night_shift ? 'Night Shift' : 'Day Shift';
-    flash(`Applied ${shiftName} (${batchForm.start_time} – ${batchForm.end_time}) to ${count} active days for ${batchEmp.full_name}. Past days preserved.`);
+    flash(`Applied ${shiftName} (${batchForm.start_time} – ${batchForm.end_time}) across the week for ${batchEmp.full_name}.`);
     setBatchEmp(null);
   };
 
   /**
-   * Mark remaining days as Week Off — SKIPS past days
+   * Mark days as Week Off
    */
   const fillRowOff = (emp) => {
     if (!grid) return;
@@ -323,7 +323,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        if (d < today) continue; // NEVER modify past days
         next[`${emp.employee_id}|${d}`] = {
           is_week_off: true,
           start_time: '',
@@ -335,14 +334,14 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       return next;
     });
     if (count > 0) {
-      flash(`Marked upcoming days as Week Off for ${emp.full_name}. Past days preserved.`);
+      flash(`Marked days as Week Off for ${emp.full_name}.`);
     } else {
-      setErrorMsg('No current or upcoming days in this week to update.');
+      setErrorMsg('No days in this week to update.');
     }
   };
 
   /**
-   * Clear employee row — SKIPS past days
+   * Clear employee row
    */
   const clearRow = (emp) => {
     if (!grid) return;
@@ -350,7 +349,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     setDraft((prev) => {
       const next = { ...prev };
       for (const d of grid.days) {
-        if (d < today) continue; // NEVER modify past days
         next[`${emp.employee_id}|${d}`] = {
           is_week_off: false,
           start_time: '',
@@ -362,7 +360,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       return next;
     });
     if (count > 0) {
-      flash(`Cleared duties for upcoming days for ${emp.full_name}. Past days preserved.`);
+      flash(`Cleared duties for this week for ${emp.full_name}.`);
     } else {
       setErrorMsg('No current or upcoming days in this week to clear.');
     }
@@ -446,7 +444,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
   }, [grid?.employees, searchQuery]);
 
   /**
-   * Save duty roster — sends ONLY active and future days (d >= today)
+   * Save duty roster — sends all configured and modified days in the week
    */
   const handleSave = async () => {
     if (!grid) return;
@@ -457,8 +455,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       const rows = [];
       for (const emp of grid.employees) {
         for (const d of grid.days) {
-          if (d < today) continue; // Past days cannot be overwritten
-
           const c = getCell(emp.employee_id, d);
           if (c.is_week_off) {
             rows.push({
@@ -483,7 +479,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       }
 
       if (!rows.length) {
-        setErrorMsg('Nothing to save for current or upcoming days in this week.');
+        setErrorMsg('Nothing to save for this week.');
         return;
       }
 
@@ -495,7 +491,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
       if (result?.isPendingApproval) {
         flash('Roster modifications submitted for approval (Pending Review).');
       } else {
-        flash(`Successfully saved ${result.saved} duty assignments for active days.`);
+        flash(`Successfully saved ${result.saved} duty assignments.`);
       }
       await load();
     } catch (err) {
@@ -509,11 +505,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
    * Handle shift swap between two staff members on the same date
    */
   const handleSwapClick = (employeeId, date, employeeName) => {
-    if (date < today) {
-      setErrorMsg('Cannot swap shifts for previous days. Past duties are locked.');
-      return;
-    }
-
     if (!swapPick) {
       setSwapPick({ employeeId, date, employeeName });
       return;
@@ -603,9 +594,28 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
     }
   };
 
-  const isEntireWeekPast = grid && grid.days[6] < today;
   const isCurrentWeek = grid && grid.days[0] <= today && grid.days[6] >= today;
-  const editableDaysCount = grid ? grid.days.filter((d) => d >= today).length : 0;
+  const [isProcessingPunches, setIsProcessingPunches] = useState(false);
+
+  const handleProcessPunches = async () => {
+    if (!grid?.weekStart) return;
+    try {
+      setIsProcessingPunches(true);
+      setErrorMsg('');
+      const res = await apiFetch('/attendance/process', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromDate: grid.weekStart,
+          toDate: grid.weekEnd,
+        }),
+      });
+      flash(`Punches processed successfully for ${grid.weekStart} to ${grid.weekEnd}. Attendance status updated.`);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to process punches for this week.');
+    } finally {
+      setIsProcessingPunches(false);
+    }
+  };
 
   return (
     <div className="space-y-4 pb-12">
@@ -642,13 +652,13 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
               <span>Cycle:</span>
               <strong className="text-gray-800 font-bold">Wednesday to Tuesday</strong>
               <span>({monthLabel(grid.weekStart)} – {monthLabel(grid.weekEnd)})</span>
-              {isEntireWeekPast ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                  <LockClosedIcon className="w-3 h-3 text-slate-500" /> Past Week (Locked)
-                </span>
-              ) : isCurrentWeek ? (
+              {isCurrentWeek ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> Active Week ({editableDaysCount} days editable)
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span> Active Current Week
+                </span>
+              ) : grid.days[6] < today ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                  <CalendarIcon className="w-3 h-3 text-slate-500" /> Past Week
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
@@ -672,15 +682,25 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                 <span>Configure Shift Timings</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleProcessPunches}
+              disabled={isProcessingPunches || isSaving || isLoading || !grid?.employees?.length}
+              className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-[#1c399b] text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Process biometric punches for this roster week to calculate attendance status based on assigned shifts"
+            >
+              <BoltIcon className="w-4 h-4" />
+              <span>{isProcessingPunches ? 'Processing Punches…' : 'Process Punches'}</span>
+            </button>
             {canBulkSave && (
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving || isLoading || !grid?.employees?.length || isEntireWeekPast}
+                disabled={isSaving || isLoading || !grid?.employees?.length}
                 className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <CheckIcon className="w-4 h-4" />
-                <span>{isSaving ? 'Saving…' : isEntireWeekPast ? 'Week Locked' : 'Save Duty Roster'}</span>
+                <span>{isSaving ? 'Saving…' : 'Save Duty Roster'}</span>
               </button>
             )}
           </div>
@@ -807,8 +827,8 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
               🏖️ Week Off (WO)
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 font-semibold">
-              <LockClosedIcon className="w-3 h-3 text-slate-400" /> Past Day (Locked)
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-semibold">
+              <CalendarIcon className="w-3 h-3 text-slate-500" /> Past Day (Editable before payroll lock)
             </span>
           </div>
 
@@ -968,8 +988,8 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                             </span>
                           )}
                           {isPast && (
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
-                              <LockClosedIcon className="w-2.5 h-2.5" /> Past
+                            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
+                              <CalendarIcon className="w-2.5 h-2.5" /> Past
                             </span>
                           )}
                           <div className={`font-extrabold text-[12px] ${isToday ? 'text-emerald-900 dark:text-emerald-300' : isPast ? 'text-slate-600 dark:text-slate-400' : 'text-gray-800 dark:text-slate-200'}`}>
@@ -1017,9 +1037,8 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                           {emp.employee_code} · <span className="font-sans text-gray-600 font-medium">{emp.role_name || 'Staff'}</span>
                         </div>
 
-                        {/* Batch Apply Actions (affects only active future days) */}
-                        {!isEntireWeekPast && (
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {/* Batch Apply Actions */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
                             <button
                               type="button"
                               onClick={() => {
@@ -1053,7 +1072,6 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                               Clear
                             </button>
                           </div>
-                        )}
                       </td>
 
                       {/* Day Cells */}
@@ -1075,295 +1093,252 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
                               isToday ? 'bg-blue-50/20' : isPast ? 'bg-slate-50/40' : ''
                             }`}
                           >
-                            {/* Past Day Display: Strictly Read-Only & Locked */}
-                            {isPast ? (
-                              <div
-                                className="p-2.5 rounded-xl border border-slate-200 bg-slate-100/70 text-center space-y-1.5"
-                                title="Past duty assignment (Locked / Completed)"
-                              >
-                                <div className="flex items-center justify-center gap-1 text-[9px] font-bold text-slate-400">
-                                  <LockClosedIcon className="w-3 h-3 text-slate-400" />
-                                  <span>Locked</span>
-                                </div>
-
-                                {cell.is_week_off ? (
-                                  <div className="px-2 py-1 rounded bg-amber-100/80 text-amber-900 font-extrabold text-[10px]">
+                            {/* Interactive Day Cell: Option to Enter Start/End Time and Toggle Day vs Night Shift */}
+                            <div
+                              className={`p-2.5 rounded-xl border transition-all shadow-2xs space-y-2 ${
+                                isPicked
+                                  ? 'bg-amber-100/80 border-amber-400 ring-2 ring-amber-400/40'
+                                  : cell.is_week_off
+                                  ? 'bg-amber-50/80 border-amber-200 hover:border-amber-300'
+                                  : cell.start_time && cell.end_time && !isCustomEditing
+                                  ? cell.is_night_shift
+                                    ? 'bg-indigo-50/70 border-indigo-200 hover:border-indigo-300'
+                                    : 'bg-blue-50/70 border-blue-200 hover:border-blue-300'
+                                  : 'bg-white border-dashed border-gray-300 hover:border-gray-400'
+                              }`}
+                            >
+                              {cell.is_week_off ? (
+                                /* State 1: Week Off */
+                                <div className="space-y-1.5 text-center py-1">
+                                  <div className="inline-block font-extrabold text-[10px] text-amber-900 bg-amber-200/70 px-2.5 py-0.5 rounded-full shadow-2xs">
                                     WEEK OFF
                                   </div>
-                                ) : cell.start_time && cell.end_time ? (
-                                  <div
-                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold flex flex-col items-center ${
-                                      cell.is_night_shift
-                                        ? 'bg-indigo-100/80 text-indigo-900'
-                                        : 'bg-blue-100/80 text-blue-900'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-1">
-                                      {cell.is_night_shift ? (
-                                        <MoonIcon className="w-3 h-3 text-indigo-700 shrink-0" />
-                                      ) : (
-                                        <SunIcon className="w-3 h-3 text-blue-700 shrink-0" />
-                                      )}
-                                      <span>{cell.is_night_shift ? 'Night Shift' : 'Day Shift'}</span>
-                                    </span>
-                                    <span className="font-mono text-[9px] mt-0.5">
-                                      {cell.start_time} – {cell.end_time}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div className="text-[10px] text-slate-400 italic py-1">
-                                    — Unassigned —
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              /* Active / Future Day: Option to Enter Start/End Time and Toggle Day vs Night Shift */
-                              <div
-                                className={`p-2.5 rounded-xl border transition-all shadow-2xs space-y-2 ${
-                                  isPicked
-                                    ? 'bg-amber-100/80 border-amber-400 ring-2 ring-amber-400/40'
-                                    : cell.is_week_off
-                                    ? 'bg-amber-50/80 border-amber-200 hover:border-amber-300'
-                                    : cell.start_time && cell.end_time && !isCustomEditing
-                                    ? cell.is_night_shift
-                                      ? 'bg-indigo-50/70 border-indigo-200 hover:border-indigo-300'
-                                      : 'bg-blue-50/70 border-blue-200 hover:border-blue-300'
-                                    : 'bg-white border-dashed border-gray-300 hover:border-gray-400'
-                                }`}
-                              >
-                                {cell.is_week_off ? (
-                                  /* State 1: Week Off */
-                                  <div className="space-y-1.5 text-center py-1">
-                                    <div className="inline-block font-extrabold text-[10px] text-amber-900 bg-amber-200/70 px-2.5 py-0.5 rounded-full shadow-2xs">
-                                      WEEK OFF
-                                    </div>
-                                    <div className="pt-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          updateCell(emp.employee_id, d, {
-                                            is_week_off: false,
-                                            start_time: '09:00',
-                                            end_time: '17:00',
-                                            is_night_shift: false,
-                                          });
-                                          setEditingCellKey(cellKey);
-                                        }}
-                                        className="text-[9px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
-                                        title="Assign custom work hours"
-                                      >
-                                        + Set Duty Hours
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : cell.start_time && cell.end_time && !isCustomEditing ? (
-                                  /* State 2: Assigned Duty (Display Card with 1-click Toggle & Edit) */
-                                  <div className="space-y-1.5">
-                                    <div
-                                      className={`px-2 py-1.5 rounded-lg text-center flex flex-col items-center justify-center ${
-                                        cell.is_night_shift
-                                          ? 'bg-indigo-100/70 text-indigo-950 border border-indigo-200/60'
-                                          : 'bg-blue-100/70 text-blue-950 border border-blue-200/60'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide">
-                                        {cell.is_night_shift ? (
-                                          <MoonIcon className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-                                        ) : (
-                                          <SunIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                        )}
-                                        <span>{cell.is_night_shift ? 'Night Shift' : 'Day Shift'}</span>
-                                      </div>
-                                      <div className="font-mono font-bold text-[11px] text-gray-900 mt-0.5">
-                                        {cell.start_time} – {cell.end_time}
-                                      </div>
-                                    </div>
-
-                                    {/* Action Bar */}
-                                    <div className="flex items-center justify-between gap-1 pt-0.5">
-                                      {/* Shift Type Switcher */}
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateCell(emp.employee_id, d, {
-                                            is_night_shift: !cell.is_night_shift,
-                                          })
-                                        }
-                                        className="inline-flex items-center gap-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs"
-                                        title={`Switch to ${cell.is_night_shift ? 'Day Shift' : 'Night Shift'}`}
-                                      >
-                                        {cell.is_night_shift ? (
-                                          <>
-                                            <SunIcon className="w-2.5 h-2.5 text-amber-600" />
-                                            <span>To Day</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <MoonIcon className="w-2.5 h-2.5 text-indigo-600" />
-                                            <span>To Night</span>
-                                          </>
-                                        )}
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingCellKey(cellKey)}
-                                        className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs flex items-center gap-0.5"
-                                        title="Change duty start/end hours"
-                                      >
-                                        <PencilSquareIcon className="w-2.5 h-2.5 text-gray-500" />
-                                        <span>Edit</span>
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateCell(emp.employee_id, d, {
-                                            is_week_off: true,
-                                            start_time: '',
-                                            end_time: '',
-                                          })
-                                        }
-                                        className="text-[8px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 hover:bg-amber-200 rounded cursor-pointer"
-                                        title="Mark as Week Off"
-                                      >
-                                        WO
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  /* State 3: Enter Start Time, End Time, and Select Day vs Night Shift */
-                                  <div className="space-y-1.5">
-                                    {/* Start & End Time Inputs */}
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-1">
-                                        <input
-                                          type="time"
-                                          value={cell.start_time || ''}
-                                          onChange={(e) =>
-                                            updateCell(emp.employee_id, d, {
-                                              is_week_off: false,
-                                              start_time: e.target.value,
-                                            })
-                                          }
-                                          className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                          placeholder="Start"
-                                          title="Duty Start Time"
-                                        />
-                                        <span className="text-[10px] text-gray-400 font-bold">–</span>
-                                        <input
-                                          type="time"
-                                          value={cell.end_time || ''}
-                                          onChange={(e) =>
-                                            updateCell(emp.employee_id, d, {
-                                              is_week_off: false,
-                                              end_time: e.target.value,
-                                            })
-                                          }
-                                          className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                          placeholder="End"
-                                          title="Duty End Time"
-                                        />
-                                      </div>
-                                    </div>
-
-                                    {/* Shift Type Selector Toggle: Day vs Night */}
-                                    <div className="grid grid-cols-2 gap-1 p-0.5 bg-gray-100 rounded-lg border border-gray-200">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateCell(emp.employee_id, d, {
-                                            is_night_shift: false,
-                                          })
-                                        }
-                                        className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
-                                          !cell.is_night_shift
-                                            ? 'bg-white text-blue-800 shadow-2xs border border-blue-200'
-                                            : 'text-gray-500 hover:text-gray-900'
-                                        }`}
-                                      >
-                                        <SunIcon className={`w-3 h-3 ${!cell.is_night_shift ? 'text-amber-500' : 'text-gray-400'}`} />
-                                        <span>Day</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateCell(emp.employee_id, d, {
-                                            is_night_shift: true,
-                                          })
-                                        }
-                                        className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
-                                          cell.is_night_shift
-                                            ? 'bg-indigo-900 text-white shadow-2xs'
-                                            : 'text-gray-500 hover:text-gray-900'
-                                        }`}
-                                      >
-                                        <MoonIcon className={`w-3 h-3 ${cell.is_night_shift ? 'text-indigo-200' : 'text-gray-400'}`} />
-                                        <span>Night</span>
-                                      </button>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center justify-between text-[9px] text-gray-600 bg-gray-50 px-1.5 py-1 rounded border border-gray-200">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateCell(emp.employee_id, d, {
-                                            is_week_off: true,
-                                            start_time: '',
-                                            end_time: '',
-                                          })
-                                        }
-                                        className="text-[8px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
-                                        title="Set as Week Off"
-                                      >
-                                        🏖️ Set WO
-                                      </button>
-                                      {cell.start_time && cell.end_time && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingCellKey(null)}
-                                          className="text-[10px] text-blue-700 font-bold hover:underline cursor-pointer px-1.5 py-0.5 bg-blue-50 rounded"
-                                        >
-                                          ✓ Done
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Shift Swap Action Button */}
-                                <div className="mt-1.5 flex flex-col gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSwapClick(emp.employee_id, d, emp.full_name)}
-                                    disabled={isSaving}
-                                    className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all disabled:opacity-40 ${
-                                      isPicked
-                                        ? 'bg-amber-500 text-white shadow-xs animate-pulse'
-                                        : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
-                                    }`}
-                                    title="Swap duty hours with another person on the same date"
-                                  >
-                                    <ArrowsRightLeftIcon className="w-3 h-3" />
-                                    <span>{isPicked ? 'PICKED FOR SWAP' : 'Swap'}</span>
-                                  </button>
-
-                                  {!cell.is_week_off && (
+                                  <div className="pt-1">
                                     <button
                                       type="button"
-                                      onClick={() => openTransferModal(emp, d, cell)}
-                                      disabled={isSaving}
-                                      className="w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200/60"
-                                      title="Transfer duty or assign replacement staff if this employee takes leave or is absent"
+                                      onClick={() => {
+                                        updateCell(emp.employee_id, d, {
+                                          is_week_off: false,
+                                          start_time: '09:00',
+                                          end_time: '17:00',
+                                          is_night_shift: false,
+                                        });
+                                        setEditingCellKey(cellKey);
+                                      }}
+                                      className="text-[9px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                      title="Assign custom work hours"
                                     >
-                                      <UserGroupIcon className="w-3 h-3 text-indigo-500" />
-                                      <span>Cover Duty</span>
+                                      + Set Duty Hours
                                     </button>
-                                  )}
+                                  </div>
                                 </div>
+                              ) : cell.start_time && cell.end_time && !isCustomEditing ? (
+                                /* State 2: Assigned Duty (Display Card with 1-click Toggle & Edit) */
+                                <div className="space-y-1.5">
+                                  <div
+                                    className={`px-2 py-1.5 rounded-lg text-center flex flex-col items-center justify-center ${
+                                      cell.is_night_shift
+                                        ? 'bg-indigo-100/70 text-indigo-950 border border-indigo-200/60'
+                                        : 'bg-blue-100/70 text-blue-950 border border-blue-200/60'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide">
+                                      {cell.is_night_shift ? (
+                                        <MoonIcon className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                                      ) : (
+                                        <SunIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      )}
+                                      <span>{cell.is_night_shift ? 'Night Shift' : 'Day Shift'}</span>
+                                    </div>
+                                    <div className="font-mono font-bold text-[11px] text-gray-900 mt-0.5">
+                                      {cell.start_time} – {cell.end_time}
+                                    </div>
+                                  </div>
+
+                                  {/* Action Bar */}
+                                  <div className="flex items-center justify-between gap-1 pt-0.5">
+                                    {/* Shift Type Switcher */}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCell(emp.employee_id, d, {
+                                          is_night_shift: !cell.is_night_shift,
+                                        })
+                                      }
+                                      className="inline-flex items-center gap-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs"
+                                      title={`Switch to ${cell.is_night_shift ? 'Day Shift' : 'Night Shift'}`}
+                                    >
+                                      {cell.is_night_shift ? (
+                                        <>
+                                          <SunIcon className="w-2.5 h-2.5 text-amber-600" />
+                                          <span>To Day</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <MoonIcon className="w-2.5 h-2.5 text-indigo-600" />
+                                          <span>To Night</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingCellKey(cellKey)}
+                                      className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 cursor-pointer shadow-2xs flex items-center gap-0.5"
+                                      title="Change duty start/end hours"
+                                    >
+                                      <PencilSquareIcon className="w-2.5 h-2.5 text-gray-500" />
+                                      <span>Edit</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCell(emp.employee_id, d, {
+                                          is_week_off: true,
+                                          start_time: '',
+                                          end_time: '',
+                                        })
+                                      }
+                                      className="text-[8px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-900 hover:bg-amber-200 rounded cursor-pointer"
+                                      title="Mark as Week Off"
+                                    >
+                                      WO
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                /* State 3: Enter Start Time, End Time, and Select Day vs Night Shift */
+                                <div className="space-y-1.5">
+                                  {/* Start & End Time Inputs */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="time"
+                                        value={cell.start_time || ''}
+                                        onChange={(e) =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_week_off: false,
+                                            start_time: e.target.value,
+                                          })
+                                        }
+                                        className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        placeholder="Start"
+                                        title="Duty Start Time"
+                                      />
+                                      <span className="text-[10px] text-gray-400 font-bold">–</span>
+                                      <input
+                                        type="time"
+                                        value={cell.end_time || ''}
+                                        onChange={(e) =>
+                                          updateCell(emp.employee_id, d, {
+                                            is_week_off: false,
+                                            end_time: e.target.value,
+                                          })
+                                        }
+                                        className="w-full text-[10px] font-bold p-1 border border-gray-300 rounded-md text-center bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        placeholder="End"
+                                        title="Duty End Time"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Shift Type Selector Toggle: Day vs Night */}
+                                  <div className="grid grid-cols-2 gap-1 p-0.5 bg-gray-100 rounded-lg border border-gray-200">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCell(emp.employee_id, d, {
+                                          is_night_shift: false,
+                                        })
+                                      }
+                                      className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                                        !cell.is_night_shift
+                                          ? 'bg-white text-blue-800 shadow-2xs border border-blue-200'
+                                          : 'text-gray-500 hover:text-gray-900'
+                                      }`}
+                                    >
+                                      <SunIcon className={`w-3 h-3 ${!cell.is_night_shift ? 'text-amber-500' : 'text-gray-400'}`} />
+                                      <span>Day</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCell(emp.employee_id, d, {
+                                          is_night_shift: true,
+                                        })
+                                      }
+                                      className={`flex items-center justify-center gap-1 py-1 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                                        cell.is_night_shift
+                                          ? 'bg-indigo-900 text-white shadow-2xs'
+                                          : 'text-gray-500 hover:text-gray-900'
+                                      }`}
+                                    >
+                                      <MoonIcon className={`w-3 h-3 ${cell.is_night_shift ? 'text-indigo-200' : 'text-gray-400'}`} />
+                                      <span>Night</span>
+                                    </button>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center justify-between text-[9px] text-gray-600 bg-gray-50 px-1.5 py-1 rounded border border-gray-200">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateCell(emp.employee_id, d, {
+                                          is_week_off: true,
+                                          start_time: '',
+                                          end_time: '',
+                                        })
+                                      }
+                                      className="text-[8px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 cursor-pointer"
+                                      title="Set as Week Off"
+                                    >
+                                      🏖️ Set WO
+                                    </button>
+                                    {cell.start_time && cell.end_time && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingCellKey(null)}
+                                        className="text-[10px] text-blue-700 font-bold hover:underline cursor-pointer px-1.5 py-0.5 bg-blue-50 rounded"
+                                      >
+                                        ✓ Done
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Shift Swap Action Button */}
+                              <div className="mt-1.5 flex flex-col gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwapClick(emp.employee_id, d, emp.full_name)}
+                                  disabled={isSaving}
+                                  className={`w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all disabled:opacity-40 ${
+                                    isPicked
+                                      ? 'bg-amber-500 text-white shadow-xs animate-pulse'
+                                      : 'text-gray-400 hover:text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
+                                  }`}
+                                  title="Swap duty hours with another person on the same date"
+                                >
+                                  <ArrowsRightLeftIcon className="w-3 h-3" />
+                                  <span>{isPicked ? 'PICKED FOR SWAP' : 'Swap'}</span>
+                                </button>
+
+                                {!cell.is_week_off && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openTransferModal(emp, d, cell)}
+                                    disabled={isSaving}
+                                    className="w-full flex items-center justify-center gap-1 text-[9px] font-bold rounded py-0.5 cursor-pointer transition-all text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200/60"
+                                    title="Transfer duty or assign replacement staff if this employee takes leave or is absent"
+                                  >
+                                    <UserGroupIcon className="w-3 h-3 text-indigo-500" />
+                                    <span>Cover Duty</span>
+                                  </button>
+                                )}
                               </div>
-                            )}
+                            </div>
                           </td>
                         );
                       })}
