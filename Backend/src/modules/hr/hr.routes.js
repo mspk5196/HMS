@@ -2,7 +2,7 @@ const router = require('express').Router();
 const ctrl = require('./hr.controller');
 const { verifyToken, requirePermissions } = require('../../middleware/auth');
 const { gate } = require('../../middleware/approvalGate');
-const { employeeDocUpload } = require('../../middleware/upload');
+const { employeeDocUpload, exitDocUpload } = require('../../middleware/upload');
 
 router.use(verifyToken);
 const canViewEmployees = requirePermissions(['hr_employee.view']);
@@ -19,6 +19,9 @@ router.post('/employees/bulk-import', gate('hr_employee.create', ctrl.bulkImport
 router.get('/employees/doctors', ctrl.listDoctors);
 router.post('/employees/remap', gate('hr_employee.remap', ctrl.remapEmployee));
 router.get('/employees', canViewEmployees, ctrl.listEmployees);
+router.get('/employees/:id/settlement-preview', canViewEmployees, ctrl.previewSettlement);
+router.post('/employees/:id/deactivate', exitDocUpload, gate('hr_employee.edit', ctrl.deactivateEmployee));
+router.post('/employees/:id/reactivate', gate('hr_employee.edit', ctrl.reactivateEmployee));
 router.get('/employees/:id', canViewEmployees, ctrl.getEmployee);
 router.post('/employees', employeeDocUpload, gate('hr_employee.create', ctrl.createEmployee));
 router.patch('/employees/:id/salary', gate('hr_employee.set_salary', ctrl.updateEmployeeSalary));

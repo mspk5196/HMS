@@ -83,6 +83,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'present' | 'absent' | 'late_present' | 'on_leave' | 'missed_punch'
 
   // Data & State
@@ -205,6 +206,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
         toDate,
       });
       if (deptFilter) params.set('departmentId', deptFilter);
+      if (shiftFilter) params.set('shiftCategory', shiftFilter);
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
       if (statusFilter !== 'all') params.set('status', statusFilter);
 
@@ -216,7 +218,7 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
     } finally {
       setIsLoading(false);
     }
-  }, [fromDate, toDate, deptFilter, searchTerm, statusFilter, onError]);
+  }, [fromDate, toDate, deptFilter, shiftFilter, searchTerm, statusFilter, onError]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -510,6 +512,22 @@ export default function AttendanceRegister({ departments = [], onError, onSucces
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Shift Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Shift</span>
+            <select
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="">All Shifts</option>
+              <option value="day">Day Shift</option>
+              <option value="night">Night Shift</option>
+              <option value="day_and_night">Day &amp; Night (Roster)</option>
+              <option value="general">General Shift</option>
             </select>
           </div>
 

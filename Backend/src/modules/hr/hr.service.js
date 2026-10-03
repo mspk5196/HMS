@@ -341,8 +341,132 @@ const updateEmployeeShift = async (employeeId, data, userId) => {
   return await q.updateEmployeeShift(employeeId, data, userId);
 };
 
+const salaryService = require('../salary/salary.service');
+
+const previewEmployeeSettlement = async (employeeId, lastWorkingDate) => {
+  return await salaryService.previewEmployeeSettlement(employeeId, lastWorkingDate);
+};
+
+const deactivateEmployee = async (employeeId, payload = {}, file = null, userId = null) => {
+  const emp = await q.getEmployee(employeeId);
+  if (!emp) throw new AppError('Employee not found', 404);
+
+  const reason = (payload.reason || payload.inactive_reason || '').trim();
+  if (!reason) {
+    throw new AppError('Reason for marking employee inactive is mandatory', 400);
+  }
+
+  const lastWorkingDate = (payload.last_working_date || payload.date_of_leaving || new Date().toISOString().slice(0, 10)).trim();
+
+  let docPath = emp.exit_document_path || null;
+  if (file && file.filename) {
+    docPath = `/uploads/${file.filename}`;
+    try {
+      const db = require('../../config/db');
+      await db.execute(
+        `INSERT INTO employee_documents (employee_id, doc_type, file_path, uploaded_by)
+         VALUES (?, 'exit_document', ?, ?)`,
+        [employeeId, docPath, userId]
+      );
+    } catch (e) {
+      console.warn('Notice inserting exit document:', e.message);
+    }
+  }
+
+  const db = require('../../config/db');
+  await db.execute(
+    `UPDATE employees
+     SET status = 'inactive',
+         date_of_leaving = ?,
+         inactive_date = ?,
+         inactive_reason = ?,
+         inactive_by = ?,
+         exit_document_path = COALESCE(?, exit_document_path)
+     WHERE id = ?`,
+    [lastWorkingDate, lastWorkingDate, reason, userId, docPath, employeeId]
+  );
+
+  // Write audit log
+  try {
+    await q.createEmployeeAuditLogsBatch([
+      {
+        employeeId,
+        changeType: 'status_change',
+        fieldName: 'status',
+        oldValue: emp.status || 'active',
+        newValue: 'inactive',
+        notes: `Marked inactive on ${lastWorkingDate}. Reason: ${reason}`,
+        changedBy: userId,
+      }
+    ]);
+  } catch (e) {
+    console.error('Audit log notice:', e.message);
+  }
+
+  let settlementResult = null;
+  const shouldSettle = payload.settle_salary === true || payload.settle_salary === 'true' || payload.settle_salary === '1' || payload.settle_salary === 1;
+
+  if (shouldSettle) {
+    settlementResult = await salaryService.settleEmployeeSalary({
+      employeeId,
+      lastWorkingDate,
+      markAsPaid: payload.mark_as_paid === true || payload.mark_as_paid === 'true' || payload.mark_as_paid === '1' || payload.mark_as_paid === 1,
+      paymentMode: payload.payment_mode || emp.payment_mode || 'account',
+      paymentDate: payload.payment_date || lastWorkingDate,
+      paymentReference: payload.payment_reference || null,
+      notes: payload.notes || `Exit settlement on ${lastWorkingDate}: ${reason}`,
+      userId,
+    });
+  }
+
+  const updated = await q.getEmployee(employeeId);
+
+  return {
+    employee: updated,
+    settlement: settlementResult,
+  };
+};
+
+const reactivateEmployee = async (employeeId, payload = {}, userId = null) => {
+  const emp = await q.getEmployee(employeeId);
+  if (!emp) throw new AppError('Employee not found', 404);
+
+  const reason = (payload.reason || 'Reactivated by HR').trim();
+  const db = require('../../config/db');
+  await db.execute(
+    `UPDATE employees
+     SET status = 'active',
+         date_of_leaving = NULL,
+         inactive_date = NULL,
+         inactive_reason = NULL,
+         inactive_by = NULL
+     WHERE id = ?`,
+    [employeeId]
+  );
+
+  try {
+    await q.createEmployeeAuditLogsBatch([
+      {
+        employeeId,
+        changeType: 'status_change',
+        fieldName: 'status',
+        oldValue: 'inactive',
+        newValue: 'active',
+        notes: reason,
+        changedBy: userId,
+      }
+    ]);
+  } catch (e) {
+    console.error('Audit log notice:', e.message);
+  }
+
+  const updated = await q.getEmployee(employeeId);
+  return { employee: updated };
+};
+
 module.exports = {
   createEmployee, updateEmployee,
+  deactivateEmployee, reactivateEmployee, previewEmployeeSettlement,
   bulkImportEmployees: q.bulkImportEmployees,
   createShift, updateShift, updateShiftTimings, deleteShift,
   createDepartment, updateDepartment, deleteDepartment,

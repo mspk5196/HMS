@@ -33,7 +33,12 @@ const daysInMonth = (month, year) => new Date(Date.UTC(year, month, 0)).getUTCDa
  * `half_day`, which the status enum does not permit, and matched `late_present`
  * before that value existed, so days_present was always understated.
  */
-const getAttendanceAggregates = async (employeeId, month, year) => {
+const getAttendanceAggregates = async (employeeId, month, year, upToDate = null) => {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const calDays = daysInMonth(month, year);
+  const endLimit = `${year}-${String(month).padStart(2, '0')}-${String(calDays).padStart(2, '0')}`;
+  const endDate = (upToDate && upToDate < endLimit) ? upToDate : endLimit;
+
   const [[summary]] = await db.execute(
     `SELECT
        COALESCE(SUM(status IN ('present','late_present')), 0) AS days_present,
@@ -45,8 +50,8 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
        COALESCE(SUM(status = 'week_off'), 0)                  AS days_week_off,
        COALESCE(SUM(late_minutes), 0)                         AS total_late_minutes
      FROM attendance_daily_summary
-     WHERE employee_id = ? AND MONTH(attendance_date) = ? AND YEAR(attendance_date) = ?`,
-    [employeeId, month, year]
+     WHERE employee_id = ? AND attendance_date >= ? AND attendance_date <= ?`,
+    [employeeId, startDate, endDate]
   );
 
   // Shifts actually worked, split by night, from attendance joined with employee & roster & effective shift history.
@@ -77,10 +82,10 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
        ON re.employee_id = ads.employee_id
       AND re.roster_date = ads.attendance_date
      WHERE ads.employee_id = ?
-       AND MONTH(ads.attendance_date) = ?
-       AND YEAR(ads.attendance_date) = ?
+       AND ads.attendance_date >= ?
+       AND ads.attendance_date <= ?
        AND ads.status IN ('present','late_present')`,
-    [employeeId, month, year]
+    [employeeId, startDate, endDate]
   );
 
   // Week-offs the employee was entitled to but worked instead — paid as an extra day
@@ -88,14 +93,14 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
     `SELECT COALESCE(sr.weekly_off_count, 0) AS entitled,
             (SELECT COUNT(*) FROM roster_entries re
               WHERE re.employee_id = e.id AND re.is_week_off = 1
-                AND MONTH(re.roster_date) = ? AND YEAR(re.roster_date) = ?) AS taken,
+                AND re.roster_date >= ? AND re.roster_date <= ?) AS taken,
             (SELECT COUNT(*) FROM roster_entries re
               WHERE re.employee_id = e.id
-                AND MONTH(re.roster_date) = ? AND YEAR(re.roster_date) = ?) AS rostered_days
+                AND re.roster_date >= ? AND re.roster_date <= ?) AS rostered_days
      FROM employees e
      LEFT JOIN staff_roles sr ON sr.id = e.designation_id
      WHERE e.id = ?`,
-    [month, year, month, year, employeeId]
+    [startDate, endDate, startDate, endDate, employeeId]
   );
 
   // Lateness beyond buffer
@@ -146,17 +151,23 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
 
 /**
  * Compute one payslip.
+ * Supports pro-rata calculation for inactive/exit employees via activeDays parameter.
  *
  * @param {object} salary    resolved by q.getEffectiveSalary
  * @param {object} agg       from getAttendanceAggregates
  * @param {object} cfg       payroll_config as a number map
  * @param {number} finesAmt  active fines for the period
  * @param {number} extraDays paid extra days worked (entry_type='extra_day')
+ * @param {number} activeDays total active working days in exit month (pro-rata divisor numerator)
  */
-const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmount = 0, month, year, nightRate }) => {
+const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmount = 0, month, year, nightRate, activeDays = null }) => {
   const monthly = Number(salary.fixed_salary) || 0;
   const calDays = daysInMonth(month, year);
   const dayRate = round2(monthly / calDays);
+
+  const effectiveActiveDays = activeDays !== null && activeDays !== undefined
+    ? Math.min(calDays, Math.max(1, Number(activeDays)))
+    : calDays;
 
   // Dynamic Basic + DA (default 70%) and HRA (default 30%) from payroll_config
   const basicPercent = (cfg.BASIC_PERCENT ?? 70) / 100;
@@ -169,7 +180,7 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmou
     ? Number(salary.hra_amount)
     : (monthly - basicDa);
 
-  const workedDays = Math.max(0, calDays - Number(agg.days_lop || 0));
+  const workedDays = Math.max(0, effectiveActiveDays - Number(agg.days_lop || 0));
   const earnedBasic = Math.round((basicDa / calDays) * workedDays);
   const earnedHra = Math.round((hra / calDays) * workedDays);
   const earnedSalary = earnedBasic + earnedHra;
@@ -179,12 +190,12 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmou
   const extraDayPay = overtimeAmount > 0 ? round2(overtimeAmount) : round2(dayRate * extraDays);
   const unusedWeekOffPay = round2(dayRate * agg.unused_week_offs);
 
-  // Start from the FULL monthly salary for record, and earned gross for payable
-  const grossPay = round2(monthly + nightComponent + extraDayPay + unusedWeekOffPay);
+  // Pro-rata gross based on active days in month worked, plus extra components
+  const grossPay = round2((monthly / calDays) * effectiveActiveDays + nightComponent + extraDayPay + unusedWeekOffPay);
   const lopAmount = round2(dayRate * Number(agg.days_lop || 0));
   const earnedGross = Math.max(0, round2(earnedSalary + nightComponent + extraDayPay + unusedWeekOffPay));
 
-  // Late attendance deductions are strictly manually assigned via the Late Attendance Fines module (no automatic deductions)
+  // Late attendance deductions are strictly manually assigned via the Late Attendance Fines module
   const bufferLateDeduction = 0;
 
   // --- PF CALCULATION (Dynamic from payroll_config) ---
@@ -224,6 +235,8 @@ const computeSalary = ({ salary, agg, cfg, finesAmt, extraDays = 0, overtimeAmou
 
   return {
     day_rate: dayRate,
+    active_days: effectiveActiveDays,
+    worked_days: workedDays,
     base_salary_component: monthly,
     basic_da_amount: basicDa,
     hra_amount: hra,
@@ -271,9 +284,25 @@ const createPayrollRun = async (data) => {
   });
 };
 
+const findOrCreatePayrollRun = async (month, year, createdBy = null) => {
+  let run = await q.findPayrollRunByPeriod(month, year);
+  if (!run) {
+    const runId = await q.createPayrollRun({
+      period_month: month,
+      period_year: year,
+      salary_date_type: 'last_day_of_month',
+    });
+    run = await q.getPayrollRun(runId);
+  }
+  return run;
+};
+
 /**
  * Calculate (or recalculate) every payslip in a draft run.
- * Safe to re-run: existing items are overwritten.
+ * Safe to re-run:
+ *   - Active employees are computed for the full month.
+ *   - Inactive employees whose date_of_leaving is in this month are computed pro-rata up to their last working date.
+ *   - Any item that was ALREADY settled/paid mid-month is strictly PRESERVED and not overwritten!
  */
 const calculatePayrollForRun = async (runId) => {
   const run = await q.getPayrollRun(runId);
@@ -285,29 +314,59 @@ const calculatePayrollForRun = async (runId) => {
   const year = Number(run.period_year);
   const cfg = await q.getPayrollConfig();
 
-  // employees.status is an enum — there is no is_active column.
+  // Query all active employees, plus employees who became inactive in this month
   const [employees] = await db.execute(
-    `SELECT id, full_name, employee_code, payment_mode FROM employees WHERE status = 'active'`
+    `SELECT id, full_name, employee_code, payment_mode, status, date_of_leaving, inactive_date
+     FROM employees
+     WHERE status = 'active'
+        OR (status = 'inactive' AND (
+             (date_of_leaving IS NOT NULL AND MONTH(date_of_leaving) = ? AND YEAR(date_of_leaving) = ?)
+          OR (inactive_date IS NOT NULL AND MONTH(inactive_date) = ? AND YEAR(inactive_date) = ?)
+        ))`,
+    [month, year, month, year]
   );
 
+  // Get existing items in this run to check if any are already paid/settled
+  const [existingItems] = await db.execute(
+    `SELECT * FROM payroll_items WHERE payroll_run_id = ?`,
+    [runId]
+  );
+  const existingMap = new Map(existingItems.map((i) => [i.employee_id, i]));
+
   let calculated = 0;
+  let preservedSettlements = 0;
   const skipped = [];
 
   for (const emp of employees) {
+    const existing = existingMap.get(emp.id);
+
+    // If this employee already has a paid or settled item, PRESERVE it so mid-month disbursements are never wiped!
+    if (existing && (existing.payment_status === 'paid' || existing.is_settlement === 1)) {
+      preservedSettlements++;
+      calculated++;
+      continue;
+    }
+
     const salary = await q.getEffectiveSalary(emp.id, month, year);
     if (!salary) {
       skipped.push({ employee_id: emp.id, full_name: emp.full_name, reason: 'no salary configured' });
       continue;
     }
 
-    const agg = await getAttendanceAggregates(emp.id, month, year);
+    const isInactive = emp.status === 'inactive';
+    const lastWorkingDate = (isInactive && (emp.date_of_leaving || emp.inactive_date))
+      ? String(emp.date_of_leaving || emp.inactive_date).slice(0, 10)
+      : null;
+    const activeDays = lastWorkingDate ? new Date(lastWorkingDate).getUTCDate() : null;
+
+    const agg = await getAttendanceAggregates(emp.id, month, year, lastWorkingDate);
     const finesAmt = await q.getActiveFinesAmount(emp.id, month, year);
-    const extraInfo = await q.countPaidExtraDays(emp.id, month, year);
+    const extraInfo = await q.countPaidExtraDays(emp.id, month, year, lastWorkingDate);
     const extraDays = typeof extraInfo === 'object' ? extraInfo.extra_days : Number(extraInfo || 0);
     const overtimeAmount = typeof extraInfo === 'object' ? extraInfo.total_amount : 0;
 
     const breakdown = computeSalary({
-      salary, agg, cfg, finesAmt, extraDays, overtimeAmount, month, year,
+      salary, agg, cfg, finesAmt, extraDays, overtimeAmount, month, year, activeDays,
     });
 
     await q.upsertPayrollItem({
@@ -320,11 +379,166 @@ const calculatePayrollForRun = async (runId) => {
       days_lop: agg.days_lop,
       shifts_worked: agg.shifts_worked,
       ...breakdown,
+      is_settlement: isInactive ? 1 : 0,
+      payment_status: 'pending',
     });
     calculated++;
   }
 
-  return { runId, month, year, calculated, skipped };
+  await q.syncPayrollRunTotals(runId);
+
+  return { runId, month, year, calculated, preservedSettlements, skipped };
+};
+
+/* ─────────────────────────────────────────────
+   INDIVIDUAL SETTLEMENT & MID-MONTH PAYOUTS
+───────────────────────────────────────────── */
+
+/**
+ * Preview pro-rata salary settlement for an employee up to their last working date.
+ */
+const previewEmployeeSettlement = async (employeeId, lastWorkingDate) => {
+  if (!employeeId) throw new AppError('employeeId is required', 400);
+  const exitDate = lastWorkingDate ? String(lastWorkingDate).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const [yStr, mStr, dStr] = exitDate.split('-');
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const activeDays = parseInt(dStr, 10);
+  const calDays = daysInMonth(month, year);
+
+  const [empRows] = await db.execute(
+    `SELECT e.*, d.name AS department_name, sr.name AS designation_name
+     FROM employees e
+     LEFT JOIN departments d ON d.id = e.department_id
+     LEFT JOIN staff_roles sr ON sr.id = e.designation_id
+     WHERE e.id = ?`,
+    [employeeId]
+  );
+  const emp = empRows[0];
+  if (!emp) throw new AppError('Employee not found', 404);
+
+  const salary = await q.getEffectiveSalary(employeeId, month, year);
+  if (!salary) {
+    throw new AppError('No salary configured for this employee.', 400);
+  }
+
+  const cfg = await q.getPayrollConfig();
+  const agg = await getAttendanceAggregates(employeeId, month, year, exitDate);
+  const finesAmt = await q.getActiveFinesAmount(employeeId, month, year);
+  const extraInfo = await q.countPaidExtraDays(employeeId, month, year, exitDate);
+  const extraDays = typeof extraInfo === 'object' ? extraInfo.extra_days : Number(extraInfo || 0);
+  const overtimeAmount = typeof extraInfo === 'object' ? extraInfo.total_amount : 0;
+
+  const breakdown = computeSalary({
+    salary,
+    agg,
+    cfg,
+    finesAmt,
+    extraDays,
+    overtimeAmount,
+    month,
+    year,
+    activeDays,
+  });
+
+  return {
+    employee: {
+      id: emp.id,
+      full_name: emp.full_name,
+      employee_code: emp.employee_code,
+      department_name: emp.department_name,
+      designation_name: emp.designation_name,
+      payment_mode: emp.payment_mode || 'account',
+      bank_account_no: emp.bank_account_no,
+      bank_name: emp.bank_name,
+      bank_ifsc: emp.bank_ifsc,
+      status: emp.status,
+    },
+    month,
+    year,
+    settlementMonth: month,
+    settlementYear: year,
+    lastWorkingDate: exitDate,
+    calDays,
+    totalCalendarDays: calDays,
+    activeDays,
+    activeWorkingDays: activeDays,
+    dayRate: breakdown.day_rate,
+    attendance: agg,
+    finesAmount: finesAmt,
+    salaryBreakdown: breakdown,
+    breakdown: {
+      ...breakdown,
+      monthly_salary: breakdown.base_salary_component,
+      earned_gross_pay: breakdown.gross_pay,
+      earned_basic_da: breakdown.earned_basic,
+      pf_employee: breakdown.pf_employee_amount,
+      esi_employee: breakdown.esi_employee_amount,
+      estimated_net_settlement: breakdown.net_pay,
+    },
+  };
+};
+
+/**
+ * Process and record individual salary settlement for an employee, optionally marking it as paid immediately.
+ */
+const settleEmployeeSalary = async ({
+  employeeId,
+  lastWorkingDate,
+  markAsPaid = false,
+  paymentMode = null,
+  paymentDate = null,
+  paymentReference = null,
+  notes = null,
+  userId = null,
+}) => {
+  const preview = await previewEmployeeSettlement(employeeId, lastWorkingDate);
+  const { month, year, salaryBreakdown, attendance, employee } = preview;
+
+  const run = await findOrCreatePayrollRun(month, year, userId);
+  const salary = await q.getEffectiveSalary(employeeId, month, year);
+
+  const isPaid = Boolean(markAsPaid);
+  const effectivePaymentMode = paymentMode || employee.payment_mode || 'account';
+  const effectivePaymentDate = isPaid ? (paymentDate || lastWorkingDate) : null;
+
+  await q.upsertPayrollItem({
+    payroll_run_id: run.id,
+    employee_id: employeeId,
+    payment_mode: effectivePaymentMode,
+    salary_structure_id: salary?.salary_structure_id || null,
+    days_present: attendance.days_present,
+    days_paid_leave: attendance.days_paid_leave,
+    days_lop: attendance.days_lop,
+    shifts_worked: attendance.shifts_worked,
+    ...salaryBreakdown,
+    is_settlement: 1,
+    payment_status: isPaid ? 'paid' : 'pending',
+    payment_date: effectivePaymentDate,
+    payment_reference: paymentReference || null,
+    settled_at: new Date(),
+    settled_by: userId,
+    notes: notes || `Final exit settlement up to ${lastWorkingDate}`,
+  });
+
+  if (isPaid) {
+    await q.markFinesDeducted(employeeId, month, year);
+  }
+
+  await q.syncPayrollRunTotals(run.id);
+
+  return {
+    success: true,
+    runId: run.id,
+    month,
+    year,
+    lastWorkingDate,
+    isPaid,
+    paymentMode: effectivePaymentMode,
+    paymentDate: effectivePaymentDate,
+    paymentReference: paymentReference || null,
+    settlement: salaryBreakdown,
+  };
 };
 
 const lockPayrollRun = async (runId, lockedBy) => {
@@ -498,7 +712,11 @@ module.exports = {
   computeSalary,
   getAttendanceAggregates,
   createPayrollRun,
+  findOrCreatePayrollRun,
   calculatePayrollForRun,
+  previewEmployeeSettlement,
+  settleEmployeeSalary,
+  markPayrollItemPaid: q.markPayrollItemPaid,
   lockPayrollRun,
   getPayslip,
   updatePayrollItemDeduction,

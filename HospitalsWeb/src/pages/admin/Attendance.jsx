@@ -229,6 +229,7 @@ export default function Attendance({ user }) {
 function DailyLog({ departments, onError, onSuccess }) {
   const [date, setDate] = useState(today());
   const [deptFilter, setDeptFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -248,6 +249,7 @@ function DailyLog({ departments, onError, onSuccess }) {
         limit: String(pageSize),
       });
       if (deptFilter) params.set('departmentId', deptFilter);
+      if (shiftFilter) params.set('shiftCategory', shiftFilter);
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
       if (statusFilter) params.set('status', statusFilter);
 
@@ -260,7 +262,7 @@ function DailyLog({ departments, onError, onSuccess }) {
     } finally {
       setIsLoading(false);
     }
-  }, [date, deptFilter, searchTerm, statusFilter, page, pageSize]);
+  }, [date, deptFilter, shiftFilter, searchTerm, statusFilter, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -338,6 +340,22 @@ function DailyLog({ departments, onError, onSuccess }) {
               </select>
             </div>
 
+            {/* Shift Type Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Shift</span>
+              <select
+                value={shiftFilter}
+                onChange={(e) => { setShiftFilter(e.target.value); setPage(1); }}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">All Shifts</option>
+                <option value="day">Day Shift</option>
+                <option value="night">Night Shift</option>
+                <option value="day_and_night">Day &amp; Night (Roster)</option>
+                <option value="general">General Shift</option>
+              </select>
+            </div>
+
             {/* Status Filter */}
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status</span>
@@ -390,10 +408,10 @@ function DailyLog({ departments, onError, onSuccess }) {
               </select>
             </div>
 
-            {(deptFilter || statusFilter || searchTerm) && (
+            {(deptFilter || shiftFilter || statusFilter || searchTerm) && (
               <button
                 type="button"
-                onClick={() => { setDeptFilter(''); setStatusFilter(''); setSearchTerm(''); setPage(1); }}
+                onClick={() => { setDeptFilter(''); setShiftFilter(''); setStatusFilter(''); setSearchTerm(''); setPage(1); }}
                 className="text-[11px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer"
               >
                 Clear Filters
@@ -617,9 +635,13 @@ function DailyLog({ departments, onError, onSuccess }) {
                     {/* Status */}
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                          {r.status === 'shift_not_configured' ? '⚠️ Shift Time Not Configured' : r.status?.replace(/_/g, ' ')}
-                        </span>
+                        {r.status ? (
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                            {r.status === 'shift_not_configured' ? '⚠️ Shift Time Not Configured' : r.status?.replace(/_/g, ' ')}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 font-medium text-xs">—</span>
+                        )}
                         {!!r.is_missed_punch && (
                           <span className="text-[9px] font-semibold text-rose-500">missed punch</span>
                         )}

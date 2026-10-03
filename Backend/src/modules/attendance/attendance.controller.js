@@ -14,7 +14,7 @@ const { success, created, paginated, fail } = require('../../utils/response');
 
 /** GET /api/attendance?date=YYYY-MM-DD  OR  ?fromDate=&toDate= */
 const listSummaries = asyncHandler(async (req, res) => {
-  let { date, fromDate, toDate, employeeId, departmentId, search, status, page = 1, limit = 50 } = req.query;
+  let { date, fromDate, toDate, employeeId, departmentId, shiftCategory, shift_category, search, status, page = 1, limit = 50 } = req.query;
   // Allow shorthand: ?date=YYYY-MM-DD  (single day)
   if (date && !fromDate) { fromDate = date; toDate = date; }
   if (!fromDate || !toDate) {
@@ -24,6 +24,7 @@ const listSummaries = asyncHandler(async (req, res) => {
     fromDate, toDate,
     employeeId: employeeId ? Number(employeeId) : null,
     departmentId: departmentId ? Number(departmentId) : null,
+    shiftCategory: shiftCategory || shift_category || null,
     search: search || null,
     status: status || null,
     page: Number(page), limit: Number(limit),
@@ -33,7 +34,7 @@ const listSummaries = asyncHandler(async (req, res) => {
 
 /** GET /api/attendance/register?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD */
 const getAttendanceRegister = asyncHandler(async (req, res) => {
-  let { fromDate, toDate, month, year, departmentId, search, status } = req.query;
+  let { fromDate, toDate, month, year, departmentId, shiftCategory, shift_category, search, status } = req.query;
   
   if (month && year && (!fromDate || !toDate)) {
     const m = Number(month);
@@ -56,6 +57,7 @@ const getAttendanceRegister = asyncHandler(async (req, res) => {
     fromDate,
     toDate,
     departmentId: departmentId ? Number(departmentId) : null,
+    shiftCategory: shiftCategory || shift_category || null,
     search: search || null,
     status: status || null,
   });

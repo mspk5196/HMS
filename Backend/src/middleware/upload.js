@@ -60,4 +60,14 @@ const logoUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 }).single('logo');
 
-module.exports = { employeeDocUpload, logoUpload };
+const exitDocUpload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+}).fields([
+  { name: 'exit_document', maxCount: 1 },
+  { name: 'document', maxCount: 1 },
+]);
+
+module.exports = { employeeDocUpload, logoUpload, exitDocUpload };
+

@@ -522,6 +522,12 @@ const computeBreakMinutes = (sortedPunches) => {
  * @param {string} date YYYY-MM-DD
  */
 const processDailyAttendance = async (date) => {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  if (date > todayStr) {
+    // Future dates cannot have attendance processed or marked absent
+    return { processed: 0, skipped: 0, date, message: 'Future dates cannot be processed.' };
+  }
+
   // Pick up any punches whose employee_code has since been registered.
   await q.linkOrphanPunches();
 
@@ -704,6 +710,32 @@ const processDailyAttendance = async (date) => {
 
     // If employee has no punches on this date:
     if (!firstIn && !lastOut) {
+      // If date is today or future, do not record absent for unpunched staff
+      if (date >= todayStr) {
+        if (shift?.is_week_off || shift?.is_holiday) {
+          const existing = await q.getDailySummary(employeeId, date);
+          if (!existing || (!existing.is_manually_marked && existing.status !== 'on_leave')) {
+            await q.upsertDailySummary({
+              employee_id: employeeId,
+              attendance_date: date,
+              shift_id: shift.shift_id ?? null,
+              status: shift.is_week_off ? 'week_off' : 'holiday',
+              first_punch_in: null,
+              last_punch_out: null,
+              worked_minutes: 0,
+              break_minutes: 0,
+              late_minutes: 0,
+              early_leave_minutes: 0,
+              is_missed_punch: 0,
+              biometric_window_extended: false,
+              overtime_minutes: 0,
+            });
+            processed++;
+          }
+        }
+        continue;
+      }
+
       const existing = await q.getDailySummary(employeeId, date);
       // Preserve manual marks or approved leave
       if (!existing || (!existing.is_manually_marked && existing.status !== 'on_leave')) {
@@ -807,12 +839,25 @@ const processAttendanceRange = async (fromDate, toDate) => {
   if (!fromDate || !toDate) {
     throw new AppError('fromDate and toDate are required', 400);
   }
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  if (fromDate > todayStr) {
+    return {
+      processed: 0,
+      skipped: 0,
+      datesProcessed: 0,
+      fromDate,
+      toDate,
+      message: 'Future date range cannot be processed.'
+    };
+  }
+
+  const effectiveToDate = toDate > todayStr ? todayStr : toDate;
   let totalProcessed = 0;
   let totalSkipped = 0;
   let datesProcessed = 0;
 
   const current = new Date(`${fromDate}T00:00:00Z`);
-  const end = new Date(`${toDate}T00:00:00Z`);
+  const end = new Date(`${effectiveToDate}T00:00:00Z`);
 
   while (current <= end) {
     const dStr = current.toISOString().slice(0, 10);
@@ -828,7 +873,7 @@ const processAttendanceRange = async (fromDate, toDate) => {
     skipped: totalSkipped,
     datesProcessed,
     fromDate,
-    toDate,
+    toDate: effectiveToDate,
   };
 };
 

@@ -7,10 +7,11 @@ const listDoctors = asyncHandler(async (req, res) => {
 });
 
 const listEmployees = asyncHandler(async (req, res) => {
-  const { search, departmentId, status, page = 1, limit = 50 } = req.query;
+  const { search, departmentId, shiftCategory, shift_category, status, page = 1, limit = 50 } = req.query;
   const result = await svc.listEmployees({
     search: search || null,
     departmentId: departmentId ? Number(departmentId) : null,
+    shiftCategory: shiftCategory || shift_category || null,
     status: status !== undefined ? status : null,
     page: Number(page),
     limit: Number(limit)
@@ -31,6 +32,26 @@ const createEmployee = asyncHandler(async (req, res) => {
   if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
   const id = await svc.createEmployee(body);
   return res.status(201).json(created({ id }, 'Employee created'));
+});
+
+const previewSettlement = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const lastWorkingDate = req.query.lastWorkingDate || req.query.last_working_date || new Date().toISOString().slice(0, 10);
+  const result = await svc.previewEmployeeSettlement(id, lastWorkingDate);
+  return res.json(success(result));
+});
+
+const deactivateEmployee = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const file = req.file || req.files?.exit_document?.[0] || req.files?.document?.[0] || null;
+  const result = await svc.deactivateEmployee(id, req.body, file, req.user?.id ?? null);
+  return res.json(success(result, 'Employee marked as inactive successfully'));
+});
+
+const reactivateEmployee = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await svc.reactivateEmployee(id, req.body, req.user?.id ?? null);
+  return res.json(success(result, 'Employee reactivated successfully'));
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
@@ -337,6 +358,7 @@ const listEmployeePayoutLogs = asyncHandler(async (req, res) => {
 
 module.exports = {
   listEmployees, listDoctors, getEmployee, createEmployee, updateEmployee, bulkImportEmployees,
+  previewSettlement, deactivateEmployee, reactivateEmployee,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listDesignations, createDesignation,
   listRoles, createRole,

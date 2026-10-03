@@ -53,7 +53,7 @@ const syncUserRoleFromDesignation = async (employeeId, designationId) => {
 };
 
 /* ─── EMPLOYEES ─── */
-const listEmployees = async ({ search, departmentId, status, page = 1, limit = 50 }) => {
+const listEmployees = async ({ search, departmentId, shiftCategory, status, page = 1, limit = 50 }) => {
   const offset = (page - 1) * limit;
   const filters = [];
   const params = [];
@@ -69,9 +69,16 @@ const listEmployees = async ({ search, departmentId, status, page = 1, limit = 5
     filters.push('e.department_id = ?');
     params.push(departmentId);
   }
-  if (status !== undefined && status !== null) {
+  if (shiftCategory && shiftCategory !== 'all') {
+    filters.push('e.shift_category = ?');
+    params.push(shiftCategory);
+  }
+  if (status !== undefined && status !== null && status !== '' && status !== 'all') {
     filters.push('e.status = ?');
     params.push(status === 1 || status === 'active' || status === true ? 'active' : 'inactive');
+  } else if (status === undefined || status === null || status === '') {
+    // Default to active employees
+    filters.push("e.status = 'active'");
   }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';

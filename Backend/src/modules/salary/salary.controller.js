@@ -302,6 +302,21 @@ const updatePayrollItemDeduction = asyncHandler(async (req, res) => {
   return res.json(success(result, 'Payroll deduction adjusted successfully'));
 });
 
+/** PATCH /api/salary/payroll-items/:itemId/pay — mark individual payroll item or settlement as paid */
+const markItemPaid = asyncHandler(async (req, res) => {
+  const itemId = Number(req.params.itemId);
+  const { payment_mode, payment_date, payment_reference, notes } = req.body;
+  await q.markPayrollItemPaid(itemId, {
+    payment_mode,
+    payment_date: payment_date || new Date().toISOString().slice(0, 10),
+    payment_reference,
+    notes,
+    settled_by: req.user?.id ?? null,
+  });
+  const item = await q.getPayrollItemById(itemId);
+  return res.json(success(item, 'Salary payment recorded successfully'));
+});
+
 /* ─── FINE TYPES ─── */
 
 const listFineTypes = asyncHandler(async (req, res) => res.json(success(await svc.listFineTypes())));
@@ -738,7 +753,7 @@ module.exports = {
   getConfig, updateConfig, getSalaryPolicy, updateSalaryPolicy,
   listNightShiftRates, addNightShiftRate,
   listRuns, getRun, createRun, calculateRun, generatePayroll, updateRunSalaryDate, lockRun, getPayslip,
-  listItems, updatePayrollItemDeduction, getCalculationSummary, exportPayrollRun,
+  listItems, updatePayrollItemDeduction, markItemPaid, getCalculationSummary, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,
   listOvertime, createOvertime,

@@ -377,7 +377,7 @@ const getDailySummary = async (employeeId, date) => {
 
 /** List daily summaries for a date range, optionally filtered by employee, department, search, and status. */
 /** List daily summaries for a date range, optionally filtered by employee, department, search, and status. */
-const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, search, status, page = 1, limit = 50 }) => {
+const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, shiftCategory, search, status, page = 1, limit = 50 }) => {
   const isSingleDay = fromDate === toDate;
   const isAll = Number(limit) === -1 || Number(limit) >= 1000;
   const lim = isAll ? 5000 : Math.max(1, Number(limit) || 50);
@@ -385,6 +385,8 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
 
   // If viewing a single date (Daily Log view), start from employees to include all staff
   if (isSingleDay) {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const isFuture = fromDate > todayStr;
     const filters = ["e.status = 'active'"];
     const params = [fromDate]; // For ON ads.attendance_date = ?
 
@@ -395,6 +397,10 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
     if (departmentId) {
       filters.push('e.department_id = ?');
       params.push(departmentId);
+    }
+    if (shiftCategory && shiftCategory !== 'all') {
+      filters.push('e.shift_category = ?');
+      params.push(shiftCategory);
     }
     if (search && String(search).trim()) {
       filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
@@ -424,8 +430,8 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          CASE
            WHEN ads.is_manually_marked = 1 THEN ads.status
            WHEN ads.status = 'on_leave' OR ads.status = 'half_day_leave' THEN ads.status
-           WHEN e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0)) THEN 'shift_not_configured'
-           ELSE COALESCE(ads.status, 'absent')
+           WHEN ads.status IS NOT NULL THEN ads.status
+           ${isFuture ? 'ELSE NULL' : "WHEN e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0)) THEN 'shift_not_configured' ELSE 'absent'"}
          END AS status,
          ads.first_in_time AS first_punch_in,
          ads.last_out_time AS last_punch_out,
@@ -502,6 +508,10 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
       statsFilters.push('e.department_id = ?');
       statsParams.push(departmentId);
     }
+    if (shiftCategory && shiftCategory !== 'all') {
+      statsFilters.push('e.shift_category = ?');
+      statsParams.push(shiftCategory);
+    }
     if (search && String(search).trim()) {
       statsFilters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
       statsParams.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
@@ -513,8 +523,8 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
          COUNT(*) AS total,
          COALESCE(SUM(CASE WHEN ads.status = 'present' AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS present,
          COALESCE(SUM(CASE WHEN ads.status = 'late_present' AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS late,
-         COALESCE(SUM(CASE WHEN (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) OR ads.status = 'shift_not_configured' THEN 1 ELSE 0 END), 0) AS shift_not_configured,
-         COALESCE(SUM(CASE WHEN (ads.status = 'absent' OR (ads.status IS NULL AND NOT (e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))))) AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) THEN 1 ELSE 0 END), 0) AS absent,
+         COALESCE(SUM(CASE WHEN ${isFuture ? '0 = 1' : "(ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))) OR ads.status = 'shift_not_configured'"} THEN 1 ELSE 0 END), 0) AS shift_not_configured,
+         COALESCE(SUM(CASE WHEN ${isFuture ? '0 = 1' : "(ads.status = 'absent' OR (ads.status IS NULL AND NOT (e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0))))) AND NOT (ads.is_manually_marked = 0 AND e.shift_category = 'day_and_night' AND (re.id IS NULL OR (re.custom_start_time IS NULL AND re.shift_id IS NULL AND re.is_week_off = 0 AND re.is_holiday = 0)))"} THEN 1 ELSE 0 END), 0) AS absent,
          COALESCE(SUM(CASE WHEN ads.status IN ('on_leave', 'half_day_leave') THEN 1 ELSE 0 END), 0) AS on_leave,
          COALESCE(SUM(CASE WHEN ads.status IN ('lop', 'half_day_lop') THEN 1 ELSE 0 END), 0) AS lop,
          COALESCE(SUM(CASE WHEN ads.status = 'week_off' OR (re.is_week_off = 1 AND ads.status IS NULL) THEN 1 ELSE 0 END), 0) AS week_off,
@@ -550,6 +560,7 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
 
   if (employeeId) { filters.push('ads.employee_id = ?'); params.push(employeeId); }
   if (departmentId) { filters.push('e.department_id = ?'); params.push(departmentId); }
+  if (shiftCategory && shiftCategory !== 'all') { filters.push('e.shift_category = ?'); params.push(shiftCategory); }
   if (search && String(search).trim()) {
     filters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');
     params.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
@@ -607,13 +618,17 @@ const listDailySummaries = async ({ fromDate, toDate, employeeId, departmentId, 
 };
 
 /** Get comprehensive attendance register & matrix (daily/weekly/monthly) */
-const getAttendanceRegister = async ({ fromDate, toDate, departmentId, search, status }) => {
+const getAttendanceRegister = async ({ fromDate, toDate, departmentId, shiftCategory, search, status }) => {
   const empFilters = ["e.status = 'active'"];
   const empParams = [];
 
   if (departmentId) {
     empFilters.push('e.department_id = ?');
     empParams.push(departmentId);
+  }
+  if (shiftCategory && shiftCategory !== 'all') {
+    empFilters.push('e.shift_category = ?');
+    empParams.push(shiftCategory);
   }
   if (search && String(search).trim()) {
     empFilters.push('(e.full_name LIKE ? OR e.employee_code LIKE ?)');

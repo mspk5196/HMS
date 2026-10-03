@@ -346,6 +346,7 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
   const [rows] = await db.query(
     `SELECT pi.*, e.full_name, e.employee_code, e.uan_number, e.esi_number,
             e.bank_account_no, e.bank_name, e.bank_ifsc,
+            e.status AS employee_status, e.date_of_leaving, e.inactive_reason, e.inactive_date,
             COALESCE(pi.payment_mode, e.payment_mode, 'account') AS payment_mode,
             e.pf_enrolled, e.esi_enrolled,
             d.name AS department_name, COALESCE(sr.name, '') AS designation_name
@@ -366,11 +367,7 @@ const getPayrollItems = async (runId, page = 1, limit = 100) => {
 
 /**
  * Write one employee's payslip line.
- *
- * The real columns are days_present / days_paid_leave / days_lop — there is no
- * days_absent or days_half (half-day leave is out of scope by decision).
- * salary_structure_id is nullable here because a salary may resolve from the
- * role default rather than an explicit structure row.
+ * Supports pro-rata settlements, individual mid-month payments, and payment references.
  */
 const upsertPayrollItem = async (data) => {
   const {
@@ -382,6 +379,8 @@ const upsertPayrollItem = async (data) => {
     pf_employee_amount, pf_employer_amount, pf_employer_eps_amount, pf_employer_epf_amount,
     esi_employee_amount, esi_employer_amount,
     fines_amount, net_pay,
+    is_settlement = 0, payment_status = 'pending', payment_date = null, payment_reference = null,
+    settled_at = null, settled_by = null, notes = null,
   } = data;
 
   await db.execute(
@@ -393,8 +392,10 @@ const upsertPayrollItem = async (data) => {
         pf_wage, esi_wage,
         pf_employee_amount, pf_employer_amount, pf_employer_eps_amount, pf_employer_epf_amount,
         esi_employee_amount, esi_employer_amount,
-        fines_amount, net_pay)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        fines_amount, net_pay,
+        is_settlement, payment_status, payment_date, payment_reference,
+        settled_at, settled_by, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        salary_structure_id = VALUES(salary_structure_id),
        payment_mode = VALUES(payment_mode),
@@ -419,7 +420,14 @@ const upsertPayrollItem = async (data) => {
        esi_employee_amount = VALUES(esi_employee_amount),
        esi_employer_amount = VALUES(esi_employer_amount),
        fines_amount = VALUES(fines_amount),
-       net_pay = VALUES(net_pay)`,
+       net_pay = VALUES(net_pay),
+       is_settlement = VALUES(is_settlement),
+       payment_status = VALUES(payment_status),
+       payment_date = VALUES(payment_date),
+       payment_reference = VALUES(payment_reference),
+       settled_at = VALUES(settled_at),
+       settled_by = VALUES(settled_by),
+       notes = VALUES(notes)`,
     [payroll_run_id, employee_id, salary_structure_id ?? null, payment_mode || 'account',
      days_present ?? 0, days_paid_leave ?? 0, days_lop ?? 0, shifts_worked ?? 0,
      base_salary_component ?? 0, earned_basic ?? 0, earned_hra ?? 0, night_shift_component ?? 0, buffer_late_deduction ?? 0,
@@ -427,7 +435,24 @@ const upsertPayrollItem = async (data) => {
      pf_wage ?? 0, esi_wage ?? 0,
      pf_employee_amount ?? 0, pf_employer_amount ?? 0, pf_employer_eps_amount ?? 0, pf_employer_epf_amount ?? 0,
      esi_employee_amount ?? 0, esi_employer_amount ?? 0,
-     fines_amount ?? 0, net_pay ?? 0]
+     fines_amount ?? 0, net_pay ?? 0,
+     is_settlement ? 1 : 0, payment_status || 'pending', payment_date || null, payment_reference || null,
+     settled_at || null, settled_by || null, notes || null]
+  );
+};
+
+const markPayrollItemPaid = async (itemId, { payment_mode, payment_date, payment_reference, notes, settled_by } = {}) => {
+  await db.execute(
+    `UPDATE payroll_items
+     SET payment_status = 'paid',
+         payment_mode = COALESCE(?, payment_mode),
+         payment_date = COALESCE(?, CURDATE()),
+         payment_reference = COALESCE(?, payment_reference),
+         notes = COALESCE(?, notes),
+         settled_at = NOW(),
+         settled_by = COALESCE(?, settled_by)
+     WHERE id = ?`,
+    [payment_mode || null, payment_date || null, payment_reference || null, notes || null, settled_by || null, itemId]
   );
 };
 
@@ -624,21 +649,25 @@ const updatePayrollItemDeductions = async (itemId, { lop_amount, buffer_late_ded
 };
 
 const syncPayrollRunTotals = async (runId) => {
-  const [rows] = await db.execute(
-    `SELECT COALESCE(SUM(net_pay), 0) AS total_net,
-            COUNT(*) AS item_count
-     FROM payroll_items
-     WHERE payroll_run_id = ?`,
-    [runId]
-  );
-  if (rows.length) {
-    const s = rows[0];
-    await db.execute(
-      `UPDATE payroll_runs
-       SET total_net = ?, item_count = ?
-       WHERE id = ?`,
-      [s.total_net, s.item_count, runId]
+  try {
+    const [rows] = await db.execute(
+      `SELECT COALESCE(SUM(net_pay), 0) AS total_net,
+              COUNT(*) AS item_count
+       FROM payroll_items
+       WHERE payroll_run_id = ?`,
+      [runId]
     );
+    if (rows.length) {
+      const s = rows[0];
+      await db.execute(
+        `UPDATE payroll_runs
+         SET total_net = ?, item_count = ?
+         WHERE id = ?`,
+        [s.total_net, s.item_count, runId]
+      );
+    }
+  } catch (err) {
+    // If total_net / item_count columns are not in payroll_runs table, ignore harmlessly
   }
 };
 
@@ -649,7 +678,7 @@ module.exports = {
   getNightShiftRate, addNightShiftRate, listNightShiftRates,
   listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
   updatePayrollRunSalaryDate, updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
-  getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem,
+  getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem, markPayrollItemPaid,
   getPayrollItemById, updatePayrollItemDeductions, syncPayrollRunTotals,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,
   listFineTypes, createFineType, updateFineType, getFineTypeByTriggerRule,

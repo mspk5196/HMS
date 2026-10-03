@@ -290,6 +290,7 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
   const [targetSalaryDate, setTargetSalaryDate] = useState('');
   const [targetSalaryDateType, setTargetSalaryDateType] = useState('last_day_of_month');
   const [isUpdatingDate, setIsUpdatingDate] = useState(false);
+  const [payingItem, setPayingItem] = useState(null);
 
   useEffect(() => {
     if (run) {
@@ -654,12 +655,29 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
                 {filteredItems.map((it) => (
                   <tr key={it.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-gray-900">{it.full_name}</span>
                         {(it.payment_mode || 'account') === 'cash' ? (
                           <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Cash</span>
                         ) : (
                           <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Bank</span>
+                        )}
+                        {(it.is_settlement === 1 || it.employee_status === 'inactive') && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                            Settled (Exit)
+                          </span>
+                        )}
+                        {it.payment_status === 'paid' ? (
+                          <span
+                            className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-0.5"
+                            title={`Paid on ${it.payment_date ? new Date(it.payment_date).toLocaleDateString('en-IN') : 'Disbursed'}${it.payment_reference ? ` (Ref: ${it.payment_reference})` : ''}`}
+                          >
+                            <CheckIcon className="w-2.5 h-2.5 text-emerald-600" /> Paid
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            Pending
+                          </span>
                         )}
                       </div>
                       <div className="text-[10px] text-gray-400 font-mono">{it.employee_code} · {it.department_name || '—'}</div>
@@ -684,6 +702,16 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
                       {money(it.net_pay)}
                     </td>
                     <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap">
+                      {it.payment_status !== 'paid' && hasPermission(user, 'payroll.edit') && (
+                        <button
+                          onClick={() => setPayingItem(it)}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-emerald-200"
+                          title="Record salary payment / disbursement"
+                        >
+                          <CheckIcon className="w-3 h-3 text-emerald-700" />
+                          <span>Pay</span>
+                        </button>
+                      )}
                       {run.status === 'draft' && hasPermission(user, 'payroll.edit') && (
                         <button
                           onClick={() => openAdjustModal(it)}
@@ -996,6 +1024,134 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
           onError={onError}
         />
       )}
+
+      {payingItem && (
+        <MarkPayrollItemPaidModal
+          item={payingItem}
+          onClose={() => setPayingItem(null)}
+          onSuccess={(msg) => {
+            onSuccess(msg);
+            setPayingItem(null);
+            loadItems();
+          }}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+function MarkPayrollItemPaidModal({ item, onClose, onSuccess, onError }) {
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentMode, setPaymentMode] = useState(() => item.payment_mode || 'account');
+  const [paymentReference, setPaymentReference] = useState(() => item.payment_reference || '');
+  const [notes, setNotes] = useState(() => item.notes || '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSaving(true);
+      const res = await apiFetch(`/salary/payroll-items/${item.id}/pay`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          payment_date: paymentDate,
+          payment_reference: paymentReference.trim(),
+          payment_mode: paymentMode,
+          notes: notes.trim(),
+        }),
+      });
+      onSuccess(res.message || `Salary payment recorded for ${item.full_name}.`);
+    } catch (err) {
+      onError(err, 'Failed to record salary payment.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 border border-slate-100 animate-in fade-in">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Record Salary Payment</h3>
+            <p className="text-[11px] text-slate-500 font-medium">
+              {item.full_name} ({item.employee_code}) · Net Payable: <strong className="text-emerald-700">{money(item.net_pay)}</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Payment Date *</label>
+            <input
+              type="date"
+              required
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Payment Mode</label>
+            <select
+              value={paymentMode}
+              onChange={(e) => setPaymentMode(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white"
+            >
+              <option value="account">Bank Transfer</option>
+              <option value="cash">Cash Payment</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Payment Ref / Voucher #</label>
+            <input
+              type="text"
+              placeholder="e.g. CASH-VOUCHER-01, UTR918237..."
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 bg-white"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Remarks / Notes</label>
+            <input
+              type="text"
+              placeholder="e.g. Disbursed via cash / regular salary release"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 bg-white"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Recording…' : 'Confirm Payment'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

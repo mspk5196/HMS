@@ -25,6 +25,8 @@ import {
   DocumentTextIcon,
   LandmarkIcon,
   ReceiptIcon,
+  CheckIcon,
+  XIcon,
 } from '../../components/Icons';
 
 const PAGE_SIZE = 25;
@@ -98,6 +100,7 @@ export default function HREmployees({ user }) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
 
   const [selectedId, setSelectedId] = useState(null);
@@ -113,6 +116,8 @@ export default function HREmployees({ user }) {
     night: { start: '20:00', end: '08:00' },
   });
   const [showShiftTimingModal, setShowShiftTimingModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -140,6 +145,7 @@ export default function HREmployees({ user }) {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (search) params.append('search', search);
       if (deptFilter) params.append('departmentId', deptFilter);
+      if (shiftFilter) params.append('shiftCategory', shiftFilter);
       if (statusFilter) params.append('status', statusFilter);
 
       const res = await apiFetch(`/hr/employees?${params.toString()}`, { withMeta: true });
@@ -157,7 +163,7 @@ export default function HREmployees({ user }) {
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, deptFilter, statusFilter]);
+  }, [page, search, deptFilter, shiftFilter, statusFilter]);
 
   useEffect(() => {
     (async () => {
@@ -307,6 +313,24 @@ export default function HREmployees({ user }) {
       setErrorMsg(err.message || 'Failed to save employee.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!detail) return;
+    if (!window.confirm(`Are you sure you want to reactivate ${detail.full_name}? This will restore their status to Active.`)) return;
+    try {
+      setIsReactivating(true);
+      setErrorMsg('');
+      await apiFetch(`/hr/employees/${detail.id}/reactivate`, { method: 'POST' });
+      flash(`Employee ${detail.full_name} has been reactivated successfully.`);
+      const fresh = await apiFetch(`/hr/employees/${detail.id}`);
+      setDetail(fresh);
+      fetchEmployees();
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to reactivate employee.');
+    } finally {
+      setIsReactivating(false);
     }
   };
 
@@ -513,11 +537,11 @@ export default function HREmployees({ user }) {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <select
                 value={deptFilter}
                 onChange={(e) => { setDeptFilter(e.target.value); setPage(1); }}
-                className="flex-1 px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 bg-white"
+                className="flex-1 min-w-0 px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 bg-white"
               >
                 <option value="">All Depts</option>
                 {departments.map((d) => (
@@ -526,13 +550,25 @@ export default function HREmployees({ user }) {
               </select>
 
               <select
+                value={shiftFilter}
+                onChange={(e) => { setShiftFilter(e.target.value); setPage(1); }}
+                className="flex-1 min-w-0 px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 bg-white"
+              >
+                <option value="">All Shifts</option>
+                <option value="day">Day Shift</option>
+                <option value="night">Night Shift</option>
+                <option value="day_and_night">Day &amp; Night</option>
+                <option value="general">General Shift</option>
+              </select>
+
+              <select
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-medium text-gray-700 bg-white"
               >
-                <option value="active">Active Only</option>
-                <option value="">All Status</option>
-                <option value="inactive">Inactive Only</option>
+                <option value="active">Active</option>
+                <option value="all">All</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
           </div>
@@ -675,15 +711,38 @@ export default function HREmployees({ user }) {
                 </div>
 
                 {/* Right Action Buttons */}
-                <div className="flex items-center gap-2 shrink-0">
-                  {rightTab === 'profile' && !isEditing && (
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  {detail.status === 'inactive' ? (
                     <button
-                      onClick={startEditing}
-                      className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      onClick={handleReactivate}
+                      disabled={isReactivating}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
                     >
-                      <EditIcon className="w-3.5 h-3.5" />
-                      <span>Edit Profile</span>
+                      <CheckIcon className="w-3.5 h-3.5 text-white" />
+                      <span>{isReactivating ? 'Reactivating...' : 'Reactivate Employee'}</span>
                     </button>
+                  ) : (
+                    <>
+                      {rightTab === 'profile' && !isEditing && (
+                        <button
+                          onClick={startEditing}
+                          className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <EditIcon className="w-3.5 h-3.5" />
+                          <span>Edit Profile</span>
+                        </button>
+                      )}
+                      {(canEdit || canSetSalary) && (
+                        <button
+                          onClick={() => setShowDeactivateModal(true)}
+                          className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                          title="Mark employee as inactive / relieved and calculate exit settlement"
+                        >
+                          <XIcon className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Mark Inactive / Exit Settlement</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1040,6 +1099,41 @@ export default function HREmployees({ user }) {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Inactive / Relieved Alert Banner */}
+                    {detail.status === 'inactive' && (
+                      <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/70 text-rose-900 space-y-2.5 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block animate-pulse"></span>
+                            <span className="text-xs font-extrabold uppercase tracking-wide text-rose-800">
+                              Employee Relieved / Marked Inactive
+                            </span>
+                          </div>
+                          {detail.exit_document_path && (
+                            <a
+                              href={detail.exit_document_path}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] font-bold px-3 py-1 rounded-lg bg-white text-rose-700 border border-rose-200 hover:bg-rose-50 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                            >
+                              <DocumentTextIcon className="w-3.5 h-3.5 text-rose-600" />
+                              <span>View Exit Document</span>
+                            </a>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white/80 p-3 rounded-lg border border-rose-100">
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Relieved / Inactive Date</span>
+                            <span className="font-bold text-gray-900">{displayDate(detail.inactive_date || detail.date_of_leaving)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Reason for Inactivation</span>
+                            <span className="font-semibold text-gray-800">{detail.inactive_reason || 'No reason provided'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Section 1: Employment & Compensation Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Personal & Work Info */}
@@ -1290,6 +1384,338 @@ export default function HREmployees({ user }) {
           }
         }}
       />
+
+      {showDeactivateModal && detail && (
+        <DeactivateEmployeeModal
+          isOpen={showDeactivateModal}
+          onClose={() => setShowDeactivateModal(false)}
+          employee={detail}
+          onSuccess={async (msg) => {
+            flash(msg);
+            const fresh = await apiFetch(`/hr/employees/${detail.id}`);
+            setDetail(fresh);
+            fetchEmployees();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeactivateEmployeeModal({ isOpen, onClose, employee, onSuccess }) {
+  if (!isOpen || !employee) return null;
+
+  const [lastWorkingDate, setLastWorkingDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reason, setReason] = useState('');
+  const [exitDoc, setExitDoc] = useState(null);
+  const [disburseImmediately, setDisburseImmediately] = useState(true);
+  const [paymentMode, setPaymentMode] = useState(() => employee.payment_mode || 'account');
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentReference, setPaymentReference] = useState('');
+  const [settlementNotes, setSettlementNotes] = useState('');
+
+  const [preview, setPreview] = useState(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Fetch settlement preview when lastWorkingDate changes
+  useEffect(() => {
+    if (!lastWorkingDate) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        setIsLoadingPreview(true);
+        const res = await apiFetch(`/hr/employees/${employee.id}/settlement-preview?lastWorkingDate=${lastWorkingDate}`);
+        if (isMounted) setPreview(res);
+      } catch (err) {
+        if (isMounted) console.error('Failed to load settlement preview:', err);
+      } finally {
+        if (isMounted) setIsLoadingPreview(false);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [employee.id, lastWorkingDate]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!reason.trim()) {
+      setErrorMsg('Reason for marking inactive is mandatory.');
+      return;
+    }
+    if (!lastWorkingDate) {
+      setErrorMsg('Please select last working date.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setErrorMsg('');
+
+      const fd = new FormData();
+      fd.append('last_working_date', lastWorkingDate);
+      fd.append('inactive_reason', reason.trim());
+      if (exitDoc) {
+        fd.append('exit_document', exitDoc);
+      }
+      fd.append('disburse_immediately', disburseImmediately ? 'true' : 'false');
+      if (disburseImmediately) {
+        fd.append('payment_mode', paymentMode);
+        fd.append('payment_date', paymentDate || lastWorkingDate);
+        fd.append('payment_reference', paymentReference.trim());
+      }
+      if (settlementNotes.trim()) {
+        fd.append('settlement_notes', settlementNotes.trim());
+      }
+
+      const res = await apiFetch(`/hr/employees/${employee.id}/deactivate`, {
+        method: 'POST',
+        body: fd,
+      });
+
+      onSuccess(res.message || `Employee ${employee.full_name} has been marked inactive.`);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to mark employee inactive.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const b = preview?.salaryBreakdown || preview?.breakdown || {};
+  const att = preview?.attendance || {};
+  const activeDaysCount = preview?.activeDays ?? preview?.activeWorkingDays ?? (lastWorkingDate ? parseInt(lastWorkingDate.split('-')[2], 10) : 0);
+  const calDaysCount = preview?.calDays ?? preview?.totalCalendarDays ?? 30;
+  const monthNum = preview?.month ?? preview?.settlementMonth ?? (lastWorkingDate ? parseInt(lastWorkingDate.split('-')[1], 10) : 0);
+  const yearNum = preview?.year ?? preview?.settlementYear ?? (lastWorkingDate ? parseInt(lastWorkingDate.split('-')[0], 10) : 0);
+
+  const baseSalaryVal = b.base_salary_component ?? b.monthly_salary ?? employee.basic_salary ?? 0;
+  const earnedGrossVal = b.gross_pay ?? b.earned_gross ?? b.earned_gross_pay ?? 0;
+  const lopDaysVal = att.days_lop ?? b.days_lop ?? 0;
+  const netPayVal = b.net_pay ?? b.estimated_net_settlement ?? 0;
+  const earnedBasicVal = b.earned_basic ?? b.earned_basic_da ?? 0;
+  const earnedHraVal = b.earned_hra ?? 0;
+  const pfVal = b.pf_employee_amount ?? b.pf_employee ?? 0;
+  const esiVal = b.esi_employee_amount ?? b.esi_employee ?? 0;
+  const finesVal = b.fines_amount ?? preview?.finesAmount ?? 0;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 my-8 space-y-5 animate-in fade-in duration-150">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+              <UserIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900">Mark Inactive &amp; Settle Exit Salary</h2>
+              <p className="text-xs text-slate-500 font-medium">
+                {employee.full_name} (#{employee.employee_code}) · {employee.department_name || 'Staff'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Step 1: Relieving Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Last Working Date (Exit Date) *
+              </label>
+              <input
+                type="date"
+                required
+                value={lastWorkingDate}
+                onChange={(e) => {
+                  setLastWorkingDate(e.target.value);
+                  if (!paymentDate || paymentDate === lastWorkingDate) {
+                    setPaymentDate(e.target.value);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              />
+              <p className="text-[10px] text-slate-400">
+                Working days in exit month will be calculated up to this date only.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Exit / Resignation Document (Optional)
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setExitDoc(e.target.files?.[0] || null)}
+                className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Attach resignation letter, clearance form or relieving doc.</p>
+            </div>
+
+            <div className="sm:col-span-2 space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Reason for Inactivation / Relieving *
+              </label>
+              <textarea
+                required
+                rows={2}
+                placeholder="e.g. Resigned for higher studies, Personal reasons, Relocation, End of contract..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              />
+            </div>
+          </div>
+
+          {/* Step 2: Live Exit Settlement Calculation Preview Card */}
+          <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CurrencyRupeeIcon className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Pro-Rata Settlement Calculation Preview
+                </span>
+              </div>
+              {isLoadingPreview ? (
+                <span className="text-[10px] text-slate-400 font-medium animate-pulse">Calculating…</span>
+              ) : (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {activeDaysCount} of {calDaysCount} Days ({monthNum}/{yearNum})
+                </span>
+              )}
+            </div>
+
+            {preview ? (
+              <div className="space-y-3 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Monthly Base</span>
+                    <span className="text-xs font-extrabold text-slate-800">{money(baseSalaryVal)}</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase block">Pro-Rata Gross</span>
+                    <span className="text-xs font-extrabold text-emerald-700">{money(earnedGrossVal)}</span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200/60 shadow-2xs">
+                    <span className="text-[9px] font-bold text-orange-600 uppercase block">Days LOP</span>
+                    <span className="text-xs font-extrabold text-orange-700">{lopDaysVal} days</span>
+                  </div>
+                  <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 shadow-2xs">
+                    <span className="text-[9px] font-bold text-emerald-800 uppercase block">Net Settlement</span>
+                    <span className="text-sm font-extrabold text-emerald-900">{money(netPayVal)}</span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <span>
+                    Basic: <strong>{money(earnedBasicVal)}</strong> · HRA: <strong>{money(earnedHraVal)}</strong>
+                  </span>
+                  <span>
+                    PF: <strong>-{money(pfVal)}</strong> · ESI: <strong>-{money(esiVal)}</strong>
+                    {Number(finesVal) > 0 && ` · Fines: -${money(finesVal)}`}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Step 3: Immediate Salary Disbursement Option */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-white space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={disburseImmediately}
+                onChange={(e) => setDisburseImmediately(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+              />
+              <span className="text-xs font-bold text-slate-800">
+                Mark salary as given / disbursed to employee immediately
+              </span>
+            </label>
+
+            {disburseImmediately && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 animate-in fade-in">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Disbursement Mode</label>
+                  <select
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white"
+                  >
+                    <option value="account">Bank Transfer (A/c: {employee.bank_account_no || 'On file'})</option>
+                    <option value="cash">Cash Payment (Direct Cash Disbursal)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment Date</label>
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment Ref / Voucher #</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CASH-SETTLE-01, UTR918237..."
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Settlement Note</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Full and final settlement paid on exit"
+                    value={settlementNotes}
+                    onChange={(e) => setSettlementNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 bg-white"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <XIcon className="w-3.5 h-3.5 text-white" />
+              <span>{isSubmitting ? 'Processing Settlement…' : 'Confirm Inactivation & Settle'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
