@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader';
 import AddMemberForm from './departmentrole/AddMemberForm';
 import BulkEmployeeImportModal, { downloadEmployeeExcelTemplate } from './BulkEmployeeImportModal';
 import ConfigureShiftTimingModal from './shiftroster/ConfigureShiftTimingModal';
+import EmployeeExportModal from './EmployeeExportModal';
 import {
   GearIcon,
   DownloadIcon,
@@ -106,6 +107,7 @@ export default function HREmployees({ user }) {
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({});
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [shiftConfigs, setShiftConfigs] = useState({
     day: { start: '09:00', end: '17:00' },
     night: { start: '20:00', end: '08:00' },
@@ -432,6 +434,16 @@ export default function HREmployees({ user }) {
 
             {canBulkImport && (
               <>
+                <button
+                  type="button"
+                  onClick={() => setShowExportModal(true)}
+                  className="bg-white hover:bg-emerald-50/50 text-emerald-700 border border-emerald-300 dark:border-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Export employees to Excel spreadsheet with customizable columns and filters"
+                >
+                  <DownloadIcon className="w-4 h-4 text-emerald-600" />
+                  <span>Export to Excel</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => downloadEmployeeExcelTemplate(departments)}
@@ -1203,6 +1215,15 @@ export default function HREmployees({ user }) {
           flash(msg);
           fetchEmployees();
         }}
+      />
+
+      <EmployeeExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        departments={departments}
+        initialDeptFilter={deptFilter}
+        initialStatusFilter={statusFilter}
+        initialSearch={search}
       />
 
       <ConfigureShiftTimingModal
