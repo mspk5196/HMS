@@ -289,6 +289,29 @@ const deleteShiftOverride = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Shift override removed'));
 });
 
+const deleteShiftOverridesRange = asyncHandler(async (req, res) => {
+  const { from_date, to_date, dates } = req.body;
+  const result = await svc.deleteShiftOverridesRange(Number(req.params.id), { from_date, to_date, dates });
+  return res.json(success(result, 'Shift overrides removed'));
+});
+
+const updateEmployeeShift = asyncHandler(async (req, res) => {
+  const result = await svc.updateEmployeeShift(Number(req.params.id), req.body, req.user?.id ?? null);
+  return res.json(success(result, 'Employee shift updated successfully'));
+});
+
+const listEmployeeShiftLogs = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { search, page = 1, limit = 50 } = req.query;
+  const result = await svc.listEmployeeShiftLogs({
+    employeeId: id ? Number(id) : null,
+    search: search || null,
+    page: Number(page),
+    limit: Number(limit),
+  });
+  return res.json(paginated(result.rows, result.total, page, limit));
+});
+
 const listEmployeeAuditLogs = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { changeType, page = 1, limit = 50 } = req.query;
@@ -323,6 +346,7 @@ module.exports = {
   listNonRosterEmployees, getEmployeeWeekOffCalendar, setEmployeeWeekOffDate, setGroupWeekOffs,
   transferDutyShift, getEligibleReplacements, listDutyTransfers,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
-  getShiftOverrides, upsertShiftOverride, deleteShiftOverride,
+  getShiftOverrides, upsertShiftOverride, deleteShiftOverride, deleteShiftOverridesRange,
+  updateEmployeeShift, listEmployeeShiftLogs,
   listEmployeeAuditLogs, listEmployeePayoutLogs,
 };

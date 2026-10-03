@@ -129,6 +129,45 @@ const updateEmployee = async (id, data, userId = null) => {
     }
   }
 
+  // Track Shift Category / Timing change in historical employee_shift_logs
+  if (data.shift_category !== undefined && data.shift_category !== null && data.shift_category !== '') {
+    const oldCat = emp.shift_category || 'day';
+    const newCat = data.shift_category;
+    const oldStart = emp.custom_shift_start || null;
+    const newStart = data.custom_shift_start || null;
+    const oldEnd = emp.custom_shift_end || null;
+    const newEnd = data.custom_shift_end || null;
+
+    if (oldCat !== newCat || (newCat === 'general' && (oldStart !== newStart || oldEnd !== newEnd))) {
+      const effectiveDate = data.shift_effective_from || data.effective_from || new Date().toISOString().slice(0, 10);
+      try {
+        const db = require('../../config/db');
+        await db.execute(
+          `INSERT INTO employee_shift_logs
+             (employee_id, previous_shift_category, new_shift_category,
+              previous_shift_start, new_shift_start,
+              previous_shift_end, new_shift_end,
+              effective_from, reason, changed_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            oldCat,
+            newCat,
+            oldStart,
+            newCat === 'general' ? newStart : null,
+            oldEnd,
+            newCat === 'general' ? newEnd : null,
+            effectiveDate,
+            data.shift_change_reason || data.reason || 'Shift changed via Profile Edit',
+            userId
+          ]
+        );
+      } catch (err) {
+        console.error('Failed to log employee shift revision:', err.message);
+      }
+    }
+  }
+
   await q.updateEmployee(id, data);
 
   if (auditEntries.length > 0) {
@@ -232,15 +271,52 @@ const updateEmployeeSalary = async (employeeId, data, userId) => {
 /* ─── SHIFT OVERRIDES ─── */
 
 const upsertShiftOverride = async (employeeId, data, userId) => {
-  const { override_date, start_time, end_time, note } = data;
-  if (!override_date || !start_time || !end_time) {
-    throw new AppError('override_date, start_time, and end_time are required', 400);
+  const { start_time, end_time, note } = data;
+  const fromDateStr = data.from_date || data.override_date;
+  const toDateStr = data.to_date || data.override_date || fromDateStr;
+
+  if (!fromDateStr || !start_time || !end_time) {
+    throw new AppError('from_date / override_date, start_time, and end_time are required', 400);
   }
   const emp = await q.getEmployee(employeeId);
   if (!emp) throw new AppError('Employee not found', 404);
 
-  await q.upsertShiftOverride({ employee_id: employeeId, override_date, start_time, end_time, note, created_by: userId });
-  return { employee_id: employeeId, override_date, start_time, end_time };
+  const from = new Date(fromDateStr);
+  const to = new Date(toDateStr);
+  if (from > to) {
+    throw new AppError('from_date cannot be later than to_date', 400);
+  }
+
+  const dayDiff = Math.round((to - from) / (1000 * 60 * 60 * 24));
+  if (dayDiff > 90) {
+    throw new AppError('Shift override date range cannot exceed 90 days at once', 400);
+  }
+
+  const dates = [];
+  const curr = new Date(from);
+  while (curr <= to) {
+    dates.push(curr.toISOString().slice(0, 10));
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  await q.upsertShiftOverridesBatch({
+    employee_id: employeeId,
+    dates,
+    start_time,
+    end_time,
+    note,
+    created_by: userId
+  });
+
+  return {
+    employee_id: employeeId,
+    dates,
+    count: dates.length,
+    from_date: fromDateStr,
+    to_date: toDateStr,
+    start_time,
+    end_time
+  };
 };
 
 const listShiftOverrides = async (employeeId) => {
@@ -254,6 +330,17 @@ const deleteShiftOverride = async (employeeId, overrideDate) => {
   if (!affected) throw new AppError('No override found for this date', 404);
 };
 
+const deleteShiftOverridesRange = async (employeeId, { from_date, to_date, dates } = {}) => {
+  const affected = await q.deleteShiftOverridesRange(employeeId, { from_date, to_date, dates });
+  return { affected };
+};
+
+const updateEmployeeShift = async (employeeId, data, userId) => {
+  if (!data.shift_category) throw new AppError('shift_category is required', 400);
+  if (!data.effective_from) throw new AppError('effective_from date is required', 400);
+  return await q.updateEmployeeShift(employeeId, data, userId);
+};
+
 module.exports = {
   createEmployee, updateEmployee,
   bulkImportEmployees: q.bulkImportEmployees,
@@ -261,8 +348,8 @@ module.exports = {
   createDepartment, updateDepartment, deleteDepartment,
   createDesignation, createRole,
   createStaffRole, updateStaffRole, deleteStaffRole,
-  remapEmployee, updateEmployeeSalary,
-  upsertShiftOverride, listShiftOverrides, deleteShiftOverride,
+  remapEmployee, updateEmployeeSalary, updateEmployeeShift,
+  upsertShiftOverride, listShiftOverrides, deleteShiftOverride, deleteShiftOverridesRange,
   // Pass-through
   listEmployees: q.listEmployees,
   listDoctors: q.listDoctors,
@@ -275,6 +362,7 @@ module.exports = {
   getStaffRole: q.getStaffRole,
   listRemappingLogs: q.listRemappingLogs,
   listSalaryLogs: q.listSalaryLogs,
+  listEmployeeShiftLogs: q.listEmployeeShiftLogs,
   listEmployeeAuditLogs: q.listEmployeeAuditLogs,
   listEmployeePayoutLogs: q.listEmployeePayoutLogs,
 };

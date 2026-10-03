@@ -193,12 +193,45 @@ const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
   let employee = empRows[0] ?? null;
   if (!employee) return null;
 
+  const timelineDate = toDate || fromDate || new Date().toISOString().slice(0, 10);
+  const [shiftLogRows] = await db.query(
+    `SELECT new_shift_category, new_shift_start, new_shift_end FROM employee_shift_logs
+     WHERE employee_id = ? AND effective_from <= ?
+     ORDER BY effective_from DESC, id DESC LIMIT 1`,
+    [employeeId, timelineDate]
+  );
+  let effectiveCategory = employee.shift_category;
+  let customShiftStart = employee.custom_shift_start;
+  let customShiftEnd = employee.custom_shift_end;
+
+  if (shiftLogRows.length && shiftLogRows[0].new_shift_category) {
+    effectiveCategory = shiftLogRows[0].new_shift_category;
+    if (effectiveCategory === 'general') {
+      customShiftStart = shiftLogRows[0].new_shift_start || customShiftStart;
+      customShiftEnd = shiftLogRows[0].new_shift_end || customShiftEnd;
+    }
+  } else {
+    const [futureShiftLogRows] = await db.query(
+      `SELECT previous_shift_category, previous_shift_start, previous_shift_end FROM employee_shift_logs
+       WHERE employee_id = ? AND effective_from > ?
+       ORDER BY effective_from ASC, id ASC LIMIT 1`,
+      [employeeId, timelineDate]
+    );
+    if (futureShiftLogRows.length && futureShiftLogRows[0].previous_shift_category) {
+      effectiveCategory = futureShiftLogRows[0].previous_shift_category;
+      if (effectiveCategory === 'general') {
+        customShiftStart = futureShiftLogRows[0].previous_shift_start || customShiftStart;
+        customShiftEnd = futureShiftLogRows[0].previous_shift_end || customShiftEnd;
+      }
+    }
+  }
+
   let shiftName = 'Day Shift';
   let shiftStart = '08:00:00';
   let shiftEnd = '18:00:00';
   let graceMins = 10;
 
-  if (employee.shift_category === 'night') {
+  if (effectiveCategory === 'night') {
     const [sRows] = await db.query(`SELECT name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = 1 ORDER BY id ASC LIMIT 1`);
     if (sRows.length) {
       shiftName = sRows[0].name || 'Night Shift';
@@ -206,7 +239,7 @@ const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
       shiftEnd = sRows[0].end_time || '08:00:00';
       graceMins = sRows[0].grace_period_minutes ?? 10;
     }
-  } else if (employee.shift_category === 'day') {
+  } else if (effectiveCategory === 'day') {
     const [sRows] = await db.query(`SELECT name, start_time, end_time, grace_period_minutes FROM shifts WHERE is_night_shift = 0 ORDER BY id ASC LIMIT 1`);
     if (sRows.length) {
       shiftName = sRows[0].name || 'Day Shift';
@@ -214,15 +247,15 @@ const getEmployeeBiometricTimeline = async (employeeId, fromDate, toDate) => {
       shiftEnd = sRows[0].end_time || '18:00:00';
       graceMins = sRows[0].grace_period_minutes ?? 10;
     }
-  } else if (employee.shift_category === 'general') {
+  } else if (effectiveCategory === 'general') {
     shiftName = 'General Shift';
-    shiftStart = employee.custom_shift_start || '09:00:00';
-    shiftEnd = employee.custom_shift_end || '17:00:00';
+    shiftStart = customShiftStart || '09:00:00';
+    shiftEnd = customShiftEnd || '17:00:00';
     graceMins = employee.custom_buffer_minutes ?? 10;
-  } else if (employee.shift_category === 'day_and_night') {
+  } else if (effectiveCategory === 'day_and_night') {
     shiftName = 'Day & Night Shift';
-    shiftStart = employee.custom_shift_start || '08:00:00';
-    shiftEnd = employee.custom_shift_end || '18:00:00';
+    shiftStart = customShiftStart || '08:00:00';
+    shiftEnd = customShiftEnd || '18:00:00';
     graceMins = 10;
   }
 

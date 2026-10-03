@@ -24,10 +24,16 @@ router.post('/employees', employeeDocUpload, gate('hr_employee.create', ctrl.cre
 router.patch('/employees/:id/salary', gate('hr_employee.set_salary', ctrl.updateEmployeeSalary));
 router.patch('/employees/:id', employeeDocUpload, gate('hr_employee.edit', ctrl.updateEmployee));
 
-// Shift Overrides (per-employee per-day timing override for Day/Night/General)
+// Shift Overrides (per-employee timing override for single day or multi-day range)
 router.get('/employees/:id/shift-overrides', canViewEmployees, ctrl.getShiftOverrides);
 router.post('/employees/:id/shift-overrides', requirePermissions(['hr_employee.edit']), ctrl.upsertShiftOverride);
 router.delete('/employees/:id/shift-overrides/:date', requirePermissions(['hr_employee.edit']), ctrl.deleteShiftOverride);
+router.delete('/employees/:id/shift-overrides', requirePermissions(['hr_employee.edit']), ctrl.deleteShiftOverridesRange);
+
+// Shift Revisions & Shift Change Logs
+router.patch('/employees/:id/shift', gate('hr_employee.edit', ctrl.updateEmployeeShift));
+router.get('/employees/:id/shift-logs', canViewEmployees, ctrl.listEmployeeShiftLogs);
+router.get('/shift-logs', canViewEmployees, ctrl.listEmployeeShiftLogs);
 
 // Employee Activity & Payout Logs
 router.get('/employees/:id/audit-logs', canViewEmployees, ctrl.listEmployeeAuditLogs);

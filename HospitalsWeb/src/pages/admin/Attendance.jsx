@@ -2682,8 +2682,11 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
   const [isSaving, setIsSaving] = useState(false);
   const [shiftConfigs, setShiftConfigs] = useState(null);
 
+  const [overrideMode, setOverrideMode] = useState('single'); // 'single' | 'range'
   const [form, setForm] = useState({
     override_date: today(),
+    from_date: today(),
+    to_date: today(),
     start_time: '08:00',
     end_time: '18:00',
     note: '',
@@ -2722,22 +2725,40 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
       onError(null, 'Please select a staff member first.');
       return;
     }
-    if (!form.override_date || !form.start_time || !form.end_time) {
-      onError(null, 'Date, start time, and end time are required.');
-      return;
+
+    const payload = {
+      start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
+      end_time: form.end_time.length === 5 ? `${form.end_time}:00` : form.end_time,
+      note: form.note ? form.note.trim() : null,
+    };
+
+    if (overrideMode === 'single') {
+      if (!form.override_date) {
+        onError(null, 'Override date is required.');
+        return;
+      }
+      payload.override_date = form.override_date;
+    } else {
+      if (!form.from_date || !form.to_date) {
+        onError(null, 'From Date and To Date are required for date range override.');
+        return;
+      }
+      if (form.from_date > form.to_date) {
+        onError(null, 'From Date cannot be later than To Date.');
+        return;
+      }
+      payload.from_date = form.from_date;
+      payload.to_date = form.to_date;
     }
+
     try {
       setIsSaving(true);
-      await apiFetch(`/hr/employees/${employeeId}/shift-overrides`, {
+      const res = await apiFetch(`/hr/employees/${employeeId}/shift-overrides`, {
         method: 'POST',
-        body: JSON.stringify({
-          override_date: form.override_date,
-          start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
-          end_time: form.end_time.length === 5 ? `${form.end_time}:00` : form.end_time,
-          note: form.note || null,
-        }),
+        body: JSON.stringify(payload),
       });
-      onSuccess(`Shift override saved for ${form.override_date}.`);
+      const count = res?.count || (overrideMode === 'single' ? 1 : 'multiple');
+      onSuccess(`Shift override successfully saved for ${count} day(s).`);
       setForm((f) => ({ ...f, note: '' }));
       await loadOverrides();
     } catch (err) {
@@ -2747,22 +2768,68 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
     }
   };
 
-  const handleDelete = async (date) => {
+  const handleCancelOverride = async (date) => {
     const formatted = typeof date === 'string' ? date.slice(0, 10) : date;
-    if (!window.confirm(`Remove shift override for ${formatted}?`)) return;
+    const isFuture = formatted >= today();
+    const confirmMsg = isFuture
+      ? `Are you sure you want to cancel the scheduled shift override for ${formatted}?`
+      : `Remove past shift override record for ${formatted}?`;
+
+    if (!window.confirm(confirmMsg)) return;
     try {
       setIsSaving(true);
       await apiFetch(`/hr/employees/${employeeId}/shift-overrides/${formatted}`, {
         method: 'DELETE',
       });
-      onSuccess(`Shift override for ${formatted} removed.`);
+      onSuccess(`Shift override for ${formatted} cancelled successfully.`);
       await loadOverrides();
     } catch (err) {
-      onError(err, 'Failed to remove shift override.');
+      onError(err, 'Failed to cancel shift override.');
     } finally {
       setIsSaving(false);
     }
   };
+
+  const handleCancelUpcoming = async () => {
+    const upcomingDates = overrides
+      .map((ov) => String(ov.override_date).slice(0, 10))
+      .filter((d) => d >= today());
+
+    if (!upcomingDates.length) {
+      alert('No upcoming shift overrides to cancel.');
+      return;
+    }
+
+    if (!window.confirm(`Cancel all ${upcomingDates.length} upcoming shift override(s) for this employee?`)) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await apiFetch(`/hr/employees/${employeeId}/shift-overrides`, {
+        method: 'DELETE',
+        body: JSON.stringify({ dates: upcomingDates }),
+      });
+      onSuccess(`Cancelled ${upcomingDates.length} upcoming shift override(s).`);
+      await loadOverrides();
+    } catch (err) {
+      onError(err, 'Failed to cancel upcoming overrides.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const rangeDayCount = useMemo(() => {
+    if (overrideMode !== 'range' || !form.from_date || !form.to_date) return 1;
+    const f = new Date(form.from_date);
+    const t = new Date(form.to_date);
+    if (f > t) return 0;
+    return Math.round((t - f) / (1000 * 60 * 60 * 24)) + 1;
+  }, [overrideMode, form.from_date, form.to_date]);
+
+  const upcomingCount = useMemo(() => {
+    return overrides.filter((ov) => String(ov.override_date).slice(0, 10) >= today()).length;
+  }, [overrides]);
 
   return (
     <div className="space-y-5">
@@ -2770,9 +2837,9 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
       <div className="p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 dark:from-[#0d1624] dark:via-[#111e32] dark:to-[#0d1624] rounded-2xl text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-emerald-500/20">
         <div>
           <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Attendance Scheduling</span>
-          <h2 className="text-base font-extrabold text-white mt-0.5">Single-Day Shift Overrides</h2>
+          <h2 className="text-base font-extrabold text-white mt-0.5">Shift Overrides & Date Range Scheduling</h2>
           <p className="text-xs text-emerald-200/90 dark:text-emerald-300 mt-1 max-w-2xl">
-            Shift overrides take precedence over standard shifts when calculating biometric attendance, shift duration, and late punch-ins. Ideal for rotating rosters, emergency ICU/special coverage, and Sunday duty shifts.
+            Shift overrides take precedence over standard shifts when calculating biometric attendance, shift duration, and late punch-ins. Configure overrides for a single date or across a multi-day range (with cancellation anytime prior to or on the date).
           </p>
         </div>
       </div>
@@ -2793,22 +2860,83 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
         <>
           {/* Add Override Form */}
           <form onSubmit={handleSubmit} className="bg-white p-5 border border-gray-200/80 rounded-xl shadow-sm space-y-4">
-            <div className="border-b border-gray-100 pb-2">
-              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Set Shift Override for a Date</h4>
-              <p className="text-[11px] text-gray-500">Assign temporary customized working hours for this employee.</p>
+            <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Set Shift Override</h4>
+                <p className="text-[11px] text-gray-500">Assign temporary customized working hours for single or multiple consecutive days.</p>
+              </div>
+
+              {/* Mode Toggle: Single Day vs Date Range */}
+              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setOverrideMode('single')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                    overrideMode === 'single'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Single Day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOverrideMode('range')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                    overrideMode === 'range'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <span>Date Range (Multi-day)</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Override Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={form.override_date}
-                  onChange={(e) => setForm((f) => ({ ...f, override_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
-                />
-              </div>
+              {overrideMode === 'single' ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">Override Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={form.override_date}
+                    onChange={(e) => setForm((f) => ({ ...f, override_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">From Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={form.from_date}
+                      onChange={(e) => setForm((f) => ({ ...f, from_date: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase">To Date *</label>
+                      {rangeDayCount > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                          {rangeDayCount} {rangeDayCount === 1 ? 'day' : 'days'}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      required
+                      min={form.from_date}
+                      value={form.to_date}
+                      onChange={(e) => setForm((f) => ({ ...f, to_date: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold bg-white"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-500 uppercase">Start Time *</label>
@@ -2832,11 +2960,11 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
                 />
               </div>
 
-              <div className="space-y-1">
+              <div className={`space-y-1 ${overrideMode === 'single' ? 'sm:col-span-1' : 'sm:col-span-4'}`}>
                 <label className="text-[10px] font-bold text-gray-500 uppercase">Note / Reason</label>
                 <input
                   type="text"
-                  placeholder="e.g. Special duty coverage"
+                  placeholder="e.g. Special duty coverage, emergency ICU shift"
                   value={form.note}
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium bg-white"
@@ -2845,42 +2973,69 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.day?.start || '08:00', end_time: shiftConfigs?.day?.end || '18:00' }))}
+                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.day?.start || '09:00', end_time: shiftConfigs?.day?.end || '17:00' }))}
                   className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
                 >
-                  Preset: Day ({shiftConfigs?.day?.start || '08:00'}–{shiftConfigs?.day?.end || '18:00'})
+                  Preset: Day ({shiftConfigs?.day?.start || '09:00'}–{shiftConfigs?.day?.end || '17:00'})
                 </button>
                 <button
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.night?.start || '18:00', end_time: shiftConfigs?.night?.end || '08:00' }))}
+                  onClick={() => setForm((f) => ({ ...f, start_time: shiftConfigs?.night?.start || '20:00', end_time: shiftConfigs?.night?.end || '08:00' }))}
                   className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
                 >
-                  Preset: Night ({shiftConfigs?.night?.start || '18:00'}–{shiftConfigs?.night?.end || '08:00'})
+                  Preset: Night ({shiftConfigs?.night?.start || '20:00'}–{shiftConfigs?.night?.end || '08:00'})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, start_time: '08:00', end_time: '20:00' }))}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
+                >
+                  12h Day (08:00–20:00)
                 </button>
               </div>
 
               <button
                 type="submit"
-                disabled={isSaving}
-                className="px-5 py-2 bg-[#1e40af] hover:bg-[#1c399b] text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                disabled={isSaving || (overrideMode === 'range' && rangeDayCount <= 0)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
               >
-                {isSaving ? 'Saving…' : 'Save Shift Override'}
+                {isSaving ? 'Saving…' : overrideMode === 'range' ? `Save Overrides for ${rangeDayCount} Days` : 'Save Shift Override'}
               </button>
             </div>
           </form>
 
           {/* List of Existing Overrides */}
           <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/70">
-              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Configured Shift Overrides ({overrides.length})</h4>
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/70 flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Configured Shift Overrides ({overrides.length})
+                </h4>
+                <p className="text-[11px] text-gray-400">
+                  {upcomingCount} upcoming / active override(s) scheduled
+                </p>
+              </div>
+
+              {upcomingCount > 1 && (
+                <button
+                  type="button"
+                  onClick={handleCancelUpcoming}
+                  disabled={isSaving}
+                  className="px-2.5 py-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel All Upcoming ({upcomingCount})
+                </button>
+              )}
             </div>
+
             <table className="w-full text-left text-xs text-gray-700">
               <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold border-b border-gray-100">
                 <tr>
                   <th className="p-3">Override Date</th>
+                  <th className="p-3">Status</th>
                   <th className="p-3">Working Hours</th>
                   <th className="p-3">Note / Reason</th>
                   <th className="p-3">Created On</th>
@@ -2889,17 +3044,42 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-gray-400">Loading overrides...</td></tr>
+                  <tr><td colSpan={6} className="p-6 text-center text-gray-400">Loading overrides...</td></tr>
                 ) : overrides.length === 0 ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-gray-400">No shift overrides configured for this employee.</td></tr>
+                  <tr><td colSpan={6} className="p-6 text-center text-gray-400">No shift overrides configured for this employee.</td></tr>
                 ) : (
                   overrides.map((ov) => {
                     const dateStr = String(ov.override_date).slice(0, 10);
+                    const todayStr = today();
+                    const isToday = dateStr === todayStr;
+                    const isUpcoming = dateStr > todayStr;
+                    const isPast = dateStr < todayStr;
+
                     return (
-                      <tr key={ov.id || dateStr} className="hover:bg-gray-50/80 transition-colors">
+                      <tr key={ov.id || dateStr} className={`transition-colors ${isToday ? 'bg-amber-50/40 font-medium' : isUpcoming ? 'hover:bg-emerald-50/30' : 'hover:bg-gray-50/60 opacity-80'}`}>
                         <td className="p-3 font-bold text-gray-900">
-                          {new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                          <div>
+                            {new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                          <div className="text-[10px] font-mono text-gray-400">{dateStr}</div>
                         </td>
+
+                        <td className="p-3">
+                          {isToday ? (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              Active Today
+                            </span>
+                          ) : isUpcoming ? (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Upcoming
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                              Completed
+                            </span>
+                          )}
+                        </td>
+
                         <td className="p-3 font-semibold text-blue-700">
                           <span className="bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-mono">
                             {String(ov.start_time).slice(0, 5)} – {String(ov.end_time).slice(0, 5)}
@@ -2912,11 +3092,16 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
                         <td className="p-3 text-right">
                           <button
                             type="button"
-                            onClick={() => handleDelete(dateStr)}
+                            onClick={() => handleCancelOverride(dateStr)}
                             disabled={isSaving}
-                            className="text-rose-600 hover:text-rose-800 font-bold hover:underline cursor-pointer"
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                              isUpcoming || isToday
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                                : 'text-gray-500 hover:text-rose-600 hover:underline'
+                            }`}
+                            title={isUpcoming || isToday ? 'Cancel this scheduled shift override' : 'Remove record'}
                           >
-                            Delete
+                            {isUpcoming || isToday ? 'Cancel Override' : 'Delete'}
                           </button>
                         </td>
                       </tr>
@@ -2929,7 +3114,7 @@ function ShiftOverridesTab({ user, departments, onError, onSuccess }) {
         </>
       ) : (
         <div className="bg-white p-8 rounded-xl border border-gray-200/80 text-center text-xs text-gray-500 shadow-sm">
-          Please select a staff member above to view and configure their single-day shift overrides.
+          Please select a staff member above to view and configure their shift overrides.
         </div>
       )}
     </div>

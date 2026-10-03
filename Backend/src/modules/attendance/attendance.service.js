@@ -153,6 +153,67 @@ const DEFAULT_SHIFT = buildResolvedShift({
   grace_period_minutes: 10,
 });
 
+/**
+ * Resolves an employee's effective shift category and custom timings for a given date,
+ * checking employee_shift_logs for historical or scheduled shift revisions.
+ */
+const resolveEmployeeShiftCategoryForDate = async (employeeId, date, baseEmp = null) => {
+  let emp = baseEmp;
+  if (!emp || !emp.shift_category) {
+    const [empRows] = await db.execute(
+      `SELECT id, shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes FROM employees WHERE id = ? LIMIT 1`,
+      [employeeId]
+    );
+    if (!empRows.length) return null;
+    emp = empRows[0];
+  }
+
+  let shiftCategory = emp.shift_category || 'day';
+  let customStart = emp.custom_shift_start || null;
+  let customEnd = emp.custom_shift_end || null;
+  let customBuffer = emp.custom_buffer_minutes ?? 10;
+
+  // 1. Check if there is a shift change effective on or before `date`
+  const [pastLogs] = await db.execute(
+    `SELECT new_shift_category, new_shift_start, new_shift_end
+     FROM employee_shift_logs
+     WHERE employee_id = ? AND effective_from <= ?
+     ORDER BY effective_from DESC, id DESC LIMIT 1`,
+    [employeeId, date]
+  );
+
+  if (pastLogs.length && pastLogs[0].new_shift_category) {
+    shiftCategory = pastLogs[0].new_shift_category;
+    if (shiftCategory === 'general') {
+      customStart = pastLogs[0].new_shift_start || customStart;
+      customEnd = pastLogs[0].new_shift_end || customEnd;
+    }
+  } else {
+    // 2. If no log is effective on or before `date`, check if there are future logs (meaning this date is before the earliest logged shift change)
+    const [futureLogs] = await db.execute(
+      `SELECT previous_shift_category, previous_shift_start, previous_shift_end
+       FROM employee_shift_logs
+       WHERE employee_id = ? AND effective_from > ?
+       ORDER BY effective_from ASC, id ASC LIMIT 1`,
+      [employeeId, date]
+    );
+    if (futureLogs.length && futureLogs[0].previous_shift_category) {
+      shiftCategory = futureLogs[0].previous_shift_category;
+      if (shiftCategory === 'general') {
+        customStart = futureLogs[0].previous_shift_start || customStart;
+        customEnd = futureLogs[0].previous_shift_end || customEnd;
+      }
+    }
+  }
+
+  return {
+    shift_category: shiftCategory,
+    custom_shift_start: customStart,
+    custom_shift_end: customEnd,
+    custom_buffer_minutes: customBuffer,
+  };
+};
+
 /* ─────────────────────────────────────────────
    SHIFT RESOLUTION
 ───────────────────────────────────────────── */
@@ -162,7 +223,7 @@ const DEFAULT_SHIFT = buildResolvedShift({
  * Priority order:
  *   1. employee_shift_overrides — per-day override for any category
  *   2. roster_entries — Day & Night duty roster (custom_start_time/end_time + buffer_minutes)
- *   3. employees category:
+ *   3. employee effective shift category (evaluating effective_from from employee_shift_logs):
  *      - day / night: configured hospital-wide in shifts table (with grace_period_minutes)
  *      - general: individually configured per employee (custom_shift_start/end + custom_buffer_minutes)
  *   4. Hard fallback 08:00–18:00
@@ -224,14 +285,9 @@ const getShiftForDate = async (employeeId, date, dayPunches = []) => {
     }
   }
 
-  // Priority 3 — category resolution
-  const [empRows] = await db.execute(
-    `SELECT shift_category, custom_shift_start, custom_shift_end, custom_buffer_minutes FROM employees WHERE id = ? LIMIT 1`,
-    [employeeId]
-  );
-  if (empRows.length) {
-    const emp = empRows[0];
-
+  // Priority 3 — category resolution considering effective dates from employee_shift_logs
+  const emp = await resolveEmployeeShiftCategoryForDate(employeeId, date);
+  if (emp) {
     // Day and Night shifts always follow the hospital-wide configured timing from shifts table
     if (emp.shift_category === 'day' || emp.shift_category === 'night') {
       const isNight = emp.shift_category === 'night';
@@ -351,9 +407,12 @@ const deduplicatePunches = (punches, windowMinutes = 60) => {
 /**
  * Determine if an employee started a night shift on date `d`.
  */
-const didStartNightShift = (emp, d, dedupedPunches) => {
-  if (emp.shift_category === 'night') return true;
-  if (emp.shift_category === 'day') return false;
+const didStartNightShift = async (emp, d, dedupedPunches) => {
+  const effectiveConfig = await resolveEmployeeShiftCategoryForDate(emp.id || emp.employee_id, d, emp);
+  const cat = effectiveConfig?.shift_category || emp.shift_category;
+
+  if (cat === 'night') return true;
+  if (cat === 'day') return false;
 
   const punchesOnD = dedupedPunches.filter((p) => String(p.punch_time).startsWith(d));
   // A day shift arrival is between 07:00 and 11:30
@@ -507,7 +566,7 @@ const processDailyAttendance = async (date) => {
     const dedupedPunches = deduplicatePunches(rawEmpPunches, 60);
 
     // 2. Check if employee worked a night shift on prevDate
-    const hadPrevNightShift = didStartNightShift(employee, prevDate, dedupedPunches);
+    const hadPrevNightShift = await didStartNightShift(employee, prevDate, dedupedPunches);
 
     // If they worked night shift on prevDate, their early morning punch on `date` (before 11:00 AM)
     // was their OUT punch for prevDate!

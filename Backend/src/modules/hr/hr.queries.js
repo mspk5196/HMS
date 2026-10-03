@@ -313,6 +313,151 @@ const deleteShiftOverride = async (employeeId, overrideDate) => {
   return result.affectedRows;
 };
 
+/** Upsert multiple shift overrides across a date range or list of dates. */
+const upsertShiftOverridesBatch = async ({ employee_id, dates = [], start_time, end_time, note, created_by }) => {
+  if (!dates.length) return 0;
+  for (const date of dates) {
+    await db.execute(
+      `INSERT INTO employee_shift_overrides
+         (employee_id, override_date, start_time, end_time, note, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         start_time  = VALUES(start_time),
+         end_time    = VALUES(end_time),
+         note        = VALUES(note),
+         created_by  = VALUES(created_by)`,
+      [employee_id, date, start_time, end_time, note ?? null, created_by ?? null]
+    );
+  }
+  return dates.length;
+};
+
+/** Delete a range of shift overrides or a specific list of dates. */
+const deleteShiftOverridesRange = async (employeeId, { from_date, to_date, dates } = {}) => {
+  if (Array.isArray(dates) && dates.length > 0) {
+    const placeholders = dates.map(() => '?').join(',');
+    const [result] = await db.query(
+      `DELETE FROM employee_shift_overrides WHERE employee_id = ? AND override_date IN (${placeholders})`,
+      [employeeId, ...dates]
+    );
+    return result.affectedRows;
+  }
+  if (from_date && to_date) {
+    const [result] = await db.execute(
+      `DELETE FROM employee_shift_overrides WHERE employee_id = ? AND override_date >= ? AND override_date <= ?`,
+      [employeeId, from_date, to_date]
+    );
+    return result.affectedRows;
+  }
+  if (from_date) {
+    const [result] = await db.execute(
+      `DELETE FROM employee_shift_overrides WHERE employee_id = ? AND override_date >= ?`,
+      [employeeId, from_date]
+    );
+    return result.affectedRows;
+  }
+  return 0;
+};
+
+/** Record shift revision in employee_shift_logs and update employee record */
+const updateEmployeeShift = async (employeeId, data, userId = null) => {
+  const { shift_category, custom_shift_start, custom_shift_end, effective_from, reason } = data;
+  const emp = await getEmployee(employeeId);
+  if (!emp) throw new Error('Employee not found');
+
+  const prevCategory = emp.shift_category || 'day';
+  const prevStart = emp.custom_shift_start || null;
+  const prevEnd = emp.custom_shift_end || null;
+
+  const newCategory = shift_category;
+  const newStart = (shift_category === 'general') ? (custom_shift_start || null) : null;
+  const newEnd = (shift_category === 'general') ? (custom_shift_end || null) : null;
+  const effectiveDate = effective_from || new Date().toISOString().slice(0, 10);
+
+  // Insert historical shift change log
+  await db.execute(
+    `INSERT INTO employee_shift_logs
+       (employee_id, previous_shift_category, new_shift_category,
+        previous_shift_start, new_shift_start,
+        previous_shift_end, new_shift_end,
+        effective_from, reason, changed_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employeeId,
+      prevCategory,
+      newCategory,
+      prevStart,
+      newStart,
+      prevEnd,
+      newEnd,
+      effectiveDate,
+      reason || 'Shift updated via Profile',
+      userId
+    ]
+  );
+
+  // Update employee record
+  await db.execute(
+    `UPDATE employees
+     SET shift_category = ?, custom_shift_start = ?, custom_shift_end = ?
+     WHERE id = ?`,
+    [newCategory, newStart, newEnd, employeeId]
+  );
+
+  // Also log into employee_audit_logs
+  await createEmployeeAuditLog({
+    employeeId,
+    changeType: 'profile_update',
+    fieldName: 'shift_category',
+    oldValue: `${prevCategory}${prevStart ? ` (${prevStart}-${prevEnd})` : ''}`,
+    newValue: `${newCategory}${newStart ? ` (${newStart}-${newEnd})` : ''}`,
+    notes: `Shift changed effective from ${effectiveDate}${reason ? `: ${reason}` : ''}`,
+    changedBy: userId,
+  });
+
+  return { employeeId, shift_category: newCategory, effective_from: effectiveDate };
+};
+
+/** List historical shift revision logs for an employee or across all employees */
+const listEmployeeShiftLogs = async ({ search, employeeId, page = 1, limit = 50 }) => {
+  const offset = (page - 1) * limit;
+  const filters = [];
+  const params = [];
+
+  if (employeeId) {
+    filters.push('sl.employee_id = ?');
+    params.push(employeeId);
+  }
+  if (search) {
+    const term = `%${search.toLowerCase().trim()}%`;
+    filters.push('(LOWER(e.full_name) LIKE ? OR LOWER(e.employee_code) LIKE ? OR LOWER(COALESCE(sl.reason, "")) LIKE ?)');
+    params.push(term, term, term);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const [rows] = await db.query(
+    `SELECT sl.*, e.full_name AS employee_name, e.employee_code, u.username AS changed_by_name
+     FROM employee_shift_logs sl
+     JOIN employees e ON e.id = sl.employee_id
+     LEFT JOIN users u ON u.id = sl.changed_by
+     ${where}
+     ORDER BY sl.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const [[{ total }]] = await db.execute(
+    `SELECT COUNT(*) AS total
+     FROM employee_shift_logs sl
+     JOIN employees e ON e.id = sl.employee_id
+     ${where}`,
+    params
+  );
+
+  return { rows, total };
+};
+
 /* ─── DEPARTMENTS ─── */
 const listDepartments = async () => {
   // Query departments with their staff counts
@@ -1222,6 +1367,7 @@ module.exports = {
   listStaffRoles, getStaffRole, createStaffRole, updateStaffRole, deleteStaffRole,
   countEmployeesInDepartment, countStaffRolesInDepartment, countEmployeesWithStaffRole,
   remapEmployee, listRemappingLogs, updateEmployeeSalary, listSalaryLogs,
-  listShiftOverrides, upsertShiftOverride, deleteShiftOverride,
+  listShiftOverrides, upsertShiftOverride, upsertShiftOverridesBatch, deleteShiftOverride, deleteShiftOverridesRange,
+  updateEmployeeShift, listEmployeeShiftLogs,
   createEmployeeAuditLog, createEmployeeAuditLogsBatch, listEmployeeAuditLogs, listEmployeePayoutLogs,
 };

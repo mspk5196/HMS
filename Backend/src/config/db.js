@@ -113,6 +113,26 @@ db.on('connection', (connection) => {
       try { await connection.query(sql); } catch { /* column exists */ }
     }
 
+    // employee_shift_logs: tracking historical shift type & timing revisions with effective dates
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS employee_shift_logs (
+        id                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        employee_id            BIGINT UNSIGNED NOT NULL,
+        previous_shift_category VARCHAR(50) NULL,
+        new_shift_category      VARCHAR(50) NOT NULL,
+        previous_shift_start    TIME NULL,
+        new_shift_start         TIME NULL,
+        previous_shift_end      TIME NULL,
+        new_shift_end           TIME NULL,
+        effective_from          DATE NOT NULL,
+        reason                  VARCHAR(255) NULL,
+        changed_by              BIGINT UNSIGNED NULL,
+        created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_shift_log_emp (employee_id),
+        INDEX idx_shift_log_date (effective_from)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     connection.release();
   } catch (err) {
     console.error("❌ Database connection error:", err);

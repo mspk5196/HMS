@@ -253,6 +253,8 @@ export default function HREmployees({ user }) {
           : (detail.custom_shift_end ? String(detail.custom_shift_end).slice(0, 5) : '17:00')),
       aadhar_doc: null,
       pan_doc: null,
+      shift_effective_from: new Date().toISOString().slice(0, 10),
+      shift_change_reason: '',
     });
     setIsEditing(true);
   };
@@ -694,6 +696,7 @@ export default function HREmployees({ user }) {
                     { id: 'monthly-payouts', label: 'Monthly Payouts', icon: ReceiptIcon },
                     { id: 'modify-salary', label: 'Modify Salary', icon: CurrencyRupeeIcon },
                     { id: 'salary-logs', label: 'Salary Logs', icon: ClipboardListIcon },
+                    { id: 'shift-logs', label: 'Shift Logs', icon: ClockIcon },
                     { id: 'remap-logs', label: 'Role Logs', icon: SyncIcon },
                     { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardListIcon },
                   ].map((tab) => {
@@ -879,6 +882,54 @@ export default function HREmployees({ user }) {
                                 onChange={(v) => setForm((f) => ({ ...f, custom_shift_end: v }))}
                               />
                             </>
+                          )}
+
+                          {/* When Shift Type or timing is changed, require Effective From Date & Reason */}
+                          {(form.shift_category !== detail.shift_category ||
+                            (form.shift_category === 'general' &&
+                              (form.custom_shift_start !== detail.custom_shift_start || form.custom_shift_end !== detail.custom_shift_end))) && (
+                            <div className="sm:col-span-2 p-3.5 bg-emerald-50/90 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 space-y-2.5 shadow-2xs">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <ClockIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                  <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                                    Shift Revision Effective Date &amp; Audit Trail
+                                  </span>
+                                </div>
+                                <span className="text-[10px] bg-emerald-200/80 dark:bg-emerald-800/80 text-emerald-900 dark:text-emerald-100 font-bold px-2 py-0.5 rounded-full uppercase">
+                                  Will Log Revision
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                                You are changing shift from <strong>{detail.shift_category ? detail.shift_category.toUpperCase() : 'DAY'}</strong> to <strong>{form.shift_category.toUpperCase()}</strong>. Specify the effective date and reason to maintain an audit trail.
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase">
+                                    Effective From Date *
+                                  </label>
+                                  <input
+                                    type="date"
+                                    required
+                                    value={form.shift_effective_from || ''}
+                                    onChange={(e) => setForm((f) => ({ ...f, shift_effective_from: e.target.value }))}
+                                    className="w-full px-2.5 py-1.5 border border-emerald-300 dark:border-emerald-700 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase">
+                                    Reason for Shift Change
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Transferred to Night Shift, Rotation"
+                                    value={form.shift_change_reason || ''}
+                                    onChange={(e) => setForm((f) => ({ ...f, shift_change_reason: e.target.value }))}
+                                    className="w-full px-2.5 py-1.5 border border-emerald-300 dark:border-emerald-700 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1195,6 +1246,8 @@ export default function HREmployees({ user }) {
                 />
               ) : rightTab === 'salary-logs' ? (
                 <EmployeeSalaryLogsSection employeeId={detail.id} />
+              ) : rightTab === 'shift-logs' ? (
+                <EmployeeShiftLogsSection employeeId={detail.id} />
               ) : rightTab === 'monthly-payouts' ? (
                 <EmployeePayoutLogsSection employeeId={detail.id} />
               ) : rightTab === 'audit-logs' ? (
@@ -1836,6 +1889,108 @@ function EmployeeAuditLogsSection({ employeeId }) {
                     <td className="p-3 text-gray-600 whitespace-nowrap">
                       {log.changed_by_name || 'System Admin'}
                     </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeShiftLogsSection({ employeeId }) {
+  const [logs, setLogs] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!employeeId) return;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const data = await apiFetch(`/hr/employees/${employeeId}/shift-logs?limit=50`);
+        setLogs(Array.isArray(data) ? data : data?.rows || []);
+      } catch {
+        setLogs([]);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [employeeId]);
+
+  const formatShiftName = (cat, start, end) => {
+    if (!cat) return '—';
+    const label = cat === 'day' ? 'Day Shift' : cat === 'night' ? 'Night Shift' : cat === 'day_and_night' ? 'Day & Night Rotational' : 'General Shift';
+    if (start && end) return `${label} (${String(start).slice(0, 5)}–${String(end).slice(0, 5)})`;
+    return label;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider">Shift Change &amp; Revision Logs</h3>
+          <p className="text-[11px] text-gray-400">Audit trail of shift type changes, timings, and effective dates</p>
+        </div>
+        <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+          {logs.length} revision(s)
+        </span>
+      </div>
+
+      <div className="border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
+        <table className="w-full text-left text-xs text-gray-700 dark:text-slate-300">
+          <thead className="bg-gray-50 dark:bg-slate-800/80 text-[10px] text-gray-500 dark:text-slate-400 uppercase font-bold border-b border-gray-100 dark:border-slate-800">
+            <tr>
+              <th className="p-3">Previous Shift</th>
+              <th className="p-3">New Shift</th>
+              <th className="p-3">Effective Date</th>
+              <th className="p-3">Reason / Note</th>
+              <th className="p-3">Changed By</th>
+              <th className="p-3">Date Logged</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+            {isLoading ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">Loading shift change history...</td></tr>
+            ) : logs.length === 0 ? (
+              <tr><td colSpan={6} className="p-6 text-center text-gray-400">No shift changes recorded for this employee.</td></tr>
+            ) : (
+              logs.map((log) => {
+                let loggedDateStr = '—';
+                if (log.created_at) {
+                  let raw = String(log.created_at).trim();
+                  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(raw) && !raw.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(raw)) {
+                    raw = raw.replace(' ', 'T') + '+05:30';
+                  }
+                  const d = new Date(raw);
+                  loggedDateStr = !Number.isNaN(d.getTime())
+                    ? d.toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit', hour12: true
+                      })
+                    : '—';
+                }
+
+                return (
+                  <tr key={log.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/40">
+                    <td className="p-3 text-rose-700 dark:text-rose-400 font-medium">
+                      <span className="bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800/60">
+                        {formatShiftName(log.previous_shift_category, log.previous_shift_start, log.previous_shift_end)}
+                      </span>
+                    </td>
+                    <td className="p-3 text-emerald-700 dark:text-emerald-400 font-bold">
+                      <span className="bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60">
+                        {formatShiftName(log.new_shift_category, log.new_shift_start, log.new_shift_end)}
+                      </span>
+                    </td>
+                    <td className="p-3 font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                      {log.effective_from ? new Date(log.effective_from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className="p-3 text-gray-600 dark:text-slate-400">{log.reason || '—'}</td>
+                    <td className="p-3 text-gray-600 dark:text-slate-400 whitespace-nowrap">{log.changed_by_name || 'System Admin'}</td>
+                    <td className="p-3 text-gray-400 dark:text-slate-500 whitespace-nowrap text-[11px]">{loggedDateStr}</td>
                   </tr>
                 );
               })

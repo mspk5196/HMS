@@ -49,20 +49,30 @@ const getAttendanceAggregates = async (employeeId, month, year) => {
     [employeeId, month, year]
   );
 
-  // Shifts actually worked, split by night, from attendance joined with employee & roster.
+  // Shifts actually worked, split by night, from attendance joined with employee & roster & effective shift history.
   const [[shiftRow]] = await db.execute(
     `SELECT
        COALESCE(COUNT(*), 0) AS shifts_worked,
        COALESCE(SUM(
          CASE
            WHEN re.is_night_shift = 1 THEN 1
-           WHEN e.shift_category = 'night' THEN 1
+           WHEN s.is_night_shift = 1 THEN 1
+           WHEN COALESCE(
+             (SELECT sl.new_shift_category FROM employee_shift_logs sl
+              WHERE sl.employee_id = ads.employee_id AND sl.effective_from <= ads.attendance_date
+              ORDER BY sl.effective_from DESC, sl.id DESC LIMIT 1),
+             (SELECT sl2.previous_shift_category FROM employee_shift_logs sl2
+              WHERE sl2.employee_id = ads.employee_id AND sl2.effective_from > ads.attendance_date
+              ORDER BY sl2.effective_from ASC, sl2.id ASC LIMIT 1),
+             e.shift_category
+           ) = 'night' THEN 1
            WHEN re.custom_start_time >= '18:00:00' OR re.custom_start_time < '06:00:00' THEN 1
            ELSE 0
          END
        ), 0) AS night_shifts_worked
      FROM attendance_daily_summary ads
      JOIN employees e ON e.id = ads.employee_id
+     LEFT JOIN shifts s ON s.id = ads.shift_id
      LEFT JOIN roster_entries re
        ON re.employee_id = ads.employee_id
       AND re.roster_date = ads.attendance_date

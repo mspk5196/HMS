@@ -98,7 +98,16 @@ const getEffectiveSalary = async (employeeId, month, year) => {
   const basicDa = (hra > 0 || da > 0) ? (basic + da) : Math.round(fixed * 0.7);
   const calculatedHra = (hra > 0 || da > 0) ? hra : (fixed - basicDa);
 
-  const nightAllowance = r.shift_category === 'day_and_night'
+  // Resolve effective shift_category for the payroll period from employee_shift_logs
+  const [shiftLogRows] = await db.execute(
+    `SELECT new_shift_category FROM employee_shift_logs
+     WHERE employee_id = ? AND effective_from <= ?
+     ORDER BY effective_from DESC, id DESC LIMIT 1`,
+    [employeeId, periodEnd]
+  );
+  const effectiveShiftCategory = shiftLogRows.length ? shiftLogRows[0].new_shift_category : r.shift_category;
+
+  const nightAllowance = effectiveShiftCategory === 'day_and_night'
     ? Math.max(0, Number(r.per_night_salary || 0) - Number(r.per_day_salary || 0))
     : 0;
 
@@ -111,7 +120,7 @@ const getEffectiveSalary = async (employeeId, month, year) => {
     night_shift_extra_amount: nightAllowance,
     pf_applicable: Boolean(r.pf_enrolled),
     esi_applicable: Boolean(r.esi_enrolled),
-    shift_category: r.shift_category,
+    shift_category: effectiveShiftCategory,
     per_day_salary: Number(r.per_day_salary || 0),
     per_night_salary: Number(r.per_night_salary || 0),
   };
