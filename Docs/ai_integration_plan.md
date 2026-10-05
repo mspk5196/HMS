@@ -1,230 +1,218 @@
-# 🤖 AI Integration Plan — Neha Hospitals HMS
+# 🤖 Standalone AI Microservice Architecture & Integration Plan — Neha Hospitals HMS
 
+> **Core Principle**: **100% Decoupled, Independent Service**. 
+> The AI services run as a dedicated, standalone microservice (`AiService`) completely separated from the existing HMS core backend (`Backend/`) and web frontend (`HospitalsWeb/`).
+> 
 > **Philosophy**: AI assists and recommends, humans approve and act.
-> Every AI action that changes data must go through an **approval workflow** — no silent mutations.
-> **Privacy & Offline First**: All AI and Voice-to-Text models must run **100% locally on-premise** without sending sensitive patient data to third-party cloud APIs.
+> Every AI output (Roster, Clinical Notes, Prescriptions) is a *draft proposal* requiring explicit human confirmation before saving to the HMS database.
+> 
+> **Privacy & Offline First**: All AI models and solvers run **100% locally on-premise** on hospital infrastructure with zero cloud data egress.
+
+---
+
+## 🏛️ System Topology & Separation of Concerns
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HOSPITAL LAN WORKSTATIONS                         │
+│                                                                             │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │               Doctor / Admin Browser (HospitalsWeb)                 │   │
+│   │   - Voice Dictation UI (Web Audio API / Push-to-Talk)               │   │
+│   │   - Interactive AI Duty Roster Review & Modification Grid           │   │
+│   └───────────────┬─────────────────────────────────────┬───────────────┘   │
+└───────────────────┼─────────────────────────────────────┼───────────────────┘
+                    │                                     │
+                    │ REST / WebSocket                    │ Direct Audio Stream
+                    ▼                                     ▼ (or via Gateway)
+┌───────────────────────────────────────┐   ┌─────────────────────────────────┐
+│     EXISTING CORE HMS BACKEND         │   │     STANDALONE AI SERVICE       │
+│           (Node.js / Express)         │   │        (Python FastAPI)         │
+│          Port: :5000 / :3000          │   │           Port: :8000           │
+├───────────────────────────────────────┤   ├─────────────────────────────────┤
+│ • Authentication & RBAC               │   │ • Google OR-Tools CP-SAT Solver │
+│ • Core Business Logic & Billing       │   │   (Roster Optimization Engine)  │
+│ • Patient / IPD / OPD Management      │   │ • Faster-Whisper STT Engine     │
+│ • PostgreSQL Direct Connection        │◄─►│ • Medical NLP & Rx Extractor    │
+│ • Approval Workflows & Auditing       │   │ • Anomaly Detection Engines     │
+└───────────────────┬───────────────────┘   └─────────────────────────────────┘
+                    │
+                    ▼
+┌───────────────────────────────────────┐
+│        POSTGRESQL DATABASE            │
+│         (nehahospitals)               │
+└───────────────────────────────────────┘
+```
+
+### Why a Standalone Architecture?
+1. **Decoupled Lifecycle & Zero Bloat**: The main Node.js backend remains lightweight and fast. Heavy computational packages (PyTorch, CTranslate2, Google OR-Tools, Transformers) are isolated in their own Python environment.
+2. **Scalability & Resource Allocation**: The AI microservice can run on a dedicated machine/VM with a GPU or multi-core CPU without affecting HMS transactional database performance.
+3. **Fault Isolation**: If an AI job or memory-intensive transcription crashes, the core HMS hospital operations (Billing, Admissions, Pharmacy, OPD) remain 100% unaffected.
+4. **Independent Upgrades**: AI models and solvers can be updated, benchmarked, and tuned independently of HMS core release cycles.
+
+---
+
+## 📦 Directory Structure (`AiService/`)
+
+```
+NehaHospitals/
+├── AiService/                      # 🌟 COMPLETELY STANDALONE MICROSERVICE
+│   ├── app/
+│   │   ├── api/                    # FastAPI route controllers
+│   │   │   ├── v1/
+│   │   │   │   ├── roster.py       # Roster optimization endpoints
+│   │   │   │   ├── voice.py        # Voice-to-Text dictation endpoints
+│   │   │   │   ├── prescription.py # Structured Rx extraction
+│   │   │   │   └── health.py       # Service & model health checks
+│   │   ├── core/                   # Configuration, logging, security
+│   │   │   ├── config.py           # Model paths, worker counts, tokens
+│   │   │   └── security.py         # Internal HMAC / JWT service auth
+│   │   ├── models/                 # Pydantic request/response schemas
+│   │   │   ├── roster_schema.py
+│   │   │   └── voice_schema.py
+│   │   ├── services/               # Core AI Engines
+│   │   │   ├── roster_solver.py    # Google OR-Tools CP-SAT scheduling engine
+│   │   │   ├── stt_engine.py       # Faster-Whisper local transcription manager
+│   │   │   └── rx_parser.py        # Rule-based + Local LLM Rx entity extractor
+│   │   └── main.py                 # FastAPI application entrypoint
+│   ├── models_cache/               # Local on-premise weights (Whisper, ONNX)
+│   ├── requirements.txt            # Python dependencies (fastapi, ortools, faster-whisper)
+│   ├── Dockerfile                  # Standalone Docker container definition
+│   └── run_service.bat             # Standalone Windows service runner
+├── Backend/                        # Core Node.js HMS Backend (Unchanged dependencies)
+├── HospitalsWeb/                   # React Frontend
+└── Sql/                            # Database Schemas & Migrations
+```
 
 ---
 
 ## 📑 Core AI Feature Roadmap
 
-| Feature | Category | Model Architecture | Priority |
+| Feature | Subsystem | Technology in `AiService` | Priority |
 |---|---|---|---|
-| **AI Duty Roster Generation** | Staff Scheduling | Local Constraint Solver + Rule Templates (Node.js) | ⭐ Primary (Phase 1) |
-| **Doctor Voice Dictation (Notes & Prescription)** | Clinical AI | Local Speech-to-Text (Faster-Whisper / WebAssembly Whisper) | ⭐ Co-Primary (Phase 1.5) |
-| **Structured Rx Extraction from Voice** | Pharmacy / OPD | Local NLP / Medical Entity Extractor & Local LLM | ⭐ Co-Primary (Phase 1.5) |
-| **Attendance & Payroll AI Assists** | HR / Payroll | Deterministic Statistical ML & Anomaly Detection | Phase 2 |
-| **Patient Safety & Pharmacy AI** | Clinical Safety | Rule-based Drug Matrix & Fuzzy Matchers | Phase 3 |
+| **AI Duty Roster Generation** | Scheduling Engine | Google OR-Tools (CP-SAT Constraint Solver) | ⭐ Primary (Phase 1) |
+| **Doctor Voice Dictation (Notes & Rx)** | Clinical AI | `faster-whisper` (Local CTranslate2 int8 model) | ⭐ Co-Primary (Phase 1.5) |
+| **Structured Rx Extraction from Voice** | Pharmacy / OPD | Local Medical Lexicon + Fast NER / Local SLM | ⭐ Co-Primary (Phase 1.5) |
+| **Attendance & Payroll Anomaly AI** | HR / Payroll | Deterministic Statistical ML & Anomaly Detection | Phase 2 |
+| **Drug-Drug Interaction & Patient Safety** | Clinical Safety | Drug Matrix Graph & Fuzzy Matchers | Phase 3 |
 
 ---
 
-## ⭐ FEATURE 1 — AI Duty Roster Generation (Scheduling Engine)
+## ⭐ FEATURE 1 — AI Duty Roster Scheduling Engine (`roster_solver.py`)
 
-> Automated, constraint-satisfying staff scheduling with fairness, fatigue control, and leave compliance.
+### Problem
+Scheduling 50–200 hospital staff across 3 shifts (Morning, Evening, Night), adhering to department coverage requirements, role-specific mandatory presence, leave requests, maximum fatigue limits, and fair weekend/night rotations is a high-complexity NP-hard combinatorial problem.
 
-### What Exists Today (in [`WeeklyRoster.jsx`](file:///I:/Project/NehaHospitals/HospitalsWeb/src/pages/admin/shiftroster/WeeklyRoster.jsx) + [`AssignShiftForm.jsx`](file:///I:/Project/NehaHospitals/HospitalsWeb/src/pages/admin/shiftroster/AssignShiftForm.jsx))
-- Weekly/monthly roster grid per department
-- Manual shift assignment per employee
-- Shift configurations (Morning 07–15, Evening 15–23, Night 23–07, General 09–17, Emergency 20–08)
-- Shift timing configuration modal
+### AI Engine Architecture (Google OR-Tools CP-SAT)
+Using Python's **Google OR-Tools CP-SAT** in the standalone service provides millisecond-to-second global optimization with mathematical guarantees:
 
-### What AI Will Add
-AI takes the current empty roster period + hospital rules as input → generates a complete, constraint-satisfying roster → presents for human review → admin approves / modifies cell by cell → roster is saved.
+1. **Hard Constraints (Must Satisfy)**:
+   - **Minimum Staffing Coverage**: Shift $s$ on Day $d$ must have at least $N_{s,d}$ nurses/doctors.
+   - **Mandatory Role Coverage**: Each emergency/ICU shift must have at least 1 Senior Doctor and 1 Charge Nurse.
+   - **No Double Shifts**: An employee cannot work two overlapping or consecutive shifts without mandatory rest.
+   - **Approved Leave Enforcement**: Zero assignment on approved leave / off days.
+   - **Minimum Rest Period**: At least 12–16 hours of rest between consecutive shifts.
+   - **Night Shift Rest Rule**: Mandatory 24h rest following a Night shift.
 
-### Rule Input System (Configurable Before Generation)
-- **Coverage Requirements**: Min staff per shift, min staff per role, mandatory role coverage (e.g. Head Nurse), weekend/holiday coverage.
-- **Fatigue & Fairness**: Max consecutive working days (default 6), min rest between shifts (12h), max night shifts/week (3), mandatory off after night shifts.
-- **Leave & Off Constraints**: Automatic exclusion of approved leave dates, week-off enforcement.
-- **Historical Balancing**: Rotate night shift burden based on previous months' roster history.
+2. **Soft Constraints & Fairness Optimization (Objective Function)**:
+   - Fair distribution of Night shifts across all eligible staff.
+   - Fair distribution of weekend duties.
+   - Honor employee shift preferences where possible.
+   - Maximize consecutive days off (e.g. 2 continuous days off rather than split days).
 
-### Roster Architecture & API
-```
-POST /api/roster/ai/generate   -> Generates candidate roster & violations report
-POST /api/roster/ai/templates  -> Saves department rule templates
-POST /api/roster/ai/approve    -> Commits reviewed roster to database
-```
+### API Contract (Node.js Backend ↔ Standalone AI Service)
 
----
-
-## 🎙️ ⭐ FEATURE 2 — Local Voice-to-Text for Doctor's Notes & Prescriptions
-
-> **Goal**: Doctors can dictate consultation notes, admission daily notes, and complex prescriptions using their microphone. The audio is transcribed **locally in real-time**, and medical prescriptions are automatically converted into structured medication line items (medicine, dose, frequency, duration, food advice).
-
-### 🔒 Core Privacy & Offline Constraints
-- **Zero Cloud API Reliance**: No OpenAI Whisper API, no Google Speech API, no cloud egress.
-- **100% On-Premise**: Runs directly on the hospital local server or workstation.
-- **Low Latency**: Near real-time transcription (< 500ms audio-to-text latency).
-- **Accurate Medical & Accent Handling**: Tailored for Indian clinical English and medical nomenclature (brand names, generic names, medical Latin abbreviations like BD, TID, OD, HS, SOS, stat).
-
----
-
-### 🏛️ Local Model Technical Architecture
-
-```
-                       [ Doctor Speaks into Web UI ]
-                                    │ (Web Audio API / MediaRecorder)
-                                    ▼
-       ┌─────────────────────────────────────────────────────────┐
-       │               DEPLOYMENT OPTION SELECTION                │
-       └────────────────────────────┬────────────────────────────┘
-                                    │
-           ┌────────────────────────┴────────────────────────┐
-           ▼                                                 ▼
-   [ Option A: Local Server Sidecar ]             [ Option B: In-Browser WebGPU/WASM ]
-   - Python `faster-whisper` Service               - `@xenova/transformers` (Whisper ONNX)
-   - FastAPI microservice on Hospital LAN          - Runs 100% inside Doctor's Chrome/Edge
-   - CPU int8 or GPU acceleration                  - Zero backend server compute needed
-   - Endpoint: POST /api/v1/voice/transcribe       - Instant response for offline clinics
-           │                                                 │
-           └────────────────────────┬────────────────────────┘
-                                    │
-                                    ▼
-                        [ Raw Dictated Transcript ]
-              "Pantocid 40 one daily before food for five days
-               and Dolo 650 three times daily after food for three days"
-                                    │
-                                    ▼
-           ┌─────────────────────────────────────────────────────────┐
-           │        LOCAL MEDICAL PARSER & ENTITY EXTRACTOR          │
-           │  1. Local Regex + Medical Lexicon Tokenizer             │
-           │  2. Local Lightweight Model (Ollama / Qwen2.5-1.5B)     │
-           │  3. Hospital Medicine Master Database Matcher           │
-           └────────────────────────┬────────────────────────┘
-                                    │
-                                    ▼
-       ┌─────────────────────────────────────────────────────────────┐
-       │              STRUCTURED CLINICAL PRESCRIPTION                │
-       │  [1] Pantocid 40mg  | Tab | 1-0-0 | Before Food | 5 Days   │
-       │  [2] Dolo 650mg      | Tab | 1-1-1 | After Food  | 3 Days   │
-       └────────────────────────────┬────────────────────────────────┘
-                                    │
-                                    ▼
-       [ Doctor Reviews & Adjusts in UI Grid → 1-Click Approve & Print ]
-```
-
----
-
-### 🛠️ Technology Stack Options for Local Voice-to-Text
-
-#### 1. Primary Engine: `faster-whisper` Local Microservice (Recommended)
-- **Engine**: CTranslate2-based implementation of OpenAI Whisper (4x faster than vanilla Whisper, 70% less memory).
-- **Model Choice**: `whisper-small.en` or `whisper-medium` (quantized `int8`).
-- **Resource Footprint**: ~400MB–1GB RAM on CPU; handles typical sentences in ~0.3s.
-- **Deployment**: Runs as a lightweight local background daemon (Python FastAPI) bundled with the backend or inside a Docker container on the hospital server.
-
-#### 2. Alternative Engine: In-Browser Client-Side WebAssembly / WebGPU
-- **Library**: `@xenova/transformers` / ONNX Runtime Web.
-- **Model Choice**: `Xenova/whisper-tiny.en` or `whisper-base`.
-- **Benefit**: Zero server load; the audio never leaves the browser tab.
-
----
-
-### 🏥 Clinical Use Cases & UI Workflows
-
-#### Use Case A: Doctor's Clinical Notes Dictation (OPD & IPD)
-- **Target Screens**:
-  - OPD Consultation Screen (`/consultations`)
-  - IPD Daily Notes (`/admissions/daily-notes`)
-  - Discharge Summary Notes (`/discharges`)
-- **UI Element**: Floating / Inline Mic Button with real-time audio waveform visualizer.
-- **Features**:
-  - Push-to-Talk or Toggle Continuous Dictation.
-  - Dictation of: Chief Complaints, History of Present Illness (HPI), Examination Findings, Diagnosis, and Treatment Advice.
-  - Automatic punctuation insertion ("full stop", "comma", "new line" voice commands).
-
-#### Use Case B: Prescription Dictation & Automatic Structured Parsing
-- **Target Screens**:
-  - Doctor Prescription Modal (`PrescriptionForm.jsx`)
-  - Pharmacy Bill Creation (`PharmacyBillForm.jsx`)
-- **Workflow**:
-  1. Doctor clicks **"🎙️ Dictate Prescription"**.
-  2. Doctor speaks: *"Tab Augmentin 625mg twice daily after food for 5 days, Syrup Ascoril LS 5ml thrice daily for 5 days, Cap Rabeprazole 20mg once daily before breakfast for 7 days."*
-  3. The local parser maps the spoken text into structured JSON:
+#### `POST http://localhost:8000/api/v1/roster/solve`
+**Request Payload from HMS**:
 ```json
-[
-  {
-    "medicine_name": "Augmentin",
-    "form_factor": "Tablet",
-    "strength": "625mg",
-    "dosage_frequency": "1-0-1",
-    "food_instruction": "after_food",
-    "duration_days": 5,
-    "matched_inventory_id": 412
-  },
-  {
-    "medicine_name": "Ascoril LS",
-    "form_factor": "Syrup",
-    "strength": "5ml",
-    "dosage_frequency": "1-1-1",
-    "food_instruction": "after_food",
-    "duration_days": 5,
-    "matched_inventory_id": 189
-  },
-  {
-    "medicine_name": "Rabeprazole",
-    "form_factor": "Capsule",
-    "strength": "20mg",
-    "dosage_frequency": "1-0-0",
-    "food_instruction": "before_food",
-    "duration_days": 7,
-    "matched_inventory_id": 95
+{
+  "department_id": 4,
+  "period_start": "2026-10-01",
+  "period_end": "2026-10-31",
+  "employees": [
+    { "id": 101, "name": "Dr. Sarah", "role": "Senior Consultant", "max_night_shifts_per_month": 4 },
+    { "id": 102, "name": "Nurse Priya", "role": "Staff Nurse", "max_consecutive_days": 6 }
+  ],
+  "shifts": [
+    { "id": 1, "code": "M", "name": "Morning", "start_time": "07:00", "end_time": "15:00" },
+    { "id": 2, "code": "E", "name": "Evening", "start_time": "15:00", "end_time": "23:00" },
+    { "id": 3, "code": "N", "name": "Night", "start_time": "23:00", "end_time": "07:00" }
+  ],
+  "rules": {
+    "min_staff_per_shift": { "M": 4, "E": 3, "N": 2 },
+    "min_rest_hours_between_shifts": 12,
+    "max_consecutive_working_days": 6,
+    "approved_leaves": [
+      { "employee_id": 102, "date": "2026-10-15" }
+    ]
   }
-]
+}
 ```
-  4. The structured table populates in the UI.
-  5. The doctor reviews/edits any dosage or medicine, and clicks **"Save & Print"**.
 
----
-
-### 🗄️ Database Schema Additions for Voice & Clinical AI
-
-```sql
--- Audio / Dictation Transcripts Log (for audit & medical records)
-CREATE TABLE clinical_voice_transcripts (
-  id              BIGSERIAL PRIMARY KEY,
-  doctor_id       BIGINT NOT NULL REFERENCES users(id),
-  patient_id      BIGINT NOT NULL REFERENCES patients(id),
-  encounter_type  VARCHAR(30) NOT NULL, -- 'opd_consultation', 'ipd_daily_note', 'prescription'
-  encounter_id    BIGINT NOT NULL,      -- consultation_id, admission_id, prescription_id
-  raw_transcript  TEXT NOT NULL,
-  structured_data JSONB NULL,
-  audio_duration_secs DECIMAL(6,2) NULL,
-  model_used      VARCHAR(50) NOT NULL DEFAULT 'faster-whisper-small-int8',
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX ix_voice_doctor_patient ON clinical_voice_transcripts (doctor_id, patient_id);
+**Response Payload from AI Service**:
+```json
+{
+  "status": "OPTIMAL",
+  "solve_time_seconds": 0.42,
+  "roster": [
+    { "employee_id": 101, "date": "2026-10-01", "shift_id": 1, "shift_code": "M" },
+    { "employee_id": 102, "date": "2026-10-01", "shift_id": 2, "shift_code": "E" }
+  ],
+  "metrics": {
+    "fairness_score": 98.4,
+    "total_shifts_assigned": 480,
+    "uncovered_shifts": []
+  }
+}
 ```
 
 ---
 
-## 📋 Complete Rollout Phases
+## 🎙️ ⭐ FEATURE 2 — Local Voice-to-Text & Structured Rx Extractor
+
+### Architecture
+Doctor speaks into `HospitalsWeb` → Audio chunk sent to `AiService` (:8000) → `faster-whisper` processes audio locally in ~300ms → `rx_parser.py` extracts structured prescription JSON → sent back to UI for doctor approval.
+
+### Standalone Endpoints:
+1. `POST http://localhost:8000/api/v1/voice/transcribe`
+   - Accepts: Audio file / stream (`multipart/form-data` or WebSocket PCM)
+   - Returns: `{ "transcript": "Tab Augmentin 625mg twice daily after food for 5 days" }`
+2. `POST http://localhost:8000/api/v1/voice/parse-prescription`
+   - Accepts: `{ "transcript": "...", "department": "OPD" }`
+   - Returns: Structured JSON matching hospital medicine master catalog.
+
+---
+
+## 🔒 Service Communication & Security
+
+1. **Private Network Binding**: The `AiService` binds strictly to `127.0.0.1` (or internal Docker network `ai-network`), never exposed directly to the public internet.
+2. **Service Token Authentication**: Requests between the Node.js backend and `AiService` use a shared secret header (`X-Internal-Service-Key`).
+3. **Stateless Operations**: `AiService` does not hold database write locks; it receives optimization requests and returns candidate solutions. The core HMS backend is the only service that writes committed records to PostgreSQL.
+
+---
+
+## 📅 Implementation Roadmap (PostgreSQL Migration First)
 
 ```
-Phase 1 — AI Duty Roster Generation
-  ├── Roster Rules Panel (Coverage, Fatigue, Offs)
-  ├── Local Node.js Constraint Solver (Zero API Cost)
-  ├── Visual Conflict & Violations Highlighting
-  └── Rule Template Management
+Prerequisite: Finalize PostgreSQL Migration & Schema Validation
+  └── Zero errors on psql import & database verification
 
-Phase 1.5 — Local Voice-to-Text & Rx Extractor (On-Premise)
-  ├── Local Whisper Microservice / WebAssembly Audio Engine
-  ├── Mic UI Component with Waveform & Live Feedback
-  ├── Clinical Notes Dictation (OPD & IPD Daily Notes)
-  ├── Structured Prescription Voice Parsing & Medicine Auto-Match
-  └── Doctor Review & 1-Click Verification
+Phase 1 — Standalone AiService Foundation & Duty Roster Engine
+  ├── Scaffold `AiService/` (FastAPI + OR-Tools + Pydantic + Uvicorn)
+  ├── Implement `roster_solver.py` with CP-SAT constraint engine
+  ├── Add Node.js client proxy in `Backend/src/services/aiClient.js`
+  └── Build interactive Roster Generation & Review UI in `HospitalsWeb`
 
-Phase 2 — Attendance & Payroll AI Assists
-  ├── Missed Punch Suggestions
-  └── Salary Anomaly Detection
+Phase 1.5 — Local Clinical Voice-to-Text & Rx Extractor
+  ├── Integrate `faster-whisper` (int8 quantized local engine) in `AiService/`
+  ├── Implement Medical Lexicon Tokenizer & Regex/SLM Rx Parser
+  └── Add Voice Dictation mic controls in OPD, IPD, and Prescription screens
 
-Phase 3 — Patient Safety & Pharmacy Intelligence
-  ├── Drug-Drug Interaction Warning Matrix
-  ├── Duplicate Patient Fuzzy Matcher
-  └── Medicine Stockout Consumption Forecasting
+Phase 2 — Attendance & Payroll AI Assists (Standalone)
+Phase 3 — Patient Safety & Pharmacy Intelligence (Standalone)
 ```
 
 ---
 
 > [!IMPORTANT]
-> **Summary of Offline Guarantee**: Both the **Duty Roster AI** and the **Voice-to-Text Clinical Dictation** run **100% locally on-premise**. No external cloud tokens, API keys, or subscriptions are required, guaranteeing hospital compliance, privacy, and zero recurring API costs.
+> **Plan Status**: Updated and saved. Implementation will **NOT** proceed until the user reviews this decoupled architecture plan and gives explicit approval.
