@@ -62,7 +62,7 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     prompt_logs: List[str] = []
     active_rules = req.rules
     if req.prompt and req.prompt.strip():
-        active_rules, prompt_logs = parse_admin_prompt(
+        active_rules, shifts, prompt_logs = parse_admin_prompt(
             req.prompt,
             req.employees,
             shifts,
@@ -101,6 +101,7 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
 
     # ── CP-SAT Model Initialization ──────────────────────────────────────────
     model = cp_model.CpModel()
+    objective_terms = []
     
     # Decision Variables:
     # x[e, d, s] == 1 if employee e works shift s on day d
@@ -137,11 +138,20 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
             model.Add(w[(e_id, d_idx)] == 1)
             for s_id in shift_ids:
                 model.Add(x[(e_id, d_idx, s_id)] == 0)
-        elif pin.shift_id and pin.shift_id in shift_by_id:
-            model.Add(x[(e_id, d_idx, pin.shift_id)] == 1)
-        elif pin.shift_code and pin.shift_code in shift_by_code:
-            target_sid = shift_by_code[pin.shift_code].id
-            model.Add(x[(e_id, d_idx, target_sid)] == 1)
+        else:
+            target_sid = None
+            if pin.shift_id and pin.shift_id in shift_by_id:
+                target_sid = pin.shift_id
+            elif pin.shift_code and pin.shift_code in shift_by_code:
+                target_sid = shift_by_code[pin.shift_code].id
+            
+            if target_sid is not None:
+                # Forbid all other shifts
+                for s_id in shift_ids:
+                    if s_id != target_sid:
+                        model.Add(x[(e_id, d_idx, s_id)] == 0)
+                # Strong reward for working the target shift
+                objective_terms.append(x[(e_id, d_idx, target_sid)] * -500)
 
     # ── 3. Maximum Consecutive Working Days ──────────────────────────────────
     max_streak = active_rules.max_consecutive_working_days or 6
@@ -235,7 +245,6 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     # If headcount is short, we allow slack variables with high penalties
     # so the solver always produces the best feasible schedule and flags deficits.
     coverage_slacks = []
-    objective_terms = []
     
     # Check shift minimums
     for d_idx, d_str in enumerate(dates):
@@ -395,6 +404,9 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
                         shift_id=s_obj.id,
                         shift_code=s_obj.shift_code,
                         shift_name=s_obj.shift_name,
+                        start_time=s_obj.start_time[:5] if s_obj.start_time else "08:00",
+                        end_time=s_obj.end_time[:5] if s_obj.end_time else "16:00",
+                        is_night_shift=bool(s_obj.is_night_shift or assigned_sid in night_shift_ids),
                         is_week_off=False,
                         is_leave=False,
                         pinned=bool(pin and (pin.shift_id == s_obj.id or pin.shift_code == s_obj.shift_code))

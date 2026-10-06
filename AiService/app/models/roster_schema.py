@@ -64,6 +64,9 @@ class RosterAssignment(BaseModel):
     shift_name: str
     is_week_off: bool = False
     is_leave: bool = False
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_night_shift: bool = False
     pinned: bool = False
 
 class Violation(BaseModel):

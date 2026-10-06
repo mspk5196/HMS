@@ -54,7 +54,7 @@ const checkAiHealth = async () => {
  * Generate AI Duty Roster
  */
 const generateAiRoster = async (
-  { departmentId, staffRoleId, startDate, endDate, rules, prompt, pinnedShifts },
+  { departmentId, staffRoleId, startDate, endDate, rules, prompt, shifts: customShifts, pinnedShifts },
   userId
 ) => {
   if (!departmentId || !startDate || !endDate) {
@@ -69,10 +69,36 @@ const generateAiRoster = async (
 
   const employeeIds = employees.map((e) => Number(e.employee_id || e.id));
 
-  // 2. Fetch active shifts
-  const [shifts] = await db.query('SELECT * FROM shifts WHERE is_active = 1');
-  if (!shifts.length) {
-    throw new AppError('No shifts defined in the system', 400);
+  // 2. Fetch active shifts (use custom shifts from template or fallback to database shifts)
+  let shiftsToUse = [];
+  if (Array.isArray(customShifts) && customShifts.length > 0) {
+    shiftsToUse = customShifts.map((s, idx) => ({
+      id: Number(s.id) || idx + 1,
+      shift_code: s.shift_code || s.code || `S${idx + 1}`,
+      shift_name: s.shift_name || s.name || `Shift ${idx + 1}`,
+      start_time: s.start_time || '08:00:00',
+      end_time: s.end_time || '16:00:00',
+      is_night_shift: Boolean(s.is_night_shift || /night/i.test(s.shift_name || s.name || '')),
+      is_active: s.is_active !== false
+    }));
+  } else {
+    const [shifts] = await db.query('SELECT * FROM shifts WHERE is_active = 1');
+    if (!shifts.length) {
+      throw new AppError('No shifts defined in the system', 400);
+    }
+    shiftsToUse = shifts.map((s) => {
+      const name = s.name || s.shift_name || `Shift #${s.id}`;
+      const code = s.code || s.shift_code || (name.toLowerCase().startsWith('night') ? 'N' : name.toLowerCase().startsWith('day') ? 'D' : name.charAt(0).toUpperCase());
+      return {
+        id: s.id,
+        shift_code: code,
+        shift_name: name,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        is_night_shift: Boolean(s.is_night_shift || /night/i.test(name)),
+        is_active: s.is_active !== 0
+      };
+    });
   }
 
   // 3. Fetch approved leaves for the date range
@@ -88,7 +114,7 @@ const generateAiRoster = async (
     min_rest_hours_between_shifts: 12,
     max_consecutive_working_days: 6,
     max_night_shifts_per_week: 3,
-    require_off_after_night_shift: true,
+    require_off_after_night_shift: false,
     weekly_offs_per_employee: 1,
     approved_leaves: approvedLeaves,
     pinned_shifts: pinnedShifts || []
@@ -118,19 +144,7 @@ const generateAiRoster = async (
       max_consecutive_days: 6,
       target_weekly_offs: Number(e.weekly_off_count || 1)
     })),
-    shifts: shifts.map((s) => {
-      const name = s.name || s.shift_name || `Shift #${s.id}`;
-      const code = s.code || s.shift_code || (name.toLowerCase().startsWith('night') ? 'N' : name.toLowerCase().startsWith('day') ? 'D' : name.charAt(0).toUpperCase());
-      return {
-        id: s.id,
-        shift_code: code,
-        shift_name: name,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        is_night_shift: Boolean(s.is_night_shift || /night/i.test(name)),
-        is_active: s.is_active !== 0
-      };
-    }),
+    shifts: shiftsToUse,
     rules: mergedRules
   };
 
@@ -177,18 +191,58 @@ const approveAiRoster = async (generationId, modifiedAssignments, userId) => {
     throw new AppError('No assignments to commit', 400);
   }
 
+  // Fetch database shifts catalog for ID/code fallback
+  const [dbShifts] = await db.query('SELECT * FROM shifts');
+  const shiftMapById = new Map();
+  const shiftMapByCode = new Map();
+  dbShifts.forEach((s) => {
+    shiftMapById.set(Number(s.id), s);
+    const code = s.code || s.shift_code || s.name?.charAt(0);
+    if (code) shiftMapByCode.set(code.toUpperCase(), s);
+  });
+
   // Convert assignments into format expected by roster_entries
   const rows = assignmentsToSave
     .filter((a) => !a.is_leave) // Leave is recorded in leave_requests
-    .map((a) => ({
-      employee_id: a.employee_id,
-      roster_date: a.date,
-      shift_id: a.is_week_off ? null : a.shift_id,
-      is_week_off: Boolean(a.is_week_off),
-      custom_start_time: null,
-      custom_end_time: null,
-      notes: 'AI Generated Duty Roster'
-    }));
+    .map((a) => {
+      const isWeekOff = Boolean(a.is_week_off || a.shift_code === 'WO');
+      
+      let startTime = null;
+      let endTime = null;
+      let isNightShift = 0;
+      let validShiftId = null;
+
+      if (!isWeekOff) {
+        // Resolve Shift Catalog item if available
+        const catalogShift = (a.shift_id && shiftMapById.get(Number(a.shift_id))) ||
+                             (a.shift_code && shiftMapByCode.get(String(a.shift_code).toUpperCase()));
+        
+        validShiftId = catalogShift ? catalogShift.id : null;
+
+        // Resolve timings
+        let rawStart = a.start_time || a.custom_start_time || catalogShift?.start_time || '08:00:00';
+        let rawEnd = a.end_time || a.custom_end_time || catalogShift?.end_time || '16:00:00';
+
+        if (rawStart.length === 5) rawStart += ':00';
+        if (rawEnd.length === 5) rawEnd += ':00';
+
+        startTime = rawStart;
+        endTime = rawEnd;
+
+        isNightShift = (a.is_night_shift || a.shift_code === 'N' || /night/i.test(a.shift_name || catalogShift?.name || '')) ? 1 : 0;
+      }
+
+      return {
+        employee_id: a.employee_id,
+        roster_date: a.date,
+        shift_id: validShiftId,
+        is_week_off: isWeekOff ? 1 : 0,
+        custom_start_time: startTime,
+        custom_end_time: endTime,
+        is_night_shift: isNightShift,
+        notes: a.shift_name || 'AI Generated Duty Roster'
+      };
+    });
 
   // Perform bulk upsert into roster_entries inside a transaction
   const conn = await db.getConnection();
@@ -198,20 +252,24 @@ const approveAiRoster = async (generationId, modifiedAssignments, userId) => {
     for (const r of rows) {
       await conn.query(
         `INSERT INTO roster_entries 
-         (employee_id, roster_date, shift_id, is_week_off, custom_start_time, custom_end_time, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (employee_id, roster_date, shift_id, is_week_off, custom_start_time, custom_end_time, is_night_shift, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            shift_id = VALUES(shift_id),
            is_week_off = VALUES(is_week_off),
+           custom_start_time = VALUES(custom_start_time),
+           custom_end_time = VALUES(custom_end_time),
+           is_night_shift = VALUES(is_night_shift),
            notes = VALUES(notes),
            updated_at = NOW()`,
         [
           r.employee_id,
           r.roster_date,
           r.shift_id,
-          r.is_week_off ? 1 : 0,
+          r.is_week_off,
           r.custom_start_time,
           r.custom_end_time,
+          r.is_night_shift,
           r.notes,
           userId
         ]

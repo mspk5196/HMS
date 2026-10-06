@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../../util/api';
 
 /* ─── Icons ─── */
@@ -26,27 +26,39 @@ const ExclamationTriangleIcon = ({ className = 'w-5 h-5' }) => (
   </svg>
 );
 
-const CpuChipIcon = ({ className = 'w-5 h-5' }) => (
+const PlusIcon = ({ className = 'w-4 h-4' }) => (
   <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
   </svg>
 );
 
-const ChatBubbleBottomCenterTextIcon = ({ className = 'w-5 h-5' }) => (
+const TrashIcon = ({ className = 'w-4 h-4' }) => (
   <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+  </svg>
+);
+
+const BuildingOffice2Icon = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+  </svg>
+);
+
+const ClockIcon = ({ className = 'w-5 h-5' }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
 export default function AiRosterModal({
   isOpen,
   onClose,
-  departmentId,
-  departmentName,
+  departmentId: initialDeptId,
+  departments: propDepts = [],
   staffRoleId,
   startDate,
   endDate,
-  shifts = [],
+  shifts: propShifts = [],
   onRosterCommitted
 }) {
   const [activeTab, setActiveTab] = useState('rules'); // 'rules' | 'preview'
@@ -56,39 +68,68 @@ export default function AiRosterModal({
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  // Departments List & Active Department
+  const [deptList, setDeptList] = useState(propDepts);
+  const [selectedDeptId, setSelectedDeptId] = useState(initialDeptId || '1');
+
   // Natural Language Prompt State
   const [promptText, setPromptText] = useState(
-    'Ensure minimum coverage: 2 in morning, 2 in evening, 1 in night. When employee ends night shift for that week, continue day shift. Max 6 consecutive work days.'
+    'Keep at least 2 staff in morning, 2 in evening, 1 in night. When employee ends night shift for that week, continue day shift of that day. Max 6 consecutive work days.'
   );
 
-  // Rule settings state
-  const [minStaff, setMinStaff] = useState({
-    M: 2,
-    E: 2,
-    N: 1,
-    G: 1
-  });
+  // Custom Shift Slots for this Template
+  const [customShifts, setCustomShifts] = useState([
+    { id: 1, shift_code: 'M', shift_name: 'Morning Shift', start_time: '08:00:00', end_time: '16:00:00', is_night_shift: false, min_staff: 2 },
+    { id: 2, shift_code: 'E', shift_name: 'Evening Shift', start_time: '16:00:00', end_time: '00:00:00', is_night_shift: false, min_staff: 2 },
+    { id: 3, shift_code: 'N', shift_name: 'Night Shift', start_time: '20:00:00', end_time: '08:00:00', is_night_shift: true, min_staff: 1 },
+    { id: 4, shift_code: 'G', shift_name: 'General Shift', start_time: '09:00:00', end_time: '17:00:00', is_night_shift: false, min_staff: 1 }
+  ]);
+
+  // Fatigue & Rest Constraints
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(6);
   const [minRestHours, setMinRestHours] = useState(12);
   const [maxNightsPerWeek, setMaxNightsPerWeek] = useState(3);
-  const [requireOffAfterNight, setRequireOffAfterNight] = useState(false); // False = allows direct day shift continuation after night shift
+  const [requireOffAfterNight, setRequireOffAfterNight] = useState(false);
 
-  // Template state
+  // Template Saving & Loading
   const [templates, setTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [newTemplateName, setNewTemplateName] = useState('');
   const [isDefaultTemplate, setIsDefaultTemplate] = useState(false);
 
-  // Generated solution state
+  // Solution State
   const [generationResult, setGenerationResult] = useState(null);
   const [editableAssignments, setEditableAssignments] = useState([]);
 
-  // Check AI Service health on mount
+  // Fetch departments if not passed as prop
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!deptList || deptList.length === 0) {
+      apiFetch('/hr/departments').then((res) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        setDeptList(list);
+        if (list[0]?.id && !selectedDeptId) {
+          setSelectedDeptId(String(list[0].id));
+        }
+      }).catch(console.error);
+    }
+  }, [isOpen]);
+
+  // Update selectedDeptId when initialDeptId changes
+  useEffect(() => {
+    if (initialDeptId) {
+      setSelectedDeptId(String(initialDeptId));
+    }
+  }, [initialDeptId]);
+
+  // Check health and load templates when modal opens or department changes
   useEffect(() => {
     if (!isOpen) return;
     checkHealth();
-    loadTemplates();
-  }, [isOpen, departmentId]);
+    if (selectedDeptId) {
+      loadTemplates(selectedDeptId);
+    }
+  }, [isOpen, selectedDeptId]);
 
   const checkHealth = async () => {
     try {
@@ -105,9 +146,9 @@ export default function AiRosterModal({
     }
   };
 
-  const loadTemplates = async () => {
+  const loadTemplates = async (deptId) => {
     try {
-      const res = await apiFetch(`/hr/roster/ai/templates?department_id=${departmentId}`);
+      const res = await apiFetch(`/hr/roster/ai/templates?department_id=${deptId}`);
       const list = Array.isArray(res) ? res : res?.data || [];
       setTemplates(list);
       const def = list.find((t) => t.is_default);
@@ -123,13 +164,43 @@ export default function AiRosterModal({
     if (!tpl?.rules) return;
     setSelectedTemplateId(tpl.id);
     if (tpl.rules.prompt) setPromptText(tpl.rules.prompt);
-    if (tpl.rules.min_staff_per_shift) setMinStaff(tpl.rules.min_staff_per_shift);
+    if (tpl.rules.custom_shifts && Array.isArray(tpl.rules.custom_shifts)) {
+      setCustomShifts(tpl.rules.custom_shifts);
+    }
     if (tpl.rules.max_consecutive_working_days) setMaxConsecutiveDays(tpl.rules.max_consecutive_working_days);
     if (tpl.rules.min_rest_hours_between_shifts) setMinRestHours(tpl.rules.min_rest_hours_between_shifts);
     if (tpl.rules.max_night_shifts_per_week) setMaxNightsPerWeek(tpl.rules.max_night_shifts_per_week);
     if (tpl.rules.require_off_after_night_shift !== undefined) {
       setRequireOffAfterNight(Boolean(tpl.rules.require_off_after_night_shift));
     }
+  };
+
+  const handleAddShiftSlot = () => {
+    const nextId = customShifts.length + 1;
+    setCustomShifts([
+      ...customShifts,
+      {
+        id: nextId,
+        shift_code: `S${nextId}`,
+        shift_name: `Shift ${nextId}`,
+        start_time: '08:00:00',
+        end_time: '16:00:00',
+        is_night_shift: false,
+        min_staff: 1
+      }
+    ]);
+  };
+
+  const handleUpdateShiftSlot = (index, field, value) => {
+    setCustomShifts((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRemoveShiftSlot = (index) => {
+    setCustomShifts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveTemplate = async () => {
@@ -139,14 +210,21 @@ export default function AiRosterModal({
     }
     try {
       setError(null);
+      // Map min staff
+      const minStaffMap = {};
+      customShifts.forEach((s) => {
+        if (s.shift_code) minStaffMap[s.shift_code] = Number(s.min_staff || 0);
+      });
+
       const payload = {
-        departmentId: Number(departmentId),
+        departmentId: Number(selectedDeptId),
         staffRoleId: staffRoleId ? Number(staffRoleId) : null,
         name: newTemplateName.trim(),
         isDefault: isDefaultTemplate,
         rules: {
           prompt: promptText.trim(),
-          min_staff_per_shift: minStaff,
+          custom_shifts: customShifts,
+          min_staff_per_shift: minStaffMap,
           max_consecutive_working_days: Number(maxConsecutiveDays),
           min_rest_hours_between_shifts: Number(minRestHours),
           max_night_shifts_per_week: Number(maxNightsPerWeek),
@@ -158,9 +236,9 @@ export default function AiRosterModal({
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      setSuccessMsg('Template saved successfully with prompt & constraints!');
+      setSuccessMsg('Template saved successfully with custom timings & prompt!');
       setNewTemplateName('');
-      loadTemplates();
+      loadTemplates(selectedDeptId);
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       setError(err.message || 'Failed to save template');
@@ -173,8 +251,13 @@ export default function AiRosterModal({
       setError(null);
       setGenerationResult(null);
 
+      const minStaffMap = {};
+      customShifts.forEach((s) => {
+        if (s.shift_code) minStaffMap[s.shift_code] = Number(s.min_staff || 0);
+      });
+
       const rulesPayload = {
-        min_staff_per_shift: minStaff,
+        min_staff_per_shift: minStaffMap,
         max_consecutive_working_days: Number(maxConsecutiveDays),
         min_rest_hours_between_shifts: Number(minRestHours),
         max_night_shifts_per_week: Number(maxNightsPerWeek),
@@ -185,11 +268,12 @@ export default function AiRosterModal({
       const res = await apiFetch('/hr/roster/ai/generate', {
         method: 'POST',
         body: JSON.stringify({
-          departmentId: Number(departmentId),
+          departmentId: Number(selectedDeptId),
           staffRoleId: staffRoleId ? Number(staffRoleId) : null,
           startDate,
           endDate,
           prompt: promptText.trim(),
+          shifts: customShifts,
           rules: rulesPayload
         })
       });
@@ -235,7 +319,7 @@ export default function AiRosterModal({
   };
 
   // Group editable assignments by employee for preview grid
-  const previewData = React.useMemo(() => {
+  const previewData = useMemo(() => {
     if (!editableAssignments.length) return { empList: [], dateList: [] };
     const dateSet = new Set();
     const empMap = new Map();
@@ -263,14 +347,26 @@ export default function AiRosterModal({
       prev.map((a) => {
         if (a.employee_id === empId && a.date === date) {
           if (newShiftCode === 'WO') {
-            return { ...a, shift_code: 'WO', shift_name: 'Week Off', is_week_off: true, shift_id: null };
+            return {
+              ...a,
+              shift_code: 'WO',
+              shift_name: 'Week Off',
+              is_week_off: true,
+              shift_id: null,
+              start_time: null,
+              end_time: null,
+              is_night_shift: false
+            };
           }
-          const targetShift = shifts.find((s) => (s.shift_code || s.code) === newShiftCode || (s.name || s.shift_name)?.toLowerCase().startsWith(newShiftCode.toLowerCase()));
+          const targetShift = customShifts.find((s) => s.shift_code === newShiftCode) || propShifts.find((s) => (s.shift_code || s.code) === newShiftCode);
           return {
             ...a,
             shift_code: newShiftCode,
-            shift_name: targetShift?.name || targetShift?.shift_name || newShiftCode,
+            shift_name: targetShift?.shift_name || targetShift?.name || newShiftCode,
             shift_id: targetShift?.id || null,
+            start_time: targetShift?.start_time ? String(targetShift.start_time).slice(0, 5) : '08:00',
+            end_time: targetShift?.end_time ? String(targetShift.end_time).slice(0, 5) : '16:00',
+            is_night_shift: Boolean(targetShift?.is_night_shift || newShiftCode === 'N' || /night/i.test(targetShift?.shift_name || targetShift?.name || '')),
             is_week_off: false
           };
         }
@@ -279,13 +375,15 @@ export default function AiRosterModal({
     );
   };
 
+  const selectedDeptObj = deptList.find((d) => String(d.id) === String(selectedDeptId));
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
+        <div className="flex flex-wrap items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md">
               <SparklesIcon className="w-6 h-6 text-amber-300" />
@@ -294,16 +392,33 @@ export default function AiRosterModal({
               <h3 className="text-lg font-bold flex items-center gap-2">
                 AI Duty Roster Generator
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/20 text-white font-medium">
-                  Prompt &amp; Constraint Solver
+                  Custom Timing &amp; Prompt Solver
                 </span>
               </h3>
               <p className="text-xs text-blue-100">
-                Department: <strong className="text-white">{departmentName || `ID: ${departmentId}`}</strong> | Period: {startDate} → {endDate}
+                Period: <strong className="text-white">{startDate}</strong> → <strong className="text-white">{endDate}</strong>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Department Selection Inside Modal Window */}
+            <div className="flex items-center gap-2 bg-white/15 px-3 py-1.5 rounded-xl backdrop-blur-md border border-white/20">
+              <BuildingOffice2Icon className="w-4 h-4 text-amber-300" />
+              <span className="text-xs font-bold uppercase tracking-wider text-white">Dept:</span>
+              <select
+                value={selectedDeptId}
+                onChange={(e) => setSelectedDeptId(e.target.value)}
+                className="text-xs font-bold px-2 py-1 rounded-lg bg-white/20 text-white border-0 focus:ring-1 focus:ring-white cursor-pointer"
+              >
+                {deptList.map((d) => (
+                  <option key={d.id} value={d.id} className="text-slate-900">
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Health Badge */}
             <div
               className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
@@ -313,7 +428,7 @@ export default function AiRosterModal({
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${aiHealth.online ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-              {aiHealth.checking ? 'Checking AI Service...' : aiHealth.online ? 'AI Solver Online (OR-Tools)' : 'AI Service Offline'}
+              {aiHealth.checking ? 'Checking...' : aiHealth.online ? 'AI Solver Online' : 'Offline'}
             </div>
 
             <button
@@ -335,8 +450,8 @@ export default function AiRosterModal({
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
-            <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
-            1. Prompt &amp; Constraint Rules
+            <ClockIcon className="w-4 h-4" />
+            1. Shift Timings, Prompts &amp; Rules
           </button>
 
           <button
@@ -371,15 +486,15 @@ export default function AiRosterModal({
             </div>
           )}
 
-          {/* TAB 1: PROMPT & RULES CONFIGURATION */}
+          {/* TAB 1: PROMPT, CUSTOM SHIFT TIMINGS & CONSTRAINTS */}
           {activeTab === 'rules' && (
             <div className="space-y-6">
-              {/* Template selector */}
+              {/* Template selection header */}
               {templates.length > 0 && (
                 <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
-                      Saved Rule Template:
+                      Load Department Template:
                     </span>
                     <select
                       value={selectedTemplateId}
@@ -397,10 +512,122 @@ export default function AiRosterModal({
                       ))}
                     </select>
                   </div>
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                    Department: {selectedDeptObj?.name || selectedDeptId}
+                  </span>
                 </div>
               )}
 
-              {/* Natural Language Prompt Input Box */}
+              {/* 1. Custom Shift Timings Builder */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <ClockIcon className="w-4 h-4 text-indigo-600" />
+                      Department Shift Slots &amp; Timings
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Define custom shift timings for this roster template. The AI will allocate staff to these exact timing slots.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddShiftSlot}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer"
+                  >
+                    <PlusIcon className="w-4 h-4" /> Add Shift Slot
+                  </button>
+                </div>
+
+                {/* Shift Slots Table / Grid */}
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      <tr>
+                        <th className="px-3 py-2.5 font-bold w-16">Code</th>
+                        <th className="px-3 py-2.5 font-bold">Shift Name</th>
+                        <th className="px-3 py-2.5 font-bold w-32">Start Time</th>
+                        <th className="px-3 py-2.5 font-bold w-32">End Time</th>
+                        <th className="px-3 py-2.5 font-bold text-center w-24">Night Duty?</th>
+                        <th className="px-3 py-2.5 font-bold text-center w-28">Min Staff/Day</th>
+                        <th className="px-3 py-2.5 text-center w-12">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {customShifts.map((slot, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={slot.shift_code}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'shift_code', e.target.value)}
+                              className="w-full font-bold uppercase text-center px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={slot.shift_name}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'shift_name', e.target.value)}
+                              className="w-full font-semibold px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="time"
+                              step="1"
+                              value={slot.start_time?.slice(0, 5) || '08:00'}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'start_time', `${e.target.value}:00`)}
+                              className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="time"
+                              step="1"
+                              value={slot.end_time?.slice(0, 5) || '16:00'}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'end_time', `${e.target.value}:00`)}
+                              className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={slot.is_night_shift}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'is_night_shift', e.target.checked)}
+                              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max="50"
+                              value={slot.min_staff ?? 1}
+                              onChange={(e) => handleUpdateShiftSlot(idx, 'min_staff', parseInt(e.target.value) || 0)}
+                              className="w-16 mx-auto text-center font-bold px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            {customShifts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveShiftSlot(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 2. Natural Language Prompt Box */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-purple-50/50 to-blue-50/80 dark:from-slate-800/80 dark:via-slate-850 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/60 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider flex items-center gap-2">
@@ -408,7 +635,7 @@ export default function AiRosterModal({
                     AI Roster Prompt &amp; Staff Rotation Rules
                   </label>
                   <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
-                    Natural Language + Mathematical Constraint Solver
+                    Universal Natural Language Parser (Accepts any phrasing)
                   </span>
                 </div>
 
@@ -416,18 +643,19 @@ export default function AiRosterModal({
                   rows="3"
                   value={promptText}
                   onChange={(e) => setPromptText(e.target.value)}
-                  placeholder="e.g. Keep at least 2 staff in morning, 2 in evening, 1 in night. When employee ends night shift for that week, continue day shift. Give Aiswarya Sunday off. Max 6 consecutive work days."
+                  placeholder="e.g. Assign Aiswarya to 08:30 to 18:30, Priya to Night shift for 3 days then Day shift. When employee ends night shift, continue day shift of that day. Give Mary Sunday off."
                   className="w-full text-xs sm:text-sm font-medium p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                 />
 
-                {/* Quick Prompt Presets */}
+                {/* Quick Interactive Prompt Snippets */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-[11px] font-semibold text-slate-500">Presets:</span>
+                  <span className="text-[11px] font-semibold text-slate-500">Quick Prompts:</span>
                   {[
                     'When night shift ends, continue day shift',
-                    '2 Morning, 2 Evening, 1 Night (Standard ICU)',
-                    'Max 2 night shifts per week, 12h rest between shifts',
-                    'Rotate night shifts fairly across all staff'
+                    'Assign Aiswarya to Day Shift',
+                    'First 3 days Night Shift then Day Shift',
+                    'Sunday off for all senior nurses',
+                    'Max 2 night shifts per week, 12h rest between shifts'
                   ].map((preset) => (
                     <button
                       key={preset}
@@ -441,84 +669,7 @@ export default function AiRosterModal({
                 </div>
               </div>
 
-              {/* Shift Minimum Coverage Requirements */}
-              <div>
-                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  Target Staff Coverage per Shift
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
-                    <label className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">
-                      🌅 Morning (M)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={minStaff.M ?? 2}
-                      onChange={(e) => setMinStaff({ ...minStaff, M: parseInt(e.target.value) || 0 })}
-                      className="mt-2 w-full text-center text-lg font-bold px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                    <p className="text-[11px] text-amber-700/80 dark:text-amber-300/70 mt-1 text-center">
-                      Min staff / day
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/50">
-                    <label className="text-xs font-bold text-purple-900 dark:text-purple-200 uppercase tracking-wide">
-                      🌆 Evening (E)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={minStaff.E ?? 2}
-                      onChange={(e) => setMinStaff({ ...minStaff, E: parseInt(e.target.value) || 0 })}
-                      className="mt-2 w-full text-center text-lg font-bold px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                    <p className="text-[11px] text-purple-700/80 dark:text-purple-300/70 mt-1 text-center">
-                      Min staff / day
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/50">
-                    <label className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wide">
-                      🌙 Night (N)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={minStaff.N ?? 1}
-                      onChange={(e) => setMinStaff({ ...minStaff, N: parseInt(e.target.value) || 0 })}
-                      className="mt-2 w-full text-center text-lg font-bold px-3 py-2 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                    <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/70 mt-1 text-center">
-                      Min staff / day
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-                      ☀️ General (G)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={minStaff.G ?? 1}
-                      onChange={(e) => setMinStaff({ ...minStaff, G: parseInt(e.target.value) || 0 })}
-                      className="mt-2 w-full text-center text-lg font-bold px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1 text-center">
-                      Min staff / day
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fatigue & Rest Rules */}
+              {/* 3. Fatigue & General Rest Rules */}
               <div>
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -585,12 +736,12 @@ export default function AiRosterModal({
                 </div>
               </div>
 
-              {/* Save Template Option (Saves Prompt + Rules) */}
+              {/* 4. Save Template Option (Saves Custom Timings + Prompt + Rules) */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex-1 min-w-[240px]">
                   <input
                     type="text"
-                    placeholder="Save current prompt &amp; rules as a new template (e.g. Night-to-Day ICU Rotation)..."
+                    placeholder="Save timings, prompt &amp; rules as template name (e.g. ICU Night-to-Day 3-Shift Template)..."
                     value={newTemplateName}
                     onChange={(e) => setNewTemplateName(e.target.value)}
                     className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
@@ -604,7 +755,7 @@ export default function AiRosterModal({
                       onChange={(e) => setIsDefaultTemplate(e.target.checked)}
                       className="w-3.5 h-3.5 rounded text-indigo-600"
                     />
-                    Set as default for this department
+                    Set as default for {selectedDeptObj?.name || 'this department'}
                   </label>
                   <button
                     onClick={handleSaveTemplate}
@@ -664,7 +815,7 @@ export default function AiRosterModal({
                 </div>
               </div>
 
-              {/* Prompt Extraction Logs Banner */}
+              {/* Prompt Extraction Logs */}
               {generationResult.prompt_logs?.length > 0 && (
                 <div className="p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-1.5">
                   <h5 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wide flex items-center gap-1.5">
@@ -701,7 +852,7 @@ export default function AiRosterModal({
                     <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-2.5 font-bold border-b border-r border-slate-200 dark:border-slate-700 min-w-[160px] bg-slate-100 dark:bg-slate-800">
-                          Employee
+                          Employee ({selectedDeptObj?.name || 'Staff'})
                         </th>
                         {previewData.dateList.map((d) => (
                           <th
@@ -744,11 +895,11 @@ export default function AiRosterModal({
                                     onChange={(e) => updateCell(emp.id, d, e.target.value)}
                                     className={`text-[11px] font-bold px-1.5 py-1 rounded cursor-pointer transition-colors ${badgeStyle}`}
                                   >
-                                    <option value="M">M (Morning)</option>
-                                    <option value="D">D (Day)</option>
-                                    <option value="E">E (Evening)</option>
-                                    <option value="N">N (Night)</option>
-                                    <option value="G">G (General)</option>
+                                    {customShifts.map((s) => (
+                                      <option key={s.shift_code} value={s.shift_code}>
+                                        {s.shift_code} ({s.shift_name})
+                                      </option>
+                                    ))}
                                     <option value="WO">WO (Off)</option>
                                   </select>
                                 )}
@@ -770,7 +921,7 @@ export default function AiRosterModal({
           <div className="text-xs text-slate-500">
             {activeTab === 'preview'
               ? 'Click on any shift cell to manually tweak before committing.'
-              : 'Configured constraints are solved using Google OR-Tools CP-SAT in real-time.'}
+              : 'Configured shift slots & prompt rules are mathematically solved by Google OR-Tools.'}
           </div>
 
           <div className="flex items-center gap-3">
@@ -805,7 +956,7 @@ export default function AiRosterModal({
                   onClick={() => setActiveTab('rules')}
                   className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
-                  Back to Prompt &amp; Rules
+                  Back to Config
                 </button>
                 <button
                   onClick={handleApprove}

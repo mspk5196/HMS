@@ -1691,6 +1691,7 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
         onClose={() => setShowAiModal(false)}
         departmentId={deptFilter || (departments[0]?.id ? String(departments[0].id) : '1')}
         departmentName={departments.find((d) => String(d.id) === String(deptFilter || departments[0]?.id))?.name}
+        departments={departments}
         staffRoleId={roleFilter}
         startDate={grid?.weekStart || weekStart}
         endDate={grid?.weekEnd || addDays(weekStart, 6)}
