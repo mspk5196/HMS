@@ -72,6 +72,14 @@ router.patch('/shifts/:id', gate('hr_shift.edit', ctrl.updateShift));
 router.delete('/shifts/:id', gate('hr_shift.delete', ctrl.deleteShift));
 
 // Roster — static segments must precede any parameterised ones
+router.get('/roster/ai/health', canViewRoster, require('./roster.ai.controller').getAiHealth);
+router.get('/roster/ai/templates', canViewRoster, require('./roster.ai.controller').listTemplates);
+router.post('/roster/ai/templates', requirePermissions(['hr_roster.save_day', 'hr_roster.bulk_save']), require('./roster.ai.controller').createTemplate);
+router.patch('/roster/ai/templates/:id', requirePermissions(['hr_roster.save_day', 'hr_roster.bulk_save']), require('./roster.ai.controller').updateTemplate);
+router.delete('/roster/ai/templates/:id', requirePermissions(['hr_roster.save_day', 'hr_roster.bulk_save']), require('./roster.ai.controller').deleteTemplate);
+router.post('/roster/ai/generate', requirePermissions(['hr_roster.save_day', 'hr_roster.bulk_save']), require('./roster.ai.controller').generateRoster);
+router.post('/roster/ai/approve', gate('hr_roster.bulk_save', require('./roster.ai.controller').approveRoster));
+
 router.get('/roster/week', canViewRoster, ctrl.getRosterWeek);
 router.get('/roster/employees', canViewRoster, ctrl.getEmployeesForRoster);
 router.get('/roster/transfers', canViewRoster, ctrl.listDutyTransfers);

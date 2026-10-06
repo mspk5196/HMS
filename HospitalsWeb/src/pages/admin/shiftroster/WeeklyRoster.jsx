@@ -3,6 +3,7 @@ import { apiFetch } from '../../../util/api';
 import { hasPermission } from '../../../util/permissions';
 import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from './ConfigureShiftTimingModal';
+import AiRosterModal from './AiRosterModal';
 
 /* ─── Professional SVG Icons ─── */
 const SunIcon = ({ className = 'w-4 h-4', ...props }) => (
@@ -165,6 +166,8 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
   const [swapPick, setSwapPick] = useState(null); // { employeeId, date, employeeName }
   const [editingCellKey, setEditingCellKey] = useState(null);
   const [showTimingModal, setShowTimingModal] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [shiftsList, setShiftsList] = useState([]);
 
   // Duty Transfer / Replacement modal state
   const [transferModal, setTransferModal] = useState(null); // { emp, date, cell }
@@ -236,6 +239,15 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    apiFetch('/hr/shifts')
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        setShiftsList(list);
+      })
+      .catch(() => {});
+  }, []);
 
   const getCell = (employeeId, date) =>
     draft[`${employeeId}|${date}`] || {
@@ -680,6 +692,22 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
               >
                 <GearIcon className="w-3.5 h-3.5 text-gray-500" />
                 <span>Configure Shift Timings</span>
+              </button>
+            )}
+            {canBulkSave && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!deptFilter && departments.length > 0) {
+                    setDeptFilter(String(departments[0].id));
+                  }
+                  setShowAiModal(true);
+                }}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-md shadow-indigo-500/20 cursor-pointer transition-all active:scale-95"
+                title="Automatically generate an optimal, conflict-free staff roster using local AI"
+              >
+                <SparklesIcon className="w-4 h-4 text-amber-300" />
+                <span>AI Duty Roster</span>
               </button>
             )}
             <button
@@ -1654,6 +1682,22 @@ export default function WeeklyRoster({ departments = [], onBack, user }) {
         onClose={() => setShowTimingModal(false)}
         onSuccess={() => {
           flash('Hospital shift timings updated successfully!');
+        }}
+      />
+
+      {/* Standalone AI Duty Roster Solver Modal */}
+      <AiRosterModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        departmentId={deptFilter || (departments[0]?.id ? String(departments[0].id) : '1')}
+        departmentName={departments.find((d) => String(d.id) === String(deptFilter || departments[0]?.id))?.name}
+        staffRoleId={roleFilter}
+        startDate={grid?.weekStart || weekStart}
+        endDate={grid?.weekEnd || addDays(weekStart, 6)}
+        shifts={shiftsList}
+        onRosterCommitted={() => {
+          load();
+          flash('AI Roster successfully applied and committed to live duty schedule!');
         }}
       />
     </div>
