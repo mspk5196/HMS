@@ -1,11 +1,12 @@
 """
 roster_solver.py
 High-performance Staff Duty Roster Scheduling Engine using Google OR-Tools CP-SAT.
-Solves hospital scheduling with hard constraints (coverage, rest, leaves, fatigue)
+Solves hospital scheduling with hard constraints (coverage, rest, leaves, fatigue, rotation)
 and soft fairness optimization.
 """
 
 import time
+import math
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Tuple
 from ortools.sat.python import cp_model
@@ -76,11 +77,20 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     shift_by_code = {s.shift_code: s for s in shifts}
     shift_ids = [s.id for s in shifts]
     
-    # Identify night shift IDs
+    # Identify shift types
     night_shift_ids = {s.id for s in shifts if s.is_night_shift or "night" in s.shift_name.lower() or s.shift_code == "N"}
-    morning_shift_ids = {s.id for s in shifts if "morning" in s.shift_name.lower() or s.shift_code == "M"}
+    morning_shift_ids = {s.id for s in shifts if "morning" in s.shift_name.lower() or s.shift_code in ("M", "D") and not s.is_night_shift}
     evening_shift_ids = {s.id for s in shifts if "evening" in s.shift_name.lower() or s.shift_code == "E"}
     
+    # Default fill shift ID
+    fill_shift_id = None
+    if active_rules.default_fill_shift and active_rules.default_fill_shift in shift_by_code:
+        fill_shift_id = shift_by_code[active_rules.default_fill_shift].id
+    elif morning_shift_ids:
+        fill_shift_id = list(morning_shift_ids)[0]
+    elif shift_ids:
+        fill_shift_id = shift_ids[0]
+
     # Set of approved leaves: (emp_id, date_str)
     approved_leaves_set = {(l.employee_id, l.date) for l in active_rules.approved_leaves}
     
@@ -88,11 +98,8 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     pinned_map = {(p.employee_id, p.date): p for p in active_rules.pinned_shifts}
     
     # History for consecutive working days continuity
-    # emp_id -> count of consecutive working days right before start_date
     history_streak: Dict[int, int] = {}
     if req.history:
-        prev_date = format_date(parse_date(req.start_date) - timedelta(days=1))
-        # Build consecutive worked days map
         for h in req.history:
             e_id = h.get("employee_id")
             streak = h.get("consecutive_worked_days", 0)
@@ -110,7 +117,7 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     w = {}
     
     for e in req.employees:
-        for d_idx, d_str in enumerate(dates):
+        for d_idx in range(num_days):
             w[(e.id, d_idx)] = model.NewBoolVar(f"w_e{e.id}_d{d_idx}")
             for s_id in shift_ids:
                 x[(e.id, d_idx, s_id)] = model.NewBoolVar(f"x_e{e.id}_d{d_idx}_s{s_id}")
@@ -121,12 +128,10 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
         for d_idx, d_str in enumerate(dates):
             is_leave = (e.id, d_str) in approved_leaves_set
             if is_leave:
-                # Forced Leave
                 model.Add(w[(e.id, d_idx)] == 0)
                 for s_id in shift_ids:
                     model.Add(x[(e.id, d_idx, s_id)] == 0)
             else:
-                # Sum of shifts + week_off == 1
                 model.Add(sum(x[(e.id, d_idx, s_id)] for s_id in shift_ids) + w[(e.id, d_idx)] == 1)
 
     # ── 2. Pinned Shifts Constraint ──────────────────────────────────────────
@@ -146,11 +151,10 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
                 target_sid = shift_by_code[pin.shift_code].id
             
             if target_sid is not None:
-                # Forbid all other shifts
                 for s_id in shift_ids:
                     if s_id != target_sid:
                         model.Add(x[(e_id, d_idx, s_id)] == 0)
-                # Strong reward for working the target shift
+                model.Add(w[(e_id, d_idx)] == 0)
                 objective_terms.append(x[(e_id, d_idx, target_sid)] * -500)
 
     # ── 3. Maximum Consecutive Working Days ──────────────────────────────────
@@ -158,117 +162,178 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     window_size = max_streak + 1
     
     for e in req.employees:
-        # Check start-of-month continuity from history
         prior_streak = history_streak.get(e.id, 0)
         if prior_streak > 0 and prior_streak < max_streak:
             remaining_allowed = max_streak - prior_streak
             if remaining_allowed < num_days:
-                # Must have at least one day off in dates[0..remaining_allowed]
                 days_off = [w[(e.id, k)] for k in range(remaining_allowed + 1)]
                 for k in range(remaining_allowed + 1):
                     if (e.id, dates[k]) in approved_leaves_set:
                         days_off.append(model.NewConstant(1))
                 model.Add(sum(days_off) >= 1)
         
-        # Standard rolling window of length (max_streak + 1)
         for d_idx in range(num_days - window_size + 1):
             worked_days = []
             for k in range(window_size):
                 cur_d = d_idx + k
                 if (e.id, dates[cur_d]) in approved_leaves_set:
-                    # Leave is an off day
                     pass
                 else:
-                    # Worked = 1 - w
-                    # sum(worked_days) <= max_streak <=> sum(w) >= 1
                     worked_days.append(sum(x[(e.id, cur_d, s_id)] for s_id in shift_ids))
             if worked_days:
                 model.Add(sum(worked_days) <= max_streak)
 
     # ── 4. Minimum Rest Between Consecutive Shifts ───────────────────────────
-    # Evening -> Morning next day (rest < 8h)
-    # Night -> Morning / Evening next day
     for e in req.employees:
         for d_idx in range(num_days - 1):
-            # Evening -> Morning next day
+            # Evening -> Morning next day (rest < 8h)
             for e_sid in evening_shift_ids:
                 for m_sid in morning_shift_ids:
                     model.Add(x[(e.id, d_idx, e_sid)] + x[(e.id, d_idx + 1, m_sid)] <= 1)
             
-            # Night -> Morning next day
-            for n_sid in night_shift_ids:
-                for m_sid in morning_shift_ids:
-                    model.Add(x[(e.id, d_idx, n_sid)] + x[(e.id, d_idx + 1, m_sid)] <= 1)
-                
-                # Night -> Evening next day (if 24h rest is requested)
-                if active_rules.require_off_after_night_shift:
+            # Night -> Morning next day (only if seamless transition is disabled)
+            if active_rules.require_off_after_night_shift:
+                for n_sid in night_shift_ids:
+                    for m_sid in morning_shift_ids:
+                        model.Add(x[(e.id, d_idx, n_sid)] + x[(e.id, d_idx + 1, m_sid)] <= 1)
                     for ev_sid in evening_shift_ids:
                         model.Add(x[(e.id, d_idx, n_sid)] + x[(e.id, d_idx + 1, ev_sid)] <= 1)
 
-    # ── 5. Night Shift Eligibility & Quotas ──────────────────────────────────
+    # ── 5. Night Shift Rotation & Distribution ───────────────────────────────
+    # Non-eligible staff cannot do night shift
     for e in req.employees:
-        # If employee not eligible for night shifts
         if not e.is_night_eligible and night_shift_ids:
             for d_idx in range(num_days):
                 for n_sid in night_shift_ids:
                     model.Add(x[(e.id, d_idx, n_sid)] == 0)
+
+    # Structured Rotation Blocks (e.g. 2 staff, 3 days block: Days 0..2 & Days 3..5)
+    if night_shift_ids and active_rules.total_night_employees and active_rules.night_rotation_block_days:
+        tot_n = active_rules.total_night_employees
+        block_len = active_rules.night_rotation_block_days
         
-        # Max night shifts per week
-        max_nights_per_week = active_rules.max_night_shifts_per_week or 3
-        if night_shift_ids and max_nights_per_week > 0:
-            for w_start in range(0, num_days, 7):
-                w_end = min(w_start + 7, num_days)
-                night_vars = [
+        # Identify blocks of length block_len (e.g. 0..2 and 3..5)
+        blocks = []
+        cur_start = 0
+        while cur_start + block_len <= num_days and len(blocks) < tot_n:
+            blocks.append((cur_start, cur_start + block_len))
+            cur_start += block_len
+
+        block_emp_vars = []
+        for b_idx, (b_start, b_end) in enumerate(blocks):
+            b_emps = [model.NewBoolVar(f"b_emp_b{b_idx}_e{e.id}") for e in req.employees]
+            for idx, e in enumerate(req.employees):
+                emp_block_nights = [
                     x[(e.id, d_idx, n_sid)]
-                    for d_idx in range(w_start, w_end)
+                    for d_idx in range(b_start, b_end)
                     for n_sid in night_shift_ids
                 ]
-                if night_vars:
-                    model.Add(sum(night_vars) <= max_nights_per_week)
+                # If b_emps[idx] is True, employee works all nights in this block
+                model.Add(sum(emp_block_nights) == (b_end - b_start)).OnlyEnforceIf(b_emps[idx])
+                model.Add(sum(emp_block_nights) == 0).OnlyEnforceIf(b_emps[idx].Not())
+            # Exactly 1 employee covers this night block
+            model.Add(sum(b_emps) == 1)
+            block_emp_vars.append(b_emps)
+
+        # All block employees must be distinct individuals
+        for idx in range(len(req.employees)):
+            model.Add(sum(b_emps[idx] for b_emps in block_emp_vars) <= 1)
+
+        # Staff not selected for rotation blocks do not work night shifts
+        for idx, e in enumerate(req.employees):
+            is_assigned_to_any_block = model.NewBoolVar(f"in_any_block_e{e.id}")
+            model.Add(sum(b_emps[idx] for b_emps in block_emp_vars) == 1).OnlyEnforceIf(is_assigned_to_any_block)
+            model.Add(sum(b_emps[idx] for b_emps in block_emp_vars) == 0).OnlyEnforceIf(is_assigned_to_any_block.Not())
+            
+            # If not in any block, 0 night shifts
+            for d_idx in range(num_days):
+                for n_sid in night_shift_ids:
+                    model.Add(x[(e.id, d_idx, n_sid)] == 0).OnlyEnforceIf(is_assigned_to_any_block.Not())
+
+        # Days outside rotation blocks (e.g. day 6 if 2 blocks of 3 days cover days 0..5) have 0 night shifts
+        covered_days = sum((b_end - b_start) for (b_start, b_end) in blocks)
+        for rem_d in range(covered_days, num_days):
+            for e in req.employees:
+                for n_sid in night_shift_ids:
+                    model.Add(x[(e.id, rem_d, n_sid)] == 0)
+
+    elif night_shift_ids:
+        # Standard night shift quota
+        max_nights_per_week = active_rules.max_night_shifts_per_week or 3
+        if max_nights_per_week > 0:
+            for e in req.employees:
+                for w_start in range(0, num_days, 7):
+                    w_end = min(w_start + 7, num_days)
+                    night_vars = [
+                        x[(e.id, d_idx, n_sid)]
+                        for d_idx in range(w_start, w_end)
+                        for n_sid in night_shift_ids
+                    ]
+                    if night_vars:
+                        model.Add(sum(night_vars) <= max_nights_per_week)
+
+        # Night shift per-day cap (prevent clustering multiple staff on the same night unless requested)
+        night_cap = active_rules.max_staff_per_shift.get('N') or active_rules.min_staff_per_shift.get('N', 1)
+        for d_idx in range(num_days):
+            model.Add(sum(x[(e.id, d_idx, n_sid)] for e in req.employees for n_sid in night_shift_ids) <= max(1, night_cap))
 
     # ── 6. Weekly Off Quota per Employee ─────────────────────────────────────
-    # Each full 7-day period should have at least 1 week-off (or leave)
     target_offs_per_week = active_rules.weekly_offs_per_employee or 1
     for e in req.employees:
         for w_start in range(0, num_days, 7):
             w_end = min(w_start + 7, num_days)
-            if (w_end - w_start) >= 5:  # Only enforce on blocks of 5+ days
+            block_len = w_end - w_start
+            if block_len >= 5:
                 off_vars = []
+                leaves_count = 0
                 for d_idx in range(w_start, w_end):
                     if (e.id, dates[d_idx]) in approved_leaves_set:
-                        off_vars.append(model.NewConstant(1))
+                        leaves_count += 1
                     else:
                         off_vars.append(w[(e.id, d_idx)])
-                model.Add(sum(off_vars) >= target_offs_per_week)
+                
+                req_offs = max(0, target_offs_per_week - leaves_count)
+                if active_rules.exact_weekly_offs:
+                    # Exact weekly off constraint
+                    model.Add(sum(off_vars) == req_offs)
+                else:
+                    model.Add(sum(off_vars) >= req_offs)
+                    extra_offs = model.NewIntVar(0, block_len, f"extra_offs_e{e.id}_w{w_start}")
+                    model.Add(extra_offs >= sum(off_vars) - req_offs)
+                    objective_terms.append(extra_offs * 100)
 
-    # ── 7. Shift Coverage Requirements (Soft with Slack Penalties) ───────────
-    # If headcount is short, we allow slack variables with high penalties
-    # so the solver always produces the best feasible schedule and flags deficits.
+    # ── 7. Stagger Week-Offs Across the Week ──────────────────────────────────
+    # Avoid having all staff take week-off on the same day; distribute evenly
+    max_offs_per_day = max(1, math.ceil((num_employees * target_offs_per_week) / num_days))
+    if num_employees >= 3:
+        for d_idx in range(num_days):
+            model.Add(sum(w[(e.id, d_idx)] for e in req.employees) <= max_offs_per_day)
+
+    # ── 8. Shift Coverage Requirements (Soft with Slack Penalties) ───────────
     coverage_slacks = []
-    
-    # Check shift minimums
     for d_idx, d_str in enumerate(dates):
         for s in shifts:
-            req_min = 0
-            if s.shift_code in active_rules.min_staff_per_shift:
-                req_min = active_rules.min_staff_per_shift[s.shift_code]
-            elif s.shift_name in active_rules.min_staff_per_shift:
-                req_min = active_rules.min_staff_per_shift[s.shift_name]
-            
+            req_min = active_rules.min_staff_per_shift.get(s.shift_code) or active_rules.min_staff_per_shift.get(s.shift_name, 0)
             if req_min > 0:
                 staff_assigned = [x[(e.id, d_idx, s.id)] for e in req.employees]
-                # slack = max(0, req_min - staff_assigned)
                 slack = model.NewIntVar(0, req_min, f"slack_cov_d{d_idx}_s{s.id}")
                 model.Add(sum(staff_assigned) + slack >= req_min)
                 coverage_slacks.append((d_str, s.shift_name, s.shift_code, req_min, slack))
-                # Heavy penalty for understaffing
                 objective_terms.append(slack * 1000)
+            
+            # Max staff cap if specified
+            req_max = active_rules.max_staff_per_shift.get(s.shift_code) or active_rules.max_staff_per_shift.get(s.shift_name)
+            if req_max is not None and req_max > 0:
+                model.Add(sum(x[(e.id, d_idx, s.id)] for e in req.employees) <= req_max)
 
-    # ── 8. Fairness Optimization Terms ───────────────────────────────────────
-    # A. Balance total shifts worked across employees
-    # B. Balance night shifts across eligible employees
-    # C. Consecutive week-offs preference (encourage 2-day off blocks over isolated single offs)
-    
+    # ── 9. Fairness & Distribution Optimization Terms ─────────────────────────
+    # A. Prioritize default fill shift (e.g. Morning Shift) on all working days
+    if fill_shift_id is not None:
+        for e in req.employees:
+            for d_idx in range(num_days):
+                objective_terms.append(x[(e.id, d_idx, fill_shift_id)] * -20)
+
+    # B. Balance total shifts worked across employees
     total_shifts_per_emp = []
     for e in req.employees:
         emp_shifts = [x[(e.id, d_idx, s_id)] for d_idx in range(num_days) for s_id in shift_ids]
@@ -281,41 +346,20 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
         max_tot = model.NewIntVar(0, num_days, "max_tot_shifts")
         model.AddMinEquality(min_tot, total_shifts_per_emp)
         model.AddMaxEquality(max_tot, total_shifts_per_emp)
-        # Penalize difference between most-worked and least-worked employee
         objective_terms.append((max_tot - min_tot) * 50)
 
-    # Balance Night Shifts
-    if night_shift_ids:
-        night_shifts_per_emp = []
-        for e in req.employees:
-            if e.is_night_eligible:
-                emp_nights = [x[(e.id, d_idx, s_id)] for d_idx in range(num_days) for s_id in night_shift_ids]
-                tot_n = model.NewIntVar(0, num_days, f"tot_nights_e{e.id}")
-                model.Add(tot_n == sum(emp_nights))
-                night_shifts_per_emp.append(tot_n)
-        if len(night_shifts_per_emp) >= 2:
-            min_n = model.NewIntVar(0, num_days, "min_night_shifts")
-            max_n = model.NewIntVar(0, num_days, "max_night_shifts")
-            model.AddMinEquality(min_n, night_shifts_per_emp)
-            model.AddMaxEquality(max_n, night_shifts_per_emp)
-            objective_terms.append((max_n - min_n) * 30)
+    # C. Balance daily working staff count (smooth daily coverage)
+    for d_idx in range(num_days):
+        daily_offs = sum(w[(e.id, d_idx)] for e in req.employees)
+        objective_terms.append(daily_offs * 5)
 
-    # Encourage Consecutive Week-Offs (w[e, d] == 1 and w[e, d+1] == 1)
-    for e in req.employees:
-        for d_idx in range(num_days - 1):
-            pair_off = model.NewBoolVar(f"pair_off_e{e.id}_d{d_idx}")
-            model.AddBoolAnd([w[(e.id, d_idx)], w[(e.id, d_idx + 1)]]).OnlyEnforceIf(pair_off)
-            model.AddBoolOr([w[(e.id, d_idx)].Not(), w[(e.id, d_idx + 1)].Not()]).OnlyEnforceIf(pair_off.Not())
-            # Reward paired offs
-            objective_terms.append(pair_off * -5)
-
-    # Minimize total penalties
+    # Minimize total objective penalties
     model.Minimize(sum(objective_terms))
 
     # ── Solve ────────────────────────────────────────────────────────────────
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10.0  # Max 10s budget
-    solver.parameters.num_workers = 4             # Multi-threaded search
+    solver.parameters.max_time_in_seconds = 10.0
+    solver.parameters.num_workers = 4
     
     status_code = solver.Solve(model)
     solve_duration = round(time.time() - start_time, 3)
@@ -339,7 +383,6 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
     assignments: List[RosterAssignment] = []
     violations: List[Violation] = []
     
-    # Check coverage deficit slacks
     for (d_str, s_name, s_code, req_min, slack_var) in coverage_slacks:
         slack_val = solver.Value(slack_var)
         if slack_val > 0:
@@ -412,7 +455,6 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
                         pinned=bool(pin and (pin.shift_id == s_obj.id or pin.shift_code == s_obj.shift_code))
                     ))
                 else:
-                    # Fallback Week Off
                     assignments.append(RosterAssignment(
                         employee_id=e.id,
                         employee_name=e.name,
@@ -425,7 +467,6 @@ def solve_roster(req: RosterSolveRequest) -> RosterSolveResponse:
                         pinned=False
                     ))
 
-    # Calculate metrics
     fairness_score = 100
     if shifts_per_emp_count:
         counts = list(shifts_per_emp_count.values())

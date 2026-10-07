@@ -35,12 +35,17 @@ class PinnedShift(BaseModel):
 
 class RosterRulesInput(BaseModel):
     min_staff_per_shift: Dict[str, int] = Field(default_factory=dict)  # {"M": 3, "E": 2, "N": 1}
+    max_staff_per_shift: Dict[str, int] = Field(default_factory=dict)  # {"N": 1}
     role_coverage: Dict[str, Dict[str, int]] = Field(default_factory=dict) # {"M": {"Staff Nurse": 2}}
     min_rest_hours_between_shifts: int = 12
     max_consecutive_working_days: int = 6
     max_night_shifts_per_week: int = 3
     require_off_after_night_shift: bool = True
     weekly_offs_per_employee: int = 1
+    exact_weekly_offs: bool = True
+    total_night_employees: Optional[int] = None
+    night_rotation_block_days: Optional[int] = None
+    default_fill_shift: Optional[str] = None
     approved_leaves: List[LeaveConstraint] = Field(default_factory=list)
     pinned_shifts: List[PinnedShift] = Field(default_factory=list)
 
@@ -51,7 +56,7 @@ class RosterSolveRequest(BaseModel):
     end_date: str    # YYYY-MM-DD
     employees: List[EmployeeInput]
     shifts: List[ShiftInput]
-    rules: RosterRulesInput
+    rules: RosterRulesInput = Field(default_factory=RosterRulesInput)
     prompt: Optional[str] = None  # Natural language instruction from admin
     history: Optional[List[Dict[str, Any]]] = None  # Last week shifts for consecutive day continuity
 

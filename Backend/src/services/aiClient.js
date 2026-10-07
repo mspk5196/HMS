@@ -30,7 +30,7 @@ const requestAiService = async (endpoint, options = {}) => {
         path: `${url.pathname}${url.search}`,
         method,
         headers,
-        timeout: 15000 // 15s timeout
+        timeout: 45000 // 45s timeout
       },
       (res) => {
         let rawData = '';
@@ -72,7 +72,7 @@ const requestAiService = async (endpoint, options = {}) => {
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new AppError('AI Service request timed out after 15 seconds', 504));
+      reject(new AppError('AI Service request timed out after 45 seconds', 504));
     });
 
     if (body) {
