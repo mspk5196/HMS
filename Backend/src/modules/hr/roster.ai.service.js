@@ -8,8 +8,8 @@ const { AppError } = require('../../utils/errors');
 /**
  * List rule templates for a department
  */
-const listRuleTemplates = async (departmentId, staffRoleId) => {
-  return aiQueries.getRuleTemplates(departmentId, staffRoleId);
+const listRuleTemplates = async (departmentId, staffRoleId, includeAll) => {
+  return aiQueries.getRuleTemplates(departmentId, staffRoleId, includeAll);
 };
 
 const createRuleTemplate = async (data, userId) => {
@@ -54,7 +54,7 @@ const checkAiHealth = async () => {
  * Generate AI Duty Roster
  */
 const generateAiRoster = async (
-  { departmentId, staffRoleId, startDate, endDate, rules, prompt, shifts: customShifts, pinnedShifts },
+  { departmentId, staffRoleId, startDate, endDate, rules, prompt, shifts: customShifts, pinnedShifts, shift_mode, shiftMode },
   userId
 ) => {
   if (!departmentId || !startDate || !endDate) {
@@ -101,11 +101,17 @@ const generateAiRoster = async (
     });
   }
 
-  // 3. Fetch approved leaves for the date range
+  // 3. Fetch approved leaves and roster history for the date range
   const approvedLeaves = await aiQueries.getApprovedLeavesForPeriod(
     employeeIds,
     startDate,
     endDate
+  );
+
+  const recentHistory = await aiQueries.getRecentRosterHistory(
+    employeeIds,
+    startDate,
+    14
   );
 
   // 4. Build AI Solver Payload
@@ -132,6 +138,7 @@ const generateAiRoster = async (
     staff_role_id: staffRoleId ? Number(staffRoleId) : null,
     start_date: startDate,
     end_date: endDate,
+    shift_mode: shift_mode || shiftMode || 'hybrid',
     prompt: prompt || rules?.prompt || null,
     employees: employees.map((e) => ({
       id: Number(e.employee_id || e.id),
@@ -145,7 +152,8 @@ const generateAiRoster = async (
       target_weekly_offs: Number(e.weekly_off_count || 1)
     })),
     shifts: shiftsToUse,
-    rules: mergedRules
+    rules: mergedRules,
+    history: recentHistory
   };
 
   // 5. Call Standalone AI Service

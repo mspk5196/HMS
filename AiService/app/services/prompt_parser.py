@@ -2,12 +2,13 @@
 prompt_parser.py
 Advanced Universal Natural Language Prompt Parser for Hospital Duty Roster Generation.
 Handles arbitrary prompt formats, custom shift timings, employee codes/names/roles,
-flexible time ranges, rotation sequences, exact week-offs, and transition rules.
+flexible time ranges, calendar dates, days of week, rotation sequences, exact week-offs,
+and transition rules.
 """
 
 import re
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Set
 from app.models.roster_schema import EmployeeInput, ShiftInput, RosterRulesInput, PinnedShift
 from app.services.ollama_client import extract_constraints_with_ollama
 
@@ -59,22 +60,108 @@ def normalize_time_str(t_str: str) -> Optional[str]:
     
     return None
 
+def resolve_target_dates(clause: str, date_list: List[str]) -> Tuple[List[str], bool]:
+    """
+    Extracts all matching calendar dates from a clause:
+    - Specific ISO dates ('2026-10-07', '10-07', '10/07')
+    - Natural language dates ('7th Oct', 'Oct 7', '7 October', '07/10')
+    - Days of the week ('Sunday', 'Mon to Wed', 'weekends')
+    - Relative ranges ('first 3 days', 'last 2 days')
+    - Explicit whole week ('all days', 'everyday', 'whole week')
+    Returns: (matched_dates, is_explicit)
+    """
+    c = clause.lower().strip()
+    matched: List[str] = []
+    
+    # Explicit full week
+    if any(k in c for k in ["all days", "every day", "everyday", "whole week", "full week", "entire week", "all 7 days"]):
+        return list(date_list), True
+
+    # 0. Single day relative matches ('last day', 'final day', 'first day', 'day 1', 'end of week/month')
+    if re.search(r'\b(?:on\s+)?(?:the\s+)?last\s+day\b', c) or re.search(r'\b(?:on\s+)?(?:the\s+)?final\s+day\b', c) or re.search(r'\bend\s+of\s+(?:the\s+)?(?:week|month|period)\b', c):
+        return [date_list[-1]], True
+
+    if re.search(r'\b(?:on\s+)?(?:the\s+)?first\s+day\b', c) or re.search(r'\b(?:on\s+)?(?:the\s+)?day\s+1\b', c) or re.search(r'\bstart\s+of\s+(?:the\s+)?(?:week|month|period)\b', c):
+        return [date_list[0]], True
+
+    # 1. Relative ranges ('first 3 days', 'next 3 days', 'last 2 days')
+    m_first = re.search(r'first\s*(\d+|one|two|three|four|five|six|seven)\s*days?', c)
+    if m_first:
+        n = parse_int_or_word(m_first.group(1)) or 3
+        return date_list[:min(n, len(date_list))], True
+
+    m_next = re.search(r'(?:next|second|following)\s*(\d+|one|two|three|four|five|six|seven)\s*days?', c)
+    if m_next:
+        n = parse_int_or_word(m_next.group(1)) or 3
+        if len(date_list) >= n:
+            start_idx = min(n, len(date_list) - 1)
+            return date_list[start_idx : min(start_idx + n, len(date_list))], True
+
+    m_last = re.search(r'last\s*(\d+|one|two|three|four|five|six|seven)\s*days?', c)
+    if m_last:
+        n = parse_int_or_word(m_last.group(1)) or 2
+        return date_list[-min(n, len(date_list)):], True
+
+    # 2. Specific calendar dates in date_list
+    for d_str in date_list:
+        dt = datetime.strptime(d_str, "%Y-%m-%d")
+        day_n = dt.day
+        month_n = dt.month
+        month_s = dt.strftime("%b").lower()
+        month_l = dt.strftime("%B").lower()
+        slash_date = d_str[5:].replace("-", "/")
+        patterns = [
+            rf'\b{re.escape(d_str)}\b',
+            rf'\b{re.escape(d_str[5:])}\b',
+            rf'\b{re.escape(slash_date)}\b',
+            rf'\b0?{day_n}[/-]0?{month_n}\b',
+            rf'\b{day_n}(?:st|nd|rd|th)?\s*(?:of\s*)?(?:{month_s}|{month_l})\b',
+            rf'\b(?:{month_s}|{month_l})\s*{day_n}(?:st|nd|rd|th)?\b'
+        ]
+        for pat in patterns:
+            if re.search(pat, c):
+                if d_str not in matched:
+                    matched.append(d_str)
+                break
+
+    # 3. Days of week & Weekends
+    if "weekend" in c:
+        for d_str in date_list:
+            dt = datetime.strptime(d_str, "%Y-%m-%d")
+            if dt.weekday() in (5, 6) and d_str not in matched:
+                matched.append(d_str)
+
+    matched_dow: Set[int] = set()
+    for dow_name, dow_idx in DAYS_OF_WEEK.items():
+        if re.search(rf'\b{re.escape(dow_name)}\b', c):
+            matched_dow.add(dow_idx)
+
+    if matched_dow:
+        for d_str in date_list:
+            dt = datetime.strptime(d_str, "%Y-%m-%d")
+            if dt.weekday() in matched_dow and d_str not in matched:
+                matched.append(d_str)
+
+    is_explicit = len(matched) > 0
+    return matched, is_explicit
+
 def is_employee_explicitly_mentioned(emp: EmployeeInput, prompt_text: str) -> bool:
-    """Verifies if an employee's exact name or distinct tokens are present in prompt text."""
+    """Verifies if an employee's exact name, ID, or distinct tokens are present in prompt text."""
     p_lower = prompt_text.lower()
+    
     # Check full name
     name_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', emp.name.lower()).strip()
     if name_clean and name_clean in p_lower:
         return True
     
-    # Check individual significant name tokens (length >= 4 and not generic words)
-    generic_words = {"shift", "duty", "nurse", "staff", "first", "second", "third", "night", "morning", "evening", "week", "days", "leave"}
+    # Check individual significant name tokens (length >= 3 and not generic keywords)
+    generic_words = {"shift", "duty", "nurse", "staff", "first", "second", "third", "night", "morning", "evening", "week", "days", "leave", "senior", "doctor", "head"}
     for token in name_clean.split():
-        if len(token) >= 4 and token not in generic_words:
+        if len(token) >= 3 and token not in generic_words:
             if re.search(rf'\b{re.escape(token)}\b', p_lower):
                 return True
                 
-    # Check employee ID
+    # Check employee ID (e.g. 'emp 101', '#101', 'employee 1')
     if re.search(rf'\b(?:emp|employee|code|#)\s*{emp.id}\b', p_lower):
         return True
         
@@ -85,16 +172,21 @@ def parse_admin_prompt(
     employees: List[EmployeeInput],
     shifts: List[ShiftInput],
     date_list: List[str],
-    base_rules: RosterRulesInput
+    base_rules: RosterRulesInput,
+    shift_mode: str = "hybrid"
 ) -> Tuple[RosterRulesInput, List[ShiftInput], List[str]]:
     """
-    Parses natural language prompts using Local Ollama LLM + universal deterministic NLP:
-    - Extracts custom time ranges and matches/creates shifts
-    - Assigns specific shifts or times to explicitly mentioned employees
-    - Interprets shift rotations (e.g. 2 staff on night rotation, 3 days each)
-    - Interprets night-to-day transitions
-    - Adjusts minimum and maximum staff coverage per shift
-    - Enforces exact week-off quotas and default fill shifts
+    Universal Natural Language Prompt Parser for Hospital Rostering:
+    Combines local Ollama LLM intelligence with deterministic date/shift resolution.
+    Handles any combination of:
+    - Named employees (names, codes, IDs, designations)
+    - Specific calendar dates (YYYY-MM-DD, MM-DD, 'Oct 7', '7th Oct')
+    - Days of week ('Sunday', 'Mon-Wed', 'weekends')
+    - Relative ranges ('first 3 days', 'last 2 days')
+    - Shift rotations (e.g. 2 staff on night rotation, 3 days each)
+    - Custom shift timings ('9am-5pm', '20:00 to 08:00')
+    - Historical continuity from past weeks ('if last week had night shift give day shift')
+    - Exact week-off quotas & default fill shifts
     """
     if not prompt_text or not prompt_text.strip():
         return base_rules, shifts, []
@@ -131,13 +223,16 @@ def parse_admin_prompt(
             if "general" in q and ("general" in s_name or s_code == "g"):
                 return s
 
-        # If timing is provided, match by time or create virtual shift
+        # If custom timing is provided, match by time or create virtual shift
         if start_time and end_time:
             for s in shift_pool:
                 if s.start_time and s.start_time.startswith(start_time[:5]) and s.end_time and s.end_time.startswith(end_time[:5]):
                     return s
             
-            # Create dynamic custom shift
+            # If configured_only mode, do not create new virtual shifts
+            if shift_mode == "configured_only":
+                return shift_pool[0] if shift_pool else None
+
             new_id = max([s.id for s in shift_pool] + [0]) + 1
             is_night = start_time >= "18:00" or start_time < "06:00" or end_time < start_time
             code = f"C{new_id}"
@@ -166,7 +261,7 @@ def parse_admin_prompt(
         emp_lookup[e.name.lower().strip()] = e
         clean_name = re.sub(r'[^a-zA-Z0-9\s]', '', e.name.lower())
         for token in clean_name.split():
-            if len(token) > 2 and token not in emp_lookup:
+            if len(token) >= 3 and token not in emp_lookup:
                 emp_lookup[token] = e
         if e.role_name:
             r_key = e.role_name.lower().strip()
@@ -186,7 +281,7 @@ def parse_admin_prompt(
     if ollama_res and isinstance(ollama_res, dict):
         logs.append("[Ollama AI] Interpreted prompt structure with local LLM (qwen2.5-coder:1.5b).")
         
-        # 1. Shift coverage from Ollama (supports dict with min/max or flat numbers)
+        # 1. Shift coverage from Ollama
         cov_dict = ollama_res.get("shift_coverage") or ollama_res.get("shift_minimum_coverage") or {}
         for s_name, cov_val in cov_dict.items():
             matched_s = find_or_create_shift(s_name)
@@ -227,6 +322,11 @@ def parse_admin_prompt(
             rules.require_off_after_night_shift = False
             logs.append("Prompt rule (Ollama): Night shift staff transition seamlessly to Day/Morning shift upon ending rotation.")
 
+        # Historical continuity from last week
+        if ollama_res.get("transition_from_last_week_nights") is True:
+            rules.transition_from_last_week_nights = True
+            logs.append("Prompt rule (Ollama): Rotate staff from last week's night shifts into Day/Morning shift this period.")
+
         # Exact weekly offs from Ollama
         if ollama_res.get("exact_weekly_offs") is not None:
             rules.weekly_offs_per_employee = int(ollama_res["exact_weekly_offs"])
@@ -248,7 +348,7 @@ def parse_admin_prompt(
         if ollama_res.get("min_rest_hours"):
             rules.min_rest_hours_between_shifts = int(ollama_res["min_rest_hours"])
 
-        # Named employee assignments from Ollama (Strictly verify that name is actually in prompt)
+        # Named employee assignments from Ollama (Strictly resolve specific dates!)
         emp_items = ollama_res.get("named_employee_assignments") or ollama_res.get("employee_assignments") or []
         for item in emp_items:
             e_name = str(item.get("name_or_role") or item.get("employee_name", "")).lower().strip()
@@ -261,27 +361,42 @@ def parse_admin_prompt(
             if matched_emp and is_employee_explicitly_mentioned(matched_emp, text):
                 is_off = bool(item.get("is_week_off") or "off" in str(item.get("shift_or_timing", "")).lower())
                 shift_desc = str(item.get("shift_or_timing") or item.get("shift_code_or_timing", "")).lower()
-                target_dows = [DAYS_OF_WEEK[dow.lower()] for dow in (item.get("days_of_week") or []) if dow.lower() in DAYS_OF_WEEK]
                 
+                # Resolve target dates only from this specific item's context and verify against user prompt
+                days_context = " ".join(item.get("days_of_week", [])) + " " + " ".join(item.get("days", [])) + " " + shift_desc
+                raw_item_dates, is_explicit = resolve_target_dates(days_context, date_list)
+                
+                # Ensure the date was actually mentioned in the user's prompt text
+                item_dates = []
+                if is_explicit and raw_item_dates:
+                    text_dates, _ = resolve_target_dates(text, date_list)
+                    item_dates = [d for d in raw_item_dates if d in text_dates]
+                    is_explicit = len(item_dates) > 0
+
                 if is_off:
-                    for d_str in date_list:
-                        dt = datetime.strptime(d_str, "%Y-%m-%d")
-                        if not target_dows or dt.weekday() in target_dows:
+                    if is_explicit and item_dates:
+                        for d_str in item_dates:
                             pinned.append(PinnedShift(employee_id=matched_emp.id, date=d_str, is_week_off=True))
-                    logs.append(f"Prompt rule (Ollama): Assigned Week-Off to {matched_emp.name}.")
+                        logs.append(f"Prompt rule (Ollama): Assigned Week-Off to {matched_emp.name} on {', '.join(item_dates)}.")
+                    elif any(w in text.lower() for w in ["all days", "whole week", "entire week"]):
+                        for d_str in date_list:
+                            pinned.append(PinnedShift(employee_id=matched_emp.id, date=d_str, is_week_off=True))
+                        logs.append(f"Prompt rule (Ollama): Assigned full-week off to {matched_emp.name}.")
                 elif shift_desc:
                     matched_s = find_or_create_shift(shift_desc)
                     if matched_s:
-                        for d_str in date_list:
-                            dt = datetime.strptime(d_str, "%Y-%m-%d")
-                            if not target_dows or dt.weekday() in target_dows:
+                        if is_explicit and item_dates:
+                            for d_str in item_dates:
                                 pinned.append(PinnedShift(
                                     employee_id=matched_emp.id,
                                     date=d_str,
                                     shift_id=matched_s.id,
                                     shift_code=matched_s.shift_code
                                 ))
-                        logs.append(f"Prompt rule (Ollama): Assigned {matched_emp.name} to {matched_s.shift_name}.")
+                            logs.append(f"Prompt rule (Ollama): Assigned {matched_emp.name} to {matched_s.shift_name} on {', '.join(item_dates)}.")
+                        else:
+                            rules.employee_preferred_shifts[matched_emp.id] = matched_s.shift_code
+                            logs.append(f"Prompt rule (Ollama): Set preferred working shift for {matched_emp.name} to '{matched_s.shift_name}'.")
 
         # User-facing interpretations from Ollama
         for interp in (ollama_res.get("interpretations") or []):
@@ -313,7 +428,6 @@ def parse_admin_prompt(
         off_cnt = parse_int_or_word(m_off.group(1)) or 1
         rules.weekly_offs_per_employee = off_cnt
         rules.exact_weekly_offs = True
-        logs.append(f"Prompt rule: Enforced exactly {off_cnt} week-off per employee for the period.")
 
     # C. Parse Fill Others Shift (e.g. "fill others with morning shift")
     m_fill = re.search(r'fill\s*others\s*with\s*([a-zA-Z\s]+?)(?:shift)?(?=[,\.]|$|\bif\b|\band\b)', text, re.IGNORECASE)
@@ -330,7 +444,6 @@ def parse_admin_prompt(
         "night to day", "transition to day", "then morning shift"
     ]):
         rules.require_off_after_night_shift = False
-        logs.append("Prompt rule: Staff transition directly into Day/Morning shift upon completing night shift rotation.")
 
     # E. Parse Global Shift Minimums (e.g. "min 2 morning", "1 in night", "morning: 2")
     cov_regexes = [
@@ -350,17 +463,38 @@ def parse_admin_prompt(
                 if matched_s:
                     rules.min_staff_per_shift[matched_s.shift_code] = cnt
 
+    # E2. Parse Day-Specific Coverage (e.g. "on Sunday min 1 morning, 1 night", "weekends 2 staff")
+    for dow_name in ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]:
+        m_day_cov = re.search(rf'\b(?:on\s+)?{dow_name}s?\b(.*?)(?=[,;\.\n]|$)', text, re.IGNORECASE)
+        if m_day_cov:
+            sub = m_day_cov.group(1).lower()
+            if any(s.shift_name.lower() in sub or s.shift_code.lower() in sub for s in shift_pool):
+                for s in shift_pool:
+                    s_name = s.shift_name.lower()
+                    s_code = s.shift_code.lower()
+                    m_cnt = re.search(rf'(\d+|one|two|three)\s*(?:staff|nurses?)?\s*(?:in|for|on)?\s*(?:{re.escape(s_name)}|{re.escape(s_code)})\b', sub)
+                    if m_cnt:
+                        c_val = parse_int_or_word(m_cnt.group(1)) or 1
+                        rules.day_specific_coverage.setdefault(dow_name.capitalize(), {})[s.shift_code] = c_val
+                        logs.append(f"Prompt rule: Set {dow_name.capitalize()} coverage for '{s.shift_name}' to {c_val} staff.")
+
     # F. Parse Fatigue and Rest limits
     m_consec = re.search(r'max(?:imum)?\s*(\d+)\s*(?:consecutive|work|working)\s*days?', text, re.IGNORECASE)
     if m_consec:
         rules.max_consecutive_working_days = int(m_consec.group(1))
-        logs.append(f"Prompt rule: Maximum consecutive working days set to {rules.max_consecutive_working_days}.")
 
     m_rest = re.search(r'(\d+)\s*(?:hours?|hrs?)\s*(?:rest|break|gap)', text, re.IGNORECASE)
     if m_rest:
         rules.min_rest_hours_between_shifts = int(m_rest.group(1))
 
-    # G. Parse Named Employee Directives (Only if explicitly in prompt)
+    # G. Parse Historical Continuity from Past Week (e.g. "if last week this emp has night shift give day shift for this week")
+    if any(k in text.lower() for k in [
+        "last week", "previous week", "past week", "rotate from last", "alternate from last"
+    ]) and any(n in text.lower() for n in ["night", "nights"]):
+        rules.transition_from_last_week_nights = True
+        logs.append("Prompt rule: Staff who worked night shift in previous period rotate into Day/Morning shift.")
+
+    # H. Parse Named Employee / Role Directives with Universal Date Resolution
     clauses = re.split(r'[,;\.\n]|\band\b|\balso\b|\bthen\b', text, flags=re.IGNORECASE)
     for raw_clause in clauses:
         clause = raw_clause.strip()
@@ -374,7 +508,7 @@ def parse_admin_prompt(
             if is_employee_explicitly_mentioned(emp, clause):
                 target_emps.append(emp)
 
-        # Check by Role
+        # Check by Role (e.g. 'all Senior Nurses', 'Staff Nurse')
         if not target_emps:
             for r_name, r_emps in role_lookup.items():
                 if r_name in c_lower or (r_name + 's') in c_lower:
@@ -383,20 +517,18 @@ def parse_admin_prompt(
         if not target_emps:
             continue
 
+        # Extract dates for this clause
+        clause_dates, is_explicit_dates = resolve_target_dates(clause, date_list)
+
         # Check Day-Off / Leave in clause
         if any(w in c_lower for w in ["off", "leave", "holiday", "rest", "vacation"]):
-            matched_dow = list(dict.fromkeys([
-                dow_idx for dow_name, dow_idx in DAYS_OF_WEEK.items()
-                if re.search(rf'\b{re.escape(dow_name)}\b', c_lower)
-            ]))
             for emp in target_emps:
-                if matched_dow:
-                    for d_str in date_list:
-                        dt = datetime.strptime(d_str, "%Y-%m-%d")
-                        if dt.weekday() in matched_dow:
+                if is_explicit_dates and clause_dates:
+                    for d_str in clause_dates:
+                        # Avoid duplicates
+                        if not any(p.employee_id == emp.id and p.date == d_str and p.is_week_off for p in pinned):
                             pinned.append(PinnedShift(employee_id=emp.id, date=d_str, is_week_off=True))
-                    dow_labels = ", ".join([DAY_NAMES[idx] for idx in matched_dow])
-                    logs.append(f"Prompt rule: Assigned Week-Off to {emp.name} on {dow_labels}.")
+                    logs.append(f"Prompt rule: Assigned Week-Off to {emp.name} on {', '.join(clause_dates)}.")
                 elif "all days" in c_lower or "whole week" in c_lower:
                     for d_str in date_list:
                         pinned.append(PinnedShift(employee_id=emp.id, date=d_str, is_week_off=True))
@@ -419,40 +551,37 @@ def parse_admin_prompt(
                     target_shift_obj = s
                     break
 
-        if target_shift_obj and not any(neg in c_lower for neg in ["no", "not", "avoid", "never"]):
+        if target_shift_obj and any(neg in c_lower for neg in ["no", "not", "avoid", "never", "exempt", "cannot", "do not"]):
             for emp in target_emps:
-                m_days = re.search(r'first\s*(\d+|one|two|three|four)\s*days?', c_lower)
-                if m_days:
-                    num_d = min(parse_int_or_word(m_days.group(1)) or 3, len(date_list))
-                    for i in range(num_d):
-                        pinned.append(PinnedShift(
-                            employee_id=emp.id,
-                            date=date_list[i],
-                            shift_id=target_shift_obj.id,
-                            shift_code=target_shift_obj.shift_code
-                        ))
-                    logs.append(f"Prompt rule: Assigned {emp.name} to {target_shift_obj.shift_name} for first {num_d} days.")
-                    
-                    if any(w in text.lower() for w in ["then day", "then morning", "continue day", "work day"]):
-                        day_s = find_or_create_shift("day") or find_or_create_shift("morning")
-                        if day_s:
-                            for i in range(num_d, len(date_list)):
-                                pinned.append(PinnedShift(
-                                    employee_id=emp.id,
-                                    date=date_list[i],
-                                    shift_id=day_s.id,
-                                    shift_code=day_s.shift_code
-                                ))
-                            logs.append(f"Prompt rule: Transitioned {emp.name} to {day_s.shift_name} for remaining days.")
+                if target_shift_obj.shift_code not in rules.disallowed_shifts.get(emp.id, []):
+                    rules.disallowed_shifts.setdefault(emp.id, []).append(target_shift_obj.shift_code)
+                    logs.append(f"Prompt rule: Excluded {emp.name} from '{target_shift_obj.shift_name}' ({target_shift_obj.shift_code}).")
+        elif target_shift_obj:
+            for emp in target_emps:
+                if is_explicit_dates and clause_dates:
+                    for d_str in clause_dates:
+                        # Avoid duplicates
+                        if not any(p.employee_id == emp.id and p.date == d_str and p.shift_code == target_shift_obj.shift_code for p in pinned):
+                            pinned.append(PinnedShift(
+                                employee_id=emp.id,
+                                date=d_str,
+                                shift_id=target_shift_obj.id,
+                                shift_code=target_shift_obj.shift_code
+                            ))
+                    logs.append(f"Prompt rule: Assigned {emp.name} to {target_shift_obj.shift_name} on {', '.join(clause_dates)}.")
                 else:
-                    for d_str in date_list:
-                        pinned.append(PinnedShift(
-                            employee_id=emp.id,
-                            date=d_str,
-                            shift_id=target_shift_obj.id,
-                            shift_code=target_shift_obj.shift_code
-                        ))
-                    logs.append(f"Prompt rule: Assigned {emp.name} to {target_shift_obj.shift_name}.")
+                    # General shift preference on working days (does not force 7 consecutive days!)
+                    rules.employee_preferred_shifts[emp.id] = target_shift_obj.shift_code
+                    if target_shift_obj.is_night_shift or target_shift_obj.shift_code == 'N':
+                        if rules.total_night_employees and emp.id not in rules.ordered_night_block_employees:
+                            rules.ordered_night_block_employees.append(emp.id)
+                    logs.append(f"Prompt rule: Assigned {emp.name} to {target_shift_obj.shift_name} (on working days).")
+
+    # Deduplicate pinned shifts (keep only 1 per emp_id, date)
+    unique_pinned_map: Dict[Tuple[int, str], PinnedShift] = {}
+    for p in pinned:
+        unique_pinned_map[(p.employee_id, p.date)] = p
+    rules.pinned_shifts = list(unique_pinned_map.values())
 
     # Deduplicate logs
     seen = set()
@@ -462,5 +591,4 @@ def parse_admin_prompt(
             seen.add(l)
             clean_logs.append(l)
 
-    rules.pinned_shifts = pinned
     return rules, shift_pool, clean_logs

@@ -3,18 +3,30 @@ const db = require('../../config/db');
 /**
  * Fetch rule templates for department / role
  */
-const getRuleTemplates = async (departmentId, staffRoleId) => {
+const getRuleTemplates = async (departmentId, staffRoleId, includeAll = false) => {
   let sql = `
-    SELECT id, department_id, staff_role_id, name, rules, is_default, created_by, created_at, updated_at
-    FROM roster_rule_templates
-    WHERE department_id = ?
+    SELECT t.id, t.department_id, t.staff_role_id, t.name, t.rules, t.is_default, t.created_by, t.created_at, t.updated_at,
+           d.name AS department_name
+    FROM roster_rule_templates t
+    LEFT JOIN departments d ON t.department_id = d.id
   `;
-  const params = [departmentId];
+  const params = [];
+  const conditions = [];
+
+  if (departmentId && !includeAll) {
+    conditions.push(`(t.department_id = ? OR t.department_id IS NULL)`);
+    params.push(departmentId);
+  }
   if (staffRoleId) {
-    sql += ` AND (staff_role_id = ? OR staff_role_id IS NULL)`;
+    conditions.push(`(t.staff_role_id = ? OR t.staff_role_id IS NULL)`);
     params.push(staffRoleId);
   }
-  sql += ` ORDER BY is_default DESC, updated_at DESC`;
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ` + conditions.join(' AND ');
+  }
+
+  sql += ` ORDER BY t.is_default DESC, t.updated_at DESC`;
   const [rows] = await db.query(sql, params);
   return rows.map((r) => ({
     ...r,
@@ -171,6 +183,39 @@ const getApprovedLeavesForPeriod = async (employeeIds, fromDate, toDate) => {
   return leaves;
 };
 
+/**
+ * Fetch past roster history (last 7-14 days) to support historical continuity rules
+ */
+const getRecentRosterHistory = async (employeeIds, startDate, lookbackDays = 14) => {
+  const validIds = (employeeIds || []).filter((id) => Number.isInteger(Number(id)) && Number(id) > 0);
+  if (!validIds.length || !startDate) return [];
+  const placeholders = validIds.map(() => '?').join(',');
+  try {
+    const [rows] = await db.query(
+      `SELECT re.employee_id, re.roster_date, re.is_week_off, re.is_night_shift, 
+              s.code AS shift_code, s.name AS shift_name
+       FROM roster_entries re
+       LEFT JOIN shifts s ON s.id = re.shift_id
+       WHERE re.employee_id IN (${placeholders})
+         AND re.roster_date >= DATE_SUB(?, INTERVAL ? DAY)
+         AND re.roster_date < ?
+       ORDER BY re.roster_date ASC`,
+      [...validIds, startDate, lookbackDays, startDate]
+    );
+    return rows.map((r) => ({
+      employee_id: Number(r.employee_id),
+      date: r.roster_date instanceof Date ? r.roster_date.toISOString().slice(0, 10) : String(r.roster_date).slice(0, 10),
+      is_week_off: Boolean(r.is_week_off),
+      is_night_shift: Boolean(r.is_night_shift || /night/i.test(r.shift_name || '')),
+      shift_code: r.shift_code || (r.is_night_shift ? 'N' : 'M'),
+      shift_name: r.shift_name || (r.is_night_shift ? 'Night Shift' : 'Morning Shift')
+    }));
+  } catch (err) {
+    console.warn('Failed to fetch recent roster history:', err.message);
+    return [];
+  }
+};
+
 module.exports = {
   getRuleTemplates,
   getRuleTemplateById,
@@ -180,5 +225,6 @@ module.exports = {
   saveAiGeneration,
   getAiGenerationById,
   updateAiGenerationStatus,
-  getApprovedLeavesForPeriod
+  getApprovedLeavesForPeriod,
+  getRecentRosterHistory
 };

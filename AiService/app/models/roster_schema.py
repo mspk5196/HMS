@@ -32,6 +32,7 @@ class PinnedShift(BaseModel):
     shift_id: Optional[int] = None
     shift_code: Optional[str] = None
     is_week_off: Optional[bool] = False
+    shift_preference_only: Optional[bool] = False
 
 class RosterRulesInput(BaseModel):
     min_staff_per_shift: Dict[str, int] = Field(default_factory=dict)  # {"M": 3, "E": 2, "N": 1}
@@ -45,7 +46,12 @@ class RosterRulesInput(BaseModel):
     exact_weekly_offs: bool = True
     total_night_employees: Optional[int] = None
     night_rotation_block_days: Optional[int] = None
+    ordered_night_block_employees: List[int] = Field(default_factory=list)
     default_fill_shift: Optional[str] = None
+    employee_preferred_shifts: Dict[int, str] = Field(default_factory=dict)  # {emp_id: "M"}
+    disallowed_shifts: Dict[int, List[str]] = Field(default_factory=dict)  # {emp_id: ["N"]}
+    day_specific_coverage: Dict[str, Dict[str, int]] = Field(default_factory=dict)  # {"Sunday": {"M": 1, "N": 1}}
+    transition_from_last_week_nights: Optional[bool] = False
     approved_leaves: List[LeaveConstraint] = Field(default_factory=list)
     pinned_shifts: List[PinnedShift] = Field(default_factory=list)
 
@@ -58,7 +64,8 @@ class RosterSolveRequest(BaseModel):
     shifts: List[ShiftInput]
     rules: RosterRulesInput = Field(default_factory=RosterRulesInput)
     prompt: Optional[str] = None  # Natural language instruction from admin
-    history: Optional[List[Dict[str, Any]]] = None  # Last week shifts for consecutive day continuity
+    shift_mode: Optional[str] = "hybrid"  # "hybrid" | "configured_only" | "prompt_only"
+    history: Optional[List[Dict[str, Any]]] = None  # Past shifts for historical continuity
 
 class RosterAssignment(BaseModel):
     employee_id: int

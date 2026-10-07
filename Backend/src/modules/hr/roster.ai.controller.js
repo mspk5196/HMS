@@ -11,8 +11,9 @@ const getAiHealth = async (req, res, next) => {
 
 const listTemplates = async (req, res, next) => {
   try {
-    const { department_id, staff_role_id } = req.query;
-    const data = await aiService.listRuleTemplates(department_id, staff_role_id);
+    const { department_id, staff_role_id, include_all } = req.query;
+    const includeAllBool = include_all === 'true' || include_all === '1';
+    const data = await aiService.listRuleTemplates(department_id, staff_role_id, includeAllBool);
     res.json({ success: true, data });
   } catch (err) {
     next(err);

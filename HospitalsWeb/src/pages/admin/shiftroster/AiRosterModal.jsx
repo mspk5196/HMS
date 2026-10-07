@@ -72,10 +72,38 @@ export default function AiRosterModal({
   const [deptList, setDeptList] = useState(propDepts);
   const [selectedDeptId, setSelectedDeptId] = useState(initialDeptId || '1');
 
+  // Period Selector State (Week / Month / Custom)
+  const [periodMode, setPeriodMode] = useState('week'); // 'week' | 'month' | 'custom'
+  const [currentStartDate, setCurrentStartDate] = useState(startDate || new Date().toISOString().slice(0, 10));
+  const [currentEndDate, setCurrentEndDate] = useState(endDate || new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10));
+
+  // Shift Timing Source Mode (Configured vs Prompt vs Hybrid)
+  const [shiftMode, setShiftMode] = useState('hybrid'); // 'hybrid' | 'configured_only' | 'prompt_only'
+
   // Natural Language Prompt State
   const [promptText, setPromptText] = useState(
     'Keep at least 2 staff in morning, 2 in evening, 1 in night. When employee ends night shift for that week, continue day shift of that day. Max 6 consecutive work days.'
   );
+
+  // Sync dates when props change
+  useEffect(() => {
+    if (startDate) setCurrentStartDate(startDate);
+    if (endDate) setCurrentEndDate(endDate);
+  }, [startDate, endDate]);
+
+  const handlePeriodChange = (mode) => {
+    setPeriodMode(mode);
+    const start = new Date(currentStartDate || startDate || new Date());
+    if (mode === 'week') {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      setCurrentEndDate(end.toISOString().slice(0, 10));
+    } else if (mode === 'month') {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 29); // 30-day roster
+      setCurrentEndDate(end.toISOString().slice(0, 10));
+    }
+  };
 
   // Custom Shift Slots for this Template
   const [customShifts, setCustomShifts] = useState([
@@ -96,6 +124,7 @@ export default function AiRosterModal({
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [newTemplateName, setNewTemplateName] = useState('');
   const [isDefaultTemplate, setIsDefaultTemplate] = useState(false);
+  const [filterAllDepts, setFilterAllDepts] = useState(true);
 
   // Solution State
   const [generationResult, setGenerationResult] = useState(null);
@@ -127,7 +156,7 @@ export default function AiRosterModal({
     if (!isOpen) return;
     checkHealth();
     if (selectedDeptId) {
-      loadTemplates(selectedDeptId);
+      loadTemplates(selectedDeptId, filterAllDepts);
     }
   }, [isOpen, selectedDeptId]);
 
@@ -146,32 +175,80 @@ export default function AiRosterModal({
     }
   };
 
-  const loadTemplates = async (deptId) => {
+  const loadTemplates = async (deptId, showAll = filterAllDepts) => {
     try {
-      const res = await apiFetch(`/hr/roster/ai/templates?department_id=${deptId}`);
+      const res = await apiFetch(`/hr/roster/ai/templates?department_id=${deptId}&include_all=${showAll ? 'true' : 'false'}`);
       const list = Array.isArray(res) ? res : res?.data || [];
       setTemplates(list);
-      const def = list.find((t) => t.is_default);
-      if (def) {
-        applyTemplate(def);
+      
+      // Auto-apply default template if no template is currently selected
+      if (!selectedTemplateId) {
+        const def = list.find((t) => t.is_default && String(t.department_id) === String(deptId)) || list.find((t) => t.is_default);
+        if (def) {
+          applyTemplate(def, false);
+        }
       }
     } catch (err) {
       console.error('Failed to load templates:', err);
     }
   };
 
-  const applyTemplate = (tpl) => {
-    if (!tpl?.rules) return;
+  const applyTemplate = (tpl, showNotice = true) => {
+    if (!tpl) return;
+    const rules = typeof tpl.rules === 'string' ? JSON.parse(tpl.rules) : (tpl.rules || {});
     setSelectedTemplateId(tpl.id);
-    if (tpl.rules.prompt) setPromptText(tpl.rules.prompt);
-    if (tpl.rules.custom_shifts && Array.isArray(tpl.rules.custom_shifts)) {
-      setCustomShifts(tpl.rules.custom_shifts);
+
+    // 1. Restore Prompt (Crucial for reuse)
+    if (rules.prompt !== undefined) {
+      setPromptText(rules.prompt || '');
     }
-    if (tpl.rules.max_consecutive_working_days) setMaxConsecutiveDays(tpl.rules.max_consecutive_working_days);
-    if (tpl.rules.min_rest_hours_between_shifts) setMinRestHours(tpl.rules.min_rest_hours_between_shifts);
-    if (tpl.rules.max_night_shifts_per_week) setMaxNightsPerWeek(tpl.rules.max_night_shifts_per_week);
-    if (tpl.rules.require_off_after_night_shift !== undefined) {
-      setRequireOffAfterNight(Boolean(tpl.rules.require_off_after_night_shift));
+
+    // 2. Restore Shift Timing Generation Mode
+    if (rules.shift_mode) {
+      setShiftMode(rules.shift_mode);
+    } else if (rules.custom_shifts && Array.isArray(rules.custom_shifts) && rules.custom_shifts.length > 0) {
+      setShiftMode('configured_only');
+    } else {
+      setShiftMode('prompt_only');
+    }
+
+    // 3. Restore Period Duration
+    if (rules.period_mode) {
+      handlePeriodChange(rules.period_mode);
+    }
+
+    // 4. Restore Custom Shifts (if any)
+    if (rules.custom_shifts && Array.isArray(rules.custom_shifts) && rules.custom_shifts.length > 0) {
+      setCustomShifts(rules.custom_shifts);
+    }
+
+    // 5. Restore Constraints
+    if (rules.max_consecutive_working_days) setMaxConsecutiveDays(rules.max_consecutive_working_days);
+    if (rules.min_rest_hours_between_shifts) setMinRestHours(rules.min_rest_hours_between_shifts);
+    if (rules.max_night_shifts_per_week) setMaxNightsPerWeek(rules.max_night_shifts_per_week);
+    if (rules.require_off_after_night_shift !== undefined) {
+      setRequireOffAfterNight(Boolean(rules.require_off_after_night_shift));
+    }
+
+    if (showNotice) {
+      setSuccessMsg(`Loaded template "${tpl.name}". Prompt and settings restored!`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId, templateName, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete template "${templateName}"?`)) return;
+    try {
+      await apiFetch(`/hr/roster/ai/templates/${templateId}`, { method: 'DELETE' });
+      if (String(selectedTemplateId) === String(templateId)) {
+        setSelectedTemplateId('');
+      }
+      setSuccessMsg(`Template "${templateName}" deleted.`);
+      loadTemplates(selectedDeptId, filterAllDepts);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to delete template');
     }
   };
 
@@ -223,6 +300,8 @@ export default function AiRosterModal({
         isDefault: isDefaultTemplate,
         rules: {
           prompt: promptText.trim(),
+          shift_mode: shiftMode,
+          period_mode: periodMode,
           custom_shifts: customShifts,
           min_staff_per_shift: minStaffMap,
           max_consecutive_working_days: Number(maxConsecutiveDays),
@@ -232,13 +311,17 @@ export default function AiRosterModal({
           weekly_offs_per_employee: 1
         }
       };
-      await apiFetch('/hr/roster/ai/templates', {
+      const res = await apiFetch('/hr/roster/ai/templates', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      setSuccessMsg('Template saved successfully with custom timings & prompt!');
+      const savedId = res?.data?.id || res?.id;
+      if (savedId) {
+        setSelectedTemplateId(savedId);
+      }
+      setSuccessMsg(`Template "${newTemplateName.trim()}" saved with current prompt & settings!`);
       setNewTemplateName('');
-      loadTemplates(selectedDeptId);
+      loadTemplates(selectedDeptId, filterAllDepts);
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       setError(err.message || 'Failed to save template');
@@ -270,8 +353,9 @@ export default function AiRosterModal({
         body: JSON.stringify({
           departmentId: Number(selectedDeptId),
           staffRoleId: staffRoleId ? Number(staffRoleId) : null,
-          startDate,
-          endDate,
+          startDate: currentStartDate,
+          endDate: currentEndDate,
+          shift_mode: shiftMode,
           prompt: promptText.trim(),
           shifts: customShifts,
           rules: rulesPayload
@@ -396,7 +480,7 @@ export default function AiRosterModal({
                 </span>
               </h3>
               <p className="text-xs text-blue-100">
-                Period: <strong className="text-white">{startDate}</strong> → <strong className="text-white">{endDate}</strong>
+                Period: <strong className="text-white">{currentStartDate}</strong> → <strong className="text-white">{currentEndDate}</strong> ({periodMode === 'week' ? '1 Week' : periodMode === 'month' ? '1 Month' : 'Custom'})
               </p>
             </div>
           </div>
@@ -489,143 +573,341 @@ export default function AiRosterModal({
           {/* TAB 1: PROMPT, CUSTOM SHIFT TIMINGS & CONSTRAINTS */}
           {activeTab === 'rules' && (
             <div className="space-y-6">
-              {/* Template selection header */}
-              {templates.length > 0 && (
-                <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
-                      Load Department Template:
-                    </span>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(e) => {
-                        const t = templates.find((x) => String(x.id) === e.target.value);
-                        if (t) applyTemplate(t);
-                      }}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
-                    >
-                      <option value="">Custom Configuration</option>
-                      {templates.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} {t.is_default ? '(Default)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                    Department: {selectedDeptObj?.name || selectedDeptId}
+              {/* 0. Roster Period Duration Selector (Week / Month) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-purple-50/90 dark:from-slate-800 dark:via-slate-850 dark:to-slate-800 border border-indigo-100 dark:border-indigo-900/60 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📅</span> Roster Duration
                   </span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Select the scheduling period: 1 Week (7 days default) or full 1 Month (30 days).
+                  </p>
                 </div>
-              )}
 
-              {/* 1. Custom Shift Timings Builder */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <ClockIcon className="w-4 h-4 text-indigo-600" />
-                      Department Shift Slots &amp; Timings
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Define custom shift timings for this roster template. The AI will allocate staff to these exact timing slots.
-                    </p>
-                  </div>
+                <div className="inline-flex rounded-xl p-1 bg-white/90 dark:bg-slate-900 border border-indigo-200 dark:border-slate-700 shadow-2xs">
                   <button
                     type="button"
-                    onClick={handleAddShiftSlot}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer"
+                    onClick={() => handlePeriodChange('week')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      periodMode === 'week'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
                   >
-                    <PlusIcon className="w-4 h-4" /> Add Shift Slot
+                    📅 1 Week (7 Days)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePeriodChange('month')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      periodMode === 'month'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    🗓️ 1 Month (30 Days)
                   </button>
                 </div>
+              </div>
 
-                {/* Shift Slots Table / Grid */}
-                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
-                  <table className="w-full text-xs text-left border-collapse">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      <tr>
-                        <th className="px-3 py-2.5 font-bold w-16">Code</th>
-                        <th className="px-3 py-2.5 font-bold">Shift Name</th>
-                        <th className="px-3 py-2.5 font-bold w-32">Start Time</th>
-                        <th className="px-3 py-2.5 font-bold w-32">End Time</th>
-                        <th className="px-3 py-2.5 font-bold text-center w-24">Night Duty?</th>
-                        <th className="px-3 py-2.5 font-bold text-center w-28">Min Staff/Day</th>
-                        <th className="px-3 py-2.5 text-center w-12">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {customShifts.map((slot, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              value={slot.shift_code}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'shift_code', e.target.value)}
-                              className="w-full font-bold uppercase text-center px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                              maxLength={4}
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              value={slot.shift_name}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'shift_name', e.target.value)}
-                              className="w-full font-semibold px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="time"
-                              step="1"
-                              value={slot.start_time?.slice(0, 5) || '08:00'}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'start_time', `${e.target.value}:00`)}
-                              className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="time"
-                              step="1"
-                              value={slot.end_time?.slice(0, 5) || '16:00'}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'end_time', `${e.target.value}:00`)}
-                              className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
-                            />
-                          </td>
-                          <td className="p-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={slot.is_night_shift}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'is_night_shift', e.target.checked)}
-                              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                            />
-                          </td>
-                          <td className="p-2 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max="50"
-                              value={slot.min_staff ?? 1}
-                              onChange={(e) => handleUpdateShiftSlot(idx, 'min_staff', parseInt(e.target.value) || 0)}
-                              className="w-16 mx-auto text-center font-bold px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            />
-                          </td>
-                          <td className="p-2 text-center">
-                            {customShifts.length > 1 && (
+              {/* Saved Templates to Reuse */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-purple-50/70 dark:from-slate-800/90 dark:via-slate-850 dark:to-slate-800/90 border border-blue-200/80 dark:border-indigo-900/60 shadow-xs space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">📋</span>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                        Saved Roster Templates ({templates.length})
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Click any saved template below to immediately reuse its prompt, shift timings &amp; rules.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer bg-white/70 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={filterAllDepts}
+                        onChange={(e) => {
+                          setFilterAllDepts(e.target.checked);
+                          loadTemplates(selectedDeptId, e.target.checked);
+                        }}
+                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      All Departments
+                    </label>
+
+                    {templates.length > 0 && (
+                      <select
+                        value={selectedTemplateId}
+                        onChange={(e) => {
+                          const t = templates.find((x) => String(x.id) === e.target.value);
+                          if (t) applyTemplate(t);
+                        }}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
+                      >
+                        <option value="">-- Choose Template to Reuse --</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} {t.is_default ? '(Default)' : ''} {t.department_name ? `[${t.department_name}]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {/* Templates Grid Cards */}
+                {templates.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                    {templates.map((tpl) => {
+                      const rules = typeof tpl.rules === 'string' ? JSON.parse(tpl.rules) : (tpl.rules || {});
+                      const isSelected = String(selectedTemplateId) === String(tpl.id);
+                      const promptSnippet = rules.prompt ? rules.prompt.trim() : '(No custom prompt saved)';
+                      const isPromptMode = rules.shift_mode === 'prompt_only' || (!rules.custom_shifts?.length);
+
+                      return (
+                        <div
+                          key={tpl.id}
+                          onClick={() => applyTemplate(tpl)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 text-left relative group ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-400/50'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-xs'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className={`text-xs font-bold truncate flex items-center gap-1.5 ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                                <span>📄</span> {tpl.name}
+                                {tpl.is_default && (
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase tracking-wider ${isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}`}>
+                                    Default
+                                  </span>
+                                )}
+                              </span>
+
                               <button
                                 type="button"
-                                onClick={() => handleRemoveShiftSlot(idx)}
-                                className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Delete template"
+                                onClick={(e) => handleDeleteTemplate(tpl.id, tpl.name, e)}
+                                className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
+                                  isSelected
+                                    ? 'text-white/80 hover:text-white hover:bg-white/20'
+                                    : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
                               >
-                                <TrashIcon className="w-4 h-4" />
+                                <TrashIcon className="w-3.5 h-3.5" />
                               </button>
+                            </div>
+
+                            {tpl.department_name && (
+                              <div className={`text-[10px] mt-0.5 font-medium ${isSelected ? 'text-indigo-200' : 'text-slate-500 dark:text-slate-400'}`}>
+                                Dept: {tpl.department_name}
+                              </div>
                             )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                            <p className={`text-[11px] line-clamp-2 mt-1 italic ${isSelected ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-300'}`}>
+                              "{promptSnippet}"
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/40 dark:border-slate-700/60 text-[10px]">
+                            <span className={`font-semibold ${isSelected ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                              {isPromptMode ? '✍️ Prompt-based' : '⚙️ Custom Slots'}
+                            </span>
+                            <span className={`font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-white text-indigo-700 shadow-2xs' : 'bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 group-hover:bg-indigo-100'}`}>
+                              {isSelected ? '✓ In Use' : 'Reuse →'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <SparklesIcon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    <span>No saved templates yet for this department. Write your prompt below and click <strong>"Save Template"</strong> to easily reuse it in the future!</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Shift Timing Generation Mode */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>⚡</span> Shift Slots Source:
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    Choose how shifts are created
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label
+                    onClick={() => setShiftMode('prompt_only')}
+                    className={`p-3.5 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                      shiftMode === 'prompt_only'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-500/20 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="shiftMode"
+                          checked={shiftMode === 'prompt_only'}
+                          onChange={() => setShiftMode('prompt_only')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        ✍️ Prompt-Based Timings (Default)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pl-6">
+                      AI handles everything from your natural prompt text. No need to manually create shift slots.
+                    </p>
+                  </label>
+
+                  <label
+                    onClick={() => setShiftMode('configured_only')}
+                    className={`p-3.5 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                      shiftMode === 'configured_only'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-500/20 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-200 flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="shiftMode"
+                          checked={shiftMode === 'configured_only'}
+                          onChange={() => setShiftMode('configured_only')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        ⚙️ Manually Configured Shift Slots
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 pl-6">
+                      Define and enforce custom shift slots &amp; timings in the table below.
+                    </p>
+                  </label>
                 </div>
               </div>
+
+              {/* 1. Custom Shift Timings Builder (Only shown when configured_only mode is chosen) */}
+              {shiftMode === 'configured_only' && (
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <ClockIcon className="w-4 h-4 text-indigo-600" />
+                        Department Shift Slots &amp; Timings
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Define custom shift timings for this roster template. The AI will allocate staff to these exact timing slots.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddShiftSlot}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer"
+                    >
+                      <PlusIcon className="w-4 h-4" /> Add Shift Slot
+                    </button>
+                  </div>
+
+                  {/* Shift Slots Table / Grid */}
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2.5 font-bold w-16">Code</th>
+                          <th className="px-3 py-2.5 font-bold">Shift Name</th>
+                          <th className="px-3 py-2.5 font-bold w-32">Start Time</th>
+                          <th className="px-3 py-2.5 font-bold w-32">End Time</th>
+                          <th className="px-3 py-2.5 font-bold text-center w-24">Night Duty?</th>
+                          <th className="px-3 py-2.5 font-bold text-center w-28">Min Staff/Day</th>
+                          <th className="px-3 py-2.5 text-center w-12">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {customShifts.map((slot, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={slot.shift_code}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'shift_code', e.target.value)}
+                                className="w-full font-bold uppercase text-center px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                                maxLength={4}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={slot.shift_name}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'shift_name', e.target.value)}
+                                className="w-full font-semibold px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="time"
+                                step="1"
+                                value={slot.start_time?.slice(0, 5) || '08:00'}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'start_time', `${e.target.value}:00`)}
+                                className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="time"
+                                step="1"
+                                value={slot.end_time?.slice(0, 5) || '16:00'}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'end_time', `${e.target.value}:00`)}
+                                className="w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={slot.is_night_shift}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'is_night_shift', e.target.checked)}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                max="50"
+                                value={slot.min_staff ?? 1}
+                                onChange={(e) => handleUpdateShiftSlot(idx, 'min_staff', parseInt(e.target.value) || 0)}
+                                className="w-16 mx-auto text-center font-bold px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              {customShifts.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveShiftSlot(idx)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* 2. Natural Language Prompt Box */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-purple-50/50 to-blue-50/80 dark:from-slate-800/80 dark:via-slate-850 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/60 shadow-sm space-y-3">
@@ -737,32 +1019,38 @@ export default function AiRosterModal({
               </div>
 
               {/* 4. Save Template Option (Saves Custom Timings + Prompt + Rules) */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-800/80 dark:via-slate-800 dark:to-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
                 <div className="flex-1 min-w-[240px]">
+                  <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span>💾</span> Save Current Setup as Reusable Template
+                  </div>
                   <input
                     type="text"
-                    placeholder="Save timings, prompt &amp; rules as template name (e.g. ICU Night-to-Day 3-Shift Template)..."
+                    placeholder="Enter template name (e.g. ICU 2-Staff Night Rotation, Emergency 3-Shift)..."
                     value={newTemplateName}
                     onChange={(e) => setNewTemplateName(e.target.value)}
-                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                    className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-1 focus:ring-indigo-500"
                   />
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                    ✓ Saves your prompt, roster duration ({periodMode === 'week' ? '1 Week' : '1 Month'}), shift mode ({shiftMode === 'prompt_only' ? 'Prompt-based' : 'Configured slots'}), and rest rules for 1-click reuse.
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-xs flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-3 pt-2 sm:pt-0">
+                  <label className="text-xs flex items-center gap-1.5 text-slate-600 dark:text-slate-400 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={isDefaultTemplate}
                       onChange={(e) => setIsDefaultTemplate(e.target.checked)}
                       className="w-3.5 h-3.5 rounded text-indigo-600"
                     />
-                    Set as default for {selectedDeptObj?.name || 'this department'}
+                    Set default for {selectedDeptObj?.name || 'department'}
                   </label>
                   <button
                     onClick={handleSaveTemplate}
                     disabled={!newTemplateName.trim()}
-                    className="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-800 text-white disabled:opacity-50 transition-colors cursor-pointer"
+                    className="text-xs font-bold px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                   >
-                    Save Template
+                    <span>💾</span> Save Template
                   </button>
                 </div>
               </div>
