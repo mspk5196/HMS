@@ -284,8 +284,8 @@ export default function AdminDashboard({ user, onLogout }) {
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1 overflow-y-auto transition-all duration-200 ${isCollapsed ? 'p-3 sm:p-4 lg:p-5' : 'p-6 lg:p-8'} [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full`}>
-        <div className={`${isCollapsed ? 'max-w-[1680px]' : 'max-w-7xl'} mx-auto space-y-4 transition-all duration-200`}>
+      <main className={`flex-1 overflow-y-auto transition-all duration-200 ${isCollapsed ? 'p-3 sm:p-5 lg:p-6 2xl:p-8' : 'p-4 sm:p-6 lg:p-8 2xl:p-10'} [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full`}>
+        <div className="w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto space-y-5 transition-all duration-200">
           {approvalNotice && (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-semibold px-4 py-3 rounded-xl shadow-xs flex items-center justify-between animate-fade-in">
               <div className="flex items-center gap-2">

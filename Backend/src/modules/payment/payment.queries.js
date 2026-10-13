@@ -391,25 +391,37 @@ const recordPharmacyPayment = async ({ pharmacyBillId, amount, paymentMode, note
 const listReceiptsByPatient = async (patientId) => {
   const [rows] = await db.query(`
     SELECT r.*,
-           GROUP_CONCAT(DISTINCT ri.fee_type ORDER BY ri.id SEPARATOR ', ') AS fee_types,
-           GROUP_CONCAT(DISTINCT ri.description ORDER BY ri.id SEPARATOR ' | ') AS item_descriptions,
-           COALESCE(e_pb.full_name, e_appt.full_name, e_adm.full_name) AS doctor_name,
-           COALESCE(e_pb.qualification, sr_pb.name, e_appt.qualification, sr_appt.name, e_adm.qualification, sr_adm.name) AS doctor_qualification,
-           COALESCE(pb_desc.id, (SELECT id FROM pharmacy_bills WHERE patient_id = r.patient_id AND DATE(bill_date) = DATE(r.payment_date) LIMIT 1)) AS pharmacy_bill_id,
-           COALESCE(pb_desc.bill_number, (SELECT bill_number FROM pharmacy_bills WHERE patient_id = r.patient_id AND DATE(bill_date) = DATE(r.payment_date) LIMIT 1)) AS bill_number
+           COALESCE(ri.fee_types, '') AS fee_types,
+           COALESCE(ri.item_descriptions, '') AS item_descriptions,
+           COALESCE(e_appt.full_name, e_adm.full_name, e_pb.full_name, '') AS doctor_name,
+           COALESCE(e_appt.qualification, sr_appt.name, e_adm.qualification, sr_adm.name, e_pb.qualification, sr_pb.name, '') AS doctor_qualification,
+           COALESCE(r.pharmacy_bill_id, pb.id) AS pharmacy_bill_id,
+           pb.bill_number
     FROM payment_receipts r
-    LEFT JOIN payment_receipt_items ri ON ri.receipt_id = r.id
+    LEFT JOIN (
+      SELECT receipt_id,
+             GROUP_CONCAT(DISTINCT fee_type ORDER BY id SEPARATOR ', ') AS fee_types,
+             GROUP_CONCAT(DISTINCT description ORDER BY id SEPARATOR ' | ') AS item_descriptions
+      FROM payment_receipt_items
+      GROUP BY receipt_id
+    ) ri ON ri.receipt_id = r.id
     LEFT JOIN appointments appt ON appt.id = r.appointment_id
     LEFT JOIN employees e_appt ON e_appt.id = appt.doctor_id
     LEFT JOIN staff_roles sr_appt ON sr_appt.id = e_appt.designation_id
     LEFT JOIN admissions adm ON adm.id = r.admission_id
     LEFT JOIN employees e_adm ON e_adm.id = adm.admitting_doctor_id
     LEFT JOIN staff_roles sr_adm ON sr_adm.id = e_adm.designation_id
-    LEFT JOIN pharmacy_bills pb_desc ON (ri.fee_type = 'pharmacy' AND ri.description LIKE 'Pharmacy Bill #%' AND pb_desc.bill_number = SUBSTRING_INDEX(ri.description, '#', -1))
-    LEFT JOIN employees e_pb ON e_pb.id = COALESCE(pb_desc.doctor_id, (SELECT doctor_id FROM appointments WHERE id = pb_desc.appointment_id), (SELECT admitting_doctor_id FROM admissions WHERE id = pb_desc.admission_id))
+    LEFT JOIN pharmacy_bills pb ON pb.id = COALESCE(
+      r.pharmacy_bill_id,
+      (SELECT id FROM pharmacy_bills WHERE patient_id = r.patient_id AND DATE(bill_date) = DATE(r.payment_date) LIMIT 1)
+    )
+    LEFT JOIN employees e_pb ON e_pb.id = COALESCE(
+      pb.doctor_id,
+      (SELECT doctor_id FROM appointments WHERE id = pb.appointment_id),
+      (SELECT admitting_doctor_id FROM admissions WHERE id = pb.admission_id)
+    )
     LEFT JOIN staff_roles sr_pb ON sr_pb.id = e_pb.designation_id
     WHERE r.patient_id = ?
-    GROUP BY r.id
     ORDER BY r.created_at DESC
   `, [patientId]);
   return rows;

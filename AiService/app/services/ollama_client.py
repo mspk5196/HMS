@@ -10,28 +10,38 @@ import logging
 import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional, List
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_API_URL = "http://127.0.0.1:11434/api/generate"
-DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:1.5b"
+OLLAMA_API_URL = settings.OLLAMA_API_URL
+DEFAULT_OLLAMA_MODEL = settings.OLLAMA_MODEL
 
-def query_ollama_json(prompt: str, model_name: str = DEFAULT_OLLAMA_MODEL, timeout: int = 40) -> Optional[Dict[str, Any]]:
+def query_ollama_json(
+    prompt: str,
+    system: Optional[str] = None,
+    model_name: Optional[str] = None,
+    timeout: Optional[int] = None,
+    temperature: float = 0.1
+) -> Optional[Dict[str, Any]]:
     """
     Queries local Ollama instance with structured JSON output enforcement.
     Returns parsed JSON dictionary or None if unreachable/timed out.
-    Timeout is set to 40s to accommodate CPU-based local inference.
     """
+    effective_model = model_name or settings.OLLAMA_MODEL
+    effective_timeout = timeout or settings.OLLAMA_TIMEOUT_SECONDS
     payload = {
-        "model": model_name,
+        "model": effective_model,
         "prompt": prompt,
         "stream": False,
         "format": "json",
         "options": {
-            "temperature": 0.1,   # Low temperature → deterministic constraint extraction
-            "num_predict": 300    # Keep output short; schema is compact
+            "temperature": temperature,
+            "num_predict": 1500
         }
     }
+    if system:
+        payload["system"] = system
 
     try:
         req = urllib.request.Request(
@@ -39,14 +49,18 @@ def query_ollama_json(prompt: str, model_name: str = DEFAULT_OLLAMA_MODEL, timeo
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with urllib.request.urlopen(req, timeout=effective_timeout) as response:
             if response.status == 200:
                 raw_res = json.loads(response.read().decode("utf-8"))
                 text_response = raw_res.get("response", "{}")
+                if isinstance(text_response, dict):
+                    return text_response
                 return json.loads(text_response)
     except Exception as e:
         logger.warning(f"Ollama local LLM query failed or timed out: {e}")
         return None
+
+query_ollama = query_ollama_json
 
 def extract_constraints_with_ollama(
     prompt_text: str,

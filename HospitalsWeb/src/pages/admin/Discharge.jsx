@@ -12,6 +12,7 @@ const displayDate = (v) => {
 
 import TabBar from '../../components/TabBar';
 import HospitalDischargeSummary from '../../components/HospitalDischargeSummary';
+import FieldDictationButton from '../../components/FieldDictationButton';
 
 function Banner({ msg, tone }) {
   if (!msg) return null;
@@ -253,15 +254,36 @@ function ProcessDischarge({ user, admission, onBack, onDone, onError }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2 space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis Summary</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis Summary</label>
+              <FieldDictationButton
+                language="auto"
+                prompt="final diagnosis, discharge condition"
+                onTranscribed={(text) => setField('diagnosis_summary')(form.diagnosis_summary ? `${form.diagnosis_summary}, ${text}` : text)}
+              />
+            </div>
             <textarea rows="2" value={form.diagnosis_summary} onChange={(e) => setField('diagnosis_summary')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
           </div>
           <div className="md:col-span-2 space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Treatment Given</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Treatment Given</label>
+              <FieldDictationButton
+                language="auto"
+                prompt="injections, surgery, IV fluids, medications administered"
+                onTranscribed={(text) => setField('treatment_summary')(form.treatment_summary ? `${form.treatment_summary}\n${text}` : text)}
+              />
+            </div>
             <textarea rows="2" value={form.treatment_summary} onChange={(e) => setField('treatment_summary')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
           </div>
           <div className="md:col-span-2 space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor's Advice</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor's Advice</label>
+              <FieldDictationButton
+                language="auto"
+                prompt="diet advice, wound care, rest, follow-up instructions"
+                onTranscribed={(text) => setField('doctor_advice')(form.doctor_advice ? `${form.doctor_advice}\n${text}` : text)}
+              />
+            </div>
             <textarea rows="2" value={form.doctor_advice} onChange={(e) => setField('doctor_advice')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
           </div>
           <div className="space-y-1.5">
@@ -287,7 +309,13 @@ function ProcessDischarge({ user, admission, onBack, onDone, onError }) {
             <input type="number" value={form.other_charges} onChange={(e) => setField('other_charges')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold" />
           </div>
           <div className="md:col-span-2 space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Discharge Notes</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Discharge Notes</label>
+              <FieldDictationButton
+                language="auto"
+                onTranscribed={(text) => setField('discharge_notes')(form.discharge_notes ? `${form.discharge_notes}\n${text}` : text)}
+              />
+            </div>
             <textarea rows="2" value={form.discharge_notes} onChange={(e) => setField('discharge_notes')(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs" />
           </div>
         </div>

@@ -93,7 +93,104 @@ const solveRoster = async (payload) => {
   });
 };
 
+const transcribeAudio = async (fileBuffer, fileName, { language, task, prompt } = {}) => {
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: 'audio/webm' });
+  formData.append('file', blob, fileName || 'recording.webm');
+  if (language) formData.append('language', language);
+  if (task) formData.append('task', task);
+  if (prompt) formData.append('prompt', prompt);
+
+  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/transcribe`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Internal-Key': AI_INTERNAL_KEY
+    }
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new AppError(`AI Voice Transcription failed: ${errText}`, res.status);
+  }
+  return res.json();
+};
+
+const enrollVoiceprint = async (fileBuffer, fileName) => {
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: 'audio/webm' });
+  formData.append('file', blob, fileName || 'voice_sample.webm');
+
+  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/enroll-voiceprint`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Internal-Key': AI_INTERNAL_KEY
+    }
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new AppError(`Doctor Voiceprint Enrollment failed: ${errText}`, res.status);
+  }
+  return res.json();
+};
+
+const ambientScribe = async (
+  fileBuffer,
+  fileName,
+  {
+    consultationType,
+    language,
+    task,
+    doctorVoiceprint,
+    doctorName,
+    patientName,
+    patientAge,
+    patientGender
+  } = {}
+) => {
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: 'audio/webm' });
+  formData.append('file', blob, fileName || 'dialogue.webm');
+  if (consultationType) formData.append('consultation_type', consultationType);
+  if (language) formData.append('language', language);
+  if (task) formData.append('task', task);
+  if (doctorVoiceprint) {
+    formData.append(
+      'doctor_voiceprint',
+      typeof doctorVoiceprint === 'string' ? doctorVoiceprint : JSON.stringify(doctorVoiceprint)
+    );
+  }
+  if (doctorName) formData.append('doctor_name', doctorName);
+  if (patientName) formData.append('patient_name', patientName);
+  if (patientAge !== undefined && patientAge !== null) formData.append('patient_age', String(patientAge));
+  if (patientGender) formData.append('patient_gender', patientGender);
+
+  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/ambient-scribe`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Internal-Key': AI_INTERNAL_KEY
+    }
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new AppError(`AI Ambient Scribe failed: ${errText}`, res.status);
+  }
+  return res.json();
+};
+
+const parseDialogue = async (payload) => {
+  return requestAiService('/api/v1/voice/parse-dialogue', {
+    method: 'POST',
+    body: payload
+  });
+};
+
 module.exports = {
   healthCheck,
-  solveRoster
+  solveRoster,
+  transcribeAudio,
+  enrollVoiceprint,
+  ambientScribe,
+  parseDialogue
 };
