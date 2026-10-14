@@ -1,0 +1,50 @@
+# ==============================================================================
+# Neha Hospitals AI Microservice - Standalone Docker Compose Specification
+# Dedicated specification to deploy and run the AI Service independently
+# ==============================================================================
+
+name: neha-ai
+
+services:
+  ai-service:
+    image: nehahospital-ai:${IMG_TAG}
+    container_name: neha-ai-service
+    restart: unless-stopped
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - neha_ai_models_cache:/app/models_cache
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AI_SERVICE_HOST: "0.0.0.0"
+      AI_SERVICE_PORT: "8000"
+      AI_INTERNAL_KEY: ${AI_INTERNAL_KEY:-neha-ai-internal-key-2026}
+      AI_LOG_LEVEL: ${AI_LOG_LEVEL:-info}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-http://host.docker.internal:11434/api/generate}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:1.5b}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-45}
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-small}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-auto}
+      WHISPER_CACHE_DIR: /app/models_cache/whisper
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - neha-ai-network
+
+networks:
+  neha-ai-network:
+    name: neha-ai-network
+    driver: bridge
+
+volumes:
+  neha_ai_models_cache:
+    name: neha_ai_models_cache
