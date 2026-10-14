@@ -127,6 +127,7 @@ export default function HREmployees({ user }) {
   const [showShiftTimingModal, setShowShiftTimingModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showDoctorVoiceModal, setShowDoctorVoiceModal] = useState(false);
+  const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -653,10 +654,18 @@ export default function HREmployees({ user }) {
                         : 'hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden shadow-2xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden shadow-2xs border border-gray-200/80 dark:border-white/10"
+                        style={{ width: '40px', height: '40px', minWidth: '40px', minHeight: '40px', maxWidth: '40px', maxHeight: '40px' }}
+                      >
                         {emp.photo_path ? (
-                          <img src={getPhotoUrl(emp.photo_path)} alt={emp.full_name} className="w-full h-full object-cover" />
+                          <img
+                            src={getPhotoUrl(emp.photo_path)}
+                            alt={emp.full_name}
+                            className="w-full h-full object-cover rounded-xl"
+                            loading="lazy"
+                          />
                         ) : (
                           (emp.full_name || '?').charAt(0).toUpperCase()
                         )}
@@ -738,10 +747,28 @@ export default function HREmployees({ user }) {
             <>
               {/* Selected Employee Identity & Action Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-white/[0.08]">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0 overflow-hidden border border-gray-100 dark:border-white/10">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div
+                    onClick={() => { if (detail.photo_path) setShowPhotoLightbox(true); }}
+                    className={`relative w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-lg font-extrabold shadow-sm shrink-0 overflow-hidden border-2 border-emerald-500/20 ring-4 ring-emerald-50/80 dark:ring-emerald-950/30 ${
+                      detail.photo_path ? 'cursor-pointer group' : ''
+                    }`}
+                    style={{ width: '56px', height: '56px', minWidth: '56px', minHeight: '56px', maxWidth: '56px', maxHeight: '56px' }}
+                    title={detail.photo_path ? 'Click to preview full photo' : ''}
+                  >
                     {detail.photo_path ? (
-                      <img src={getPhotoUrl(detail.photo_path)} alt={detail.full_name} className="w-full h-full object-cover" />
+                      <>
+                        <img
+                          src={getPhotoUrl(detail.photo_path)}
+                          alt={detail.full_name}
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                        </div>
+                      </>
                     ) : (
                       (detail.full_name || '?').charAt(0).toUpperCase()
                     )}
@@ -1612,6 +1639,71 @@ export default function HREmployees({ user }) {
           onClose={() => setShowDoctorVoiceModal(false)}
           onEnrolled={handleVoiceprintEnrolled}
         />
+      )}
+
+      {/* Employee Photo Lightbox Preview Modal */}
+      {showPhotoLightbox && detail?.photo_path && (
+        <div
+          onClick={() => setShowPhotoLightbox(false)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-gray-200 dark:border-white/10 p-5 space-y-4 cursor-default text-center animate-scale-in"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-white/10">
+              <div className="text-left">
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">{detail.full_name}</h4>
+                <p className="text-[11px] text-gray-400 font-mono">#{detail.employee_code} · {detail.designation_name || 'Staff'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhotoLightbox(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-lg cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="relative w-64 h-64 mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md bg-gray-50">
+              <img
+                src={getPhotoUrl(detail.photo_path)}
+                alt={detail.full_name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <a
+                href={getPhotoUrl(detail.photo_path)}
+                target="_blank"
+                rel="noreferrer"
+                download={`Employee_${detail.employee_code || detail.id}_Photo.jpg`}
+                className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download Photo</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPhotoLightbox(false);
+                  startEditing();
+                }}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span>Edit Photo</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

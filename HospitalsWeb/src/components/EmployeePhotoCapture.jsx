@@ -58,6 +58,9 @@ export default function EmployeePhotoCapture({
   const [cameraError, setCameraError] = useState('');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [capturedPreview, setCapturedPreview] = useState(null);
+  const [availableDevices, setAvailableDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -87,36 +90,102 @@ export default function EmployeePhotoCapture({
     setIsCameraReady(false);
   };
 
-  const startCamera = async () => {
+  const startCamera = async (overrideDeviceId = null) => {
     setCameraError('');
     setCapturedPreview(null);
     setIsWebcamOpen(true);
+    setIsCameraReady(false);
+    stopCameraStream();
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Webcam access is not supported by your browser or environment.');
+        throw new Error('UNSUPPORTED');
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 640 },
-          facingMode: 'user',
-        },
-        audio: false,
-      });
+      // Check available video devices
+      let videoDevs = [];
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        videoDevs = devs.filter((d) => d.kind === 'videoinput');
+        setAvailableDevices(videoDevs);
+        if (videoDevs.length === 0) {
+          throw new Error('NO_CAMERA_HARDWARE');
+        }
+      } catch (enumErr) {
+        if (enumErr.message === 'NO_CAMERA_HARDWARE') throw enumErr;
+      }
+
+      const activeDevId = overrideDeviceId || selectedDeviceId || (videoDevs[0]?.deviceId || null);
+
+      let stream = null;
+
+      // Tier 1: Try with selected deviceId, or ideal 640x640 with facingMode: 'user'
+      try {
+        const constraints = activeDevId
+          ? { video: { deviceId: { exact: activeDevId }, width: { ideal: 640 }, height: { ideal: 640 } }, audio: false }
+          : { video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' }, audio: false };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (t1Err) {
+        console.warn('Camera Tier 1 failed, falling back to Tier 2:', t1Err);
+        // Tier 2: Without facingMode and strict deviceId
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 640 } },
+            audio: false,
+          });
+        } catch (t2Err) {
+          console.warn('Camera Tier 2 failed, falling back to basic video (Tier 3):', t2Err);
+          // Tier 3: Basic video true
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
+      }
+
+      if (!stream) {
+        throw new Error('NO_STREAM');
+      }
 
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
+          videoRef.current.play().catch(console.error);
           setIsCameraReady(true);
         };
       }
     } catch (err) {
-      console.error('Camera error:', err);
-      setCameraError(err.message || 'Unable to access camera. Please allow camera permissions.');
+      console.error('Camera initialization error:', err);
+      let friendly = 'Unable to access camera.';
+      const msg = (err.message || '').toLowerCase();
+      const name = (err.name || '').toLowerCase();
+
+      if (
+        err.message === 'NO_CAMERA_HARDWARE' ||
+        msg.includes('requested device not found') ||
+        name.includes('notfounderror') ||
+        name.includes('devicesnotfounderror')
+      ) {
+        friendly = 'No camera or webcam was detected on this computer. You can upload a photo file from your computer instead.';
+      } else if (
+        name.includes('notallowederror') ||
+        name.includes('permissiondenied') ||
+        msg.includes('permission denied')
+      ) {
+        friendly = 'Camera permission was blocked. Please allow camera permissions in your browser address bar (lock/camera icon), or upload a photo directly.';
+      } else if (
+        name.includes('notreadableerror') ||
+        name.includes('trackstarterror') ||
+        msg.includes('already in use')
+      ) {
+        friendly = 'Camera is in use by another application (Zoom, Teams, or another browser tab). Please close other apps or upload a photo directly.';
+      } else if (err.message === 'UNSUPPORTED') {
+        friendly = 'Camera access is not supported by your browser or environment. Please upload a photo file.';
+      } else {
+        friendly = err.message || 'Unable to access camera. Please upload an image file instead.';
+      }
+      setCameraError(friendly);
     }
   };
 
@@ -141,9 +210,7 @@ export default function EmployeePhotoCapture({
 
   const handleRetake = () => {
     setCapturedPreview(null);
-    if (!streamRef.current) {
-      startCamera();
-    }
+    startCamera(selectedDeviceId);
   };
 
   const handleConfirmWebcamPhoto = () => {
@@ -154,13 +221,16 @@ export default function EmployeePhotoCapture({
     closeWebcamModal();
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
+  const processImageFile = (file) => {
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPG, PNG, JPEG, WEBP).');
+      return;
+    }
 
     try {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const img = new Image();
         img.onload = async () => {
           const res = await standardizeImage(img, 400);
@@ -174,12 +244,44 @@ export default function EmployeePhotoCapture({
       reader.readAsDataURL(file);
     } catch (err) {
       console.error('Failed to process image file:', err);
-    } finally {
-      e.target.value = '';
     }
   };
 
-  const handleRemovePhoto = () => {
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+  };
+
+  const handleRemovePhoto = (e) => {
+    e?.stopPropagation();
     setPreview(null);
     onChange?.(null, null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -196,9 +298,38 @@ export default function EmployeePhotoCapture({
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-center gap-4 p-3 bg-gray-50/70 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/[0.08] rounded-xl">
-        {/* Photo Preview Container */}
-        <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0 shadow-xs group">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/png, image/jpeg, image/jpg, image/webp"
+        className="hidden"
+        disabled={disabled}
+      />
+
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex flex-col sm:flex-row items-center gap-4 p-3 rounded-xl border transition-all ${
+          isDragging
+            ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/30'
+            : 'bg-gray-50/70 dark:bg-white/[0.03] border-gray-200/80 dark:border-white/[0.08]'
+        }`}
+      >
+        {/* Photo Preview Container (Clickable to trigger upload) */}
+        <div
+          onClick={() => {
+            if (!disabled && !preview) {
+              fileInputRef.current?.click();
+            }
+          }}
+          className={`relative w-24 h-24 rounded-xl border-2 border-dashed bg-white dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0 shadow-xs group ${
+            disabled ? 'opacity-70' : 'cursor-pointer hover:border-blue-500'
+          } ${preview ? 'border-gray-200 dark:border-gray-700' : 'border-gray-300 dark:border-gray-600'}`}
+          title={preview ? 'Employee Photo' : 'Click to select photo from computer'}
+        >
           {preview ? (
             <>
               <img
@@ -207,25 +338,33 @@ export default function EmployeePhotoCapture({
                 className="w-full h-full object-cover"
               />
               {!disabled && (
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px] font-bold"
-                  title="Remove photograph"
-                >
-                  <svg className="w-5 h-5 mb-0.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Remove
-                </button>
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1 text-white">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 rounded text-[9px] font-bold shadow-xs cursor-pointer"
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 rounded text-[9px] font-bold shadow-xs cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </div>
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center text-gray-400 p-2 text-center">
-              <svg className="w-8 h-8 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex flex-col items-center justify-center text-gray-400 p-2 text-center group-hover:text-blue-500 transition-colors">
+              <svg className="w-8 h-8 text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <span className="text-[9px] mt-1 text-gray-400">No Photo</span>
+              <span className="text-[9px] mt-1 text-gray-400 group-hover:text-blue-600 font-medium">Click / Drop</span>
             </div>
           )}
         </div>
@@ -237,35 +376,27 @@ export default function EmployeePhotoCapture({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
-            {/* Upload File Button */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/png, image/jpeg, image/jpg, image/webp"
-              className="hidden"
-              disabled={disabled}
-            />
+            {/* Primary Button: Upload Photo from Computer */}
             <button
               type="button"
               disabled={disabled}
               onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
-              <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
               <span>Upload Photo</span>
             </button>
 
-            {/* Webcam Button */}
+            {/* Secondary Button: Webcam Capture */}
             <button
               type="button"
               disabled={disabled}
-              onClick={startCamera}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              onClick={() => startCamera()}
+              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-300 dark:border-gray-600 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -304,6 +435,8 @@ export default function EmployeePhotoCapture({
                   <p className="text-[10px] text-gray-400">Position face centered inside the frame</p>
                 </div>
               </div>
+
+              {/* Close Button */}
               <button
                 type="button"
                 onClick={closeWebcamModal}
@@ -318,15 +451,38 @@ export default function EmployeePhotoCapture({
             {/* Viewfinder Body */}
             <div className="p-5 flex flex-col items-center">
               {cameraError ? (
-                <div className="w-full p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl text-center space-y-2">
-                  <div className="text-rose-600 dark:text-rose-400 text-xs font-semibold">{cameraError}</div>
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
-                  >
-                    Try Again
-                  </button>
+                /* Clear, actionable error UI with direct "Upload Photo Instead" option */
+                <div className="w-full p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl text-center space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="text-rose-800 dark:text-rose-300 text-xs font-semibold leading-relaxed px-2">
+                    {cameraError}
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeWebcamModal();
+                        fileInputRef.current?.click();
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      <span>Upload Photo Instead</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startCamera(selectedDeviceId)}
+                      className="w-full sm:w-auto px-3 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-gray-200 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Try Again
+                    </button>
+                  </div>
                 </div>
               ) : capturedPreview ? (
                 /* Freeze/Preview State */
@@ -342,27 +498,49 @@ export default function EmployeePhotoCapture({
                 </div>
               ) : (
                 /* Live Camera State */
-                <div className="relative w-64 h-64 rounded-2xl overflow-hidden bg-black flex items-center justify-center border-2 border-gray-300 dark:border-gray-700 shadow-inner">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover mirror-mode"
-                    style={{ transform: 'scaleX(-1)' }}
-                  />
-
-                  {/* Standard Passport Guidelines Overlay */}
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    {/* Passport Face Oval Guide */}
-                    <div className="w-36 h-48 border-2 border-dashed border-white/60 rounded-[50%] shadow-2xs" />
-                  </div>
-
-                  {!isCameraReady && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-xs font-medium">
-                      Initializing camera...
+                <div className="space-y-3 w-full flex flex-col items-center">
+                  {/* Camera selector if multiple cameras exist */}
+                  {availableDevices.length > 1 && (
+                    <div className="w-64">
+                      <select
+                        value={selectedDeviceId}
+                        onChange={(e) => {
+                          const newId = e.target.value;
+                          setSelectedDeviceId(newId);
+                          startCamera(newId);
+                        }}
+                        className="w-full px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
+                      >
+                        {availableDevices.map((dev, idx) => (
+                          <option key={dev.deviceId || idx} value={dev.deviceId}>
+                            {dev.label || `Camera ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
+
+                  <div className="relative w-64 h-64 rounded-2xl overflow-hidden bg-black flex items-center justify-center border-2 border-gray-300 dark:border-gray-700 shadow-inner">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover mirror-mode"
+                      style={{ transform: 'scaleX(-1)' }}
+                    />
+
+                    {/* Standard Passport Guidelines Overlay */}
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                      <div className="w-36 h-48 border-2 border-dashed border-white/60 rounded-[50%] shadow-2xs" />
+                    </div>
+
+                    {!isCameraReady && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-xs font-medium">
+                        Initializing camera...
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -406,7 +584,7 @@ export default function EmployeePhotoCapture({
                     <span>Use Photo</span>
                   </button>
                 </>
-              ) : (
+              ) : !cameraError ? (
                 <button
                   type="button"
                   disabled={!isCameraReady}
@@ -419,7 +597,7 @@ export default function EmployeePhotoCapture({
                   </svg>
                   <span>Snap Photo</span>
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
