@@ -78,24 +78,34 @@ export default function DoctorVoiceEnrollModal({ doctorId, doctorName, onClose, 
       setIsUploading(true);
       setErrorMsg('');
 
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'doctor_voice_sample.webm');
+      // If doctorId is provided (e.g. editing existing employee), upload immediately
       if (doctorId) {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'doctor_voice_sample.webm');
         formData.append('doctorId', String(doctorId));
-      }
 
-      const res = await apiFetch('/consultation/voice/doctor-voiceprint', {
-        method: 'POST',
-        body: formData,
-      });
+        const res = await apiFetch('/consultation/voice/doctor-voiceprint', {
+          method: 'POST',
+          body: formData,
+        });
 
-      setSuccessMsg('Doctor voiceprint enrolled successfully!');
-      if (onEnrolled) {
-        onEnrolled(res?.data || res);
+        setSuccessMsg('Doctor voiceprint enrolled successfully!');
+        if (onEnrolled) {
+          onEnrolled(res?.data || res);
+        }
+        setTimeout(() => {
+          if (onClose) onClose();
+        }, 1500);
+      } else {
+        // Deferred mode (e.g. adding new doctor employee): pass audioBlob back to form
+        setSuccessMsg('Voice sample captured successfully! Will be saved upon creating employee.');
+        if (onEnrolled) {
+          onEnrolled({ audioBlob, durationSeconds: seconds, sampleUrl: audioUrl });
+        }
+        setTimeout(() => {
+          if (onClose) onClose();
+        }, 1200);
       }
-      setTimeout(() => {
-        if (onClose) onClose();
-      }, 1500);
     } catch (err) {
       console.error('Enrollment error:', err);
       setErrorMsg(err?.message || 'Failed to enroll doctor voiceprint. Please try again.');

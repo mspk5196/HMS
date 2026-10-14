@@ -6,3 +6,4 @@ Backend/scripts/
 BiometricConnector/.env
 BiometricConnector/devices.json
 *.zip
+Backend/uploads/

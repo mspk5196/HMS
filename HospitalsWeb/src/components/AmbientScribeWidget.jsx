@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { apiFetch } from '../util/api';
-import DoctorVoiceEnrollModal from './DoctorVoiceEnrollModal';
 
 export default function AmbientScribeWidget({ appointment, user, onApplyData }) {
   const [isRecording, setIsRecording] = useState(false);
@@ -12,9 +11,8 @@ export default function AmbientScribeWidget({ appointment, user, onApplyData }) 
   const [parsedResult, setParsedResult] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
-  // Doctor Voiceprint Enrollment State
+  // Doctor Voiceprint Status State
   const [isVoiceEnrolled, setIsVoiceEnrolled] = useState(false);
-  const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [checkingVoiceStatus, setCheckingVoiceStatus] = useState(false);
 
   const mediaRecorderRef = useRef(null);
@@ -249,14 +247,9 @@ export default function AmbientScribeWidget({ appointment, user, onApplyData }) 
                   <span>Dr. {doctorName} (Voice Verified)</span>
                 </span>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowEnrollModal(true)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-200 transition-colors cursor-pointer"
-                  title="Click to enroll 15s voiceprint to differentiate doctor from patient & relatives"
-                >
-                  <span>+ Enroll Doctor Voiceprint (15s)</span>
-                </button>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700" title="Doctor voiceprint can be enrolled in HR & Employees page">
+                  <span>Voiceprint: Not Enrolled in HR</span>
+                </span>
               )}
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -353,19 +346,6 @@ export default function AmbientScribeWidget({ appointment, user, onApplyData }) 
           <span>{errorMsg}</span>
           <button onClick={() => setErrorMsg('')} className="text-rose-500 hover:text-rose-700 cursor-pointer font-bold">✕</button>
         </div>
-      )}
-
-      {/* Voice Enrollment Modal */}
-      {showEnrollModal && (
-        <DoctorVoiceEnrollModal
-          doctorId={doctorId}
-          doctorName={doctorName}
-          onClose={() => setShowEnrollModal(false)}
-          onEnrolled={() => {
-            setIsVoiceEnrolled(true);
-            setShowEnrollModal(false);
-          }}
-        />
       )}
 
       {/* Review & Edit Modal */}

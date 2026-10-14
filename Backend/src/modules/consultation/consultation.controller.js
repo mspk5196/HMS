@@ -3,10 +3,7 @@ const service = require('./consultation.service');
 const getConsultation = async (req, res, next) => {
   try {
     const data = await service.getConsultation(req.params.appointmentId);
-    if (!data) {
-      return res.status(404).json({ success: false, message: 'Consultation not found' });
-    }
-    res.json({ success: true, data });
+    res.json({ success: true, data: data || null });
   } catch (error) {
     next(error);
   }
@@ -139,6 +136,12 @@ const ambientScribeConsultation = async (req, res, next) => {
 
 const enrollDoctorVoiceprint = async (req, res, next) => {
   try {
+    if (!req.file && req.body?.file_base64) {
+      req.file = {
+        buffer: Buffer.from(req.body.file_base64, 'base64'),
+        originalname: req.body.file_originalname || 'doctor_voice_sample.webm'
+      };
+    }
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'Audio file is required for voice enrollment' });
     }

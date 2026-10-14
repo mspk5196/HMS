@@ -7,6 +7,8 @@ import AddMemberForm from './departmentrole/AddMemberForm';
 import BulkEmployeeImportModal, { downloadEmployeeExcelTemplate } from './BulkEmployeeImportModal';
 import ConfigureShiftTimingModal from './shiftroster/ConfigureShiftTimingModal';
 import EmployeeExportModal from './EmployeeExportModal';
+import DoctorVoiceEnrollModal from '../../components/DoctorVoiceEnrollModal';
+import EmployeePhotoCapture from '../../components/EmployeePhotoCapture';
 import {
   GearIcon,
   DownloadIcon,
@@ -42,6 +44,13 @@ const money = (value) =>
   value === null || value === undefined || value === '' || Number(value) === 0
     ? '—'
     : `₹${Number(value).toLocaleString('en-IN')}`;
+
+const getPhotoUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
+  return `${backendBase}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 /** Read-only key/value cell used across the profile panel. */
 function Field({ label, value }) {
@@ -117,6 +126,7 @@ export default function HREmployees({ user }) {
   });
   const [showShiftTimingModal, setShowShiftTimingModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showDoctorVoiceModal, setShowDoctorVoiceModal] = useState(false);
   const [isReactivating, setIsReactivating] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -259,6 +269,9 @@ export default function HREmployees({ user }) {
           : (detail.custom_shift_end ? String(detail.custom_shift_end).slice(0, 5) : '17:00')),
       aadhar_doc: null,
       pan_doc: null,
+      photo: null,
+      photoPreview: detail.photo_path || null,
+      photoRemoved: false,
       shift_effective_from: new Date().toISOString().slice(0, 10),
       shift_change_reason: '',
     });
@@ -283,15 +296,23 @@ export default function HREmployees({ user }) {
       }
 
       const fd = new FormData();
+      if (form.photo instanceof File) {
+        fd.append('photo', form.photo);
+      } else if (form.photoRemoved) {
+        fd.append('photo_path', '');
+      }
+
       Object.entries(dataToSend).forEach(([k, v]) => {
         if (k === 'aadhar_doc') {
           if (v instanceof File) fd.append('aadhar_doc', v);
         } else if (k === 'pan_doc') {
           if (v instanceof File) fd.append('pan_doc', v);
-        } else if (v !== undefined && v !== null) {
-          fd.append(k, v);
-        } else if (v === null) {
-          fd.append(k, '');
+        } else if (k !== 'photo' && k !== 'photoPreview' && k !== 'photoRemoved') {
+          if (v !== undefined && v !== null) {
+            fd.append(k, v);
+          } else if (v === null) {
+            fd.append(k, '');
+          }
         }
       });
 
@@ -334,6 +355,20 @@ export default function HREmployees({ user }) {
     }
   };
 
+  const handleVoiceprintEnrolled = async () => {
+    if (selectedId) {
+      try {
+        const fresh = await apiFetch(`/hr/employees/${selectedId}`);
+        setDetail(fresh);
+        fetchEmployees();
+        flash('Doctor voiceprint profile enrolled successfully!');
+      } catch (err) {
+        console.warn('Refresh error after voice enrollment:', err);
+      }
+    }
+    setShowDoctorVoiceModal(false);
+  };
+
   const handleAddMember = async (memberData, targetDept) => {
     if (!targetDept) { setErrorMsg('Select a department first.'); return; }
     try {
@@ -369,6 +404,8 @@ export default function HREmployees({ user }) {
       if (memberData.panNumber) fd.append('pan_number', memberData.panNumber);
       if (memberData.aadharDoc instanceof File) fd.append('aadhar_doc', memberData.aadharDoc);
       if (memberData.panDoc instanceof File) fd.append('pan_doc', memberData.panDoc);
+      if (memberData.photo instanceof File) fd.append('photo', memberData.photo);
+      else if (memberData.photoFile instanceof File) fd.append('photo', memberData.photoFile);
 
       if (memberData.shiftCategory) fd.append('shift_category', memberData.shiftCategory);
       if (memberData.shiftCategory === 'day') {
@@ -387,12 +424,27 @@ export default function HREmployees({ user }) {
         body: fd,
       });
 
+      const newId = created?.id || created?.data?.id;
+      if (newId && memberData.voiceAudioBlob) {
+        try {
+          const vfd = new FormData();
+          vfd.append('file', memberData.voiceAudioBlob, 'doctor_voice_sample.webm');
+          vfd.append('doctorId', String(newId));
+          await apiFetch('/consultation/voice/doctor-voiceprint', {
+            method: 'POST',
+            body: vfd,
+          });
+        } catch (vErr) {
+          console.warn('Voiceprint enrollment warning:', vErr);
+        }
+      }
+
       setViewMode('list');
       setPage(1);
       if (created?.isPendingApproval) {
         flash(`Registration for ${memberData.name} submitted for approval (Pending Review).`);
       } else {
-        setSelectedId(created.id);
+        setSelectedId(newId || created.id);
         flash(`${memberData.name} added to ${targetDept.name}.`);
       }
       await fetchEmployees();
@@ -420,6 +472,15 @@ export default function HREmployees({ user }) {
       </div>
     );
   }
+
+  const isDoctorRole = Boolean(
+    detail && (
+      detail.is_doctor === 1 ||
+      detail.is_doctor === true ||
+      detail.isDoctor === true ||
+      departments.some((d) => d.roles?.some((r) => String(r.id) === String(isEditing ? form.designation_id : detail.designation_id) && (r.isDoctor || r.is_doctor)))
+    )
+  );
 
   return (
     <div className="space-y-6">
@@ -592,15 +653,23 @@ export default function HREmployees({ user }) {
                         : 'hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-900 dark:text-white">{emp.full_name}</span>
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">({emp.employee_code})</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden shadow-2xs">
+                        {emp.photo_path ? (
+                          <img src={getPhotoUrl(emp.photo_path)} alt={emp.full_name} className="w-full h-full object-cover" />
+                        ) : (
+                          (emp.full_name || '?').charAt(0).toUpperCase()
+                        )}
                       </div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">
-                        {emp.department_name || 'No Dept'} · {emp.designation_name || 'No Role'}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 dark:text-white">{emp.full_name}</span>
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">({emp.employee_code})</span>
+                        </div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">
+                          {emp.department_name || 'No Dept'} · {emp.designation_name || 'No Role'}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1">
                         {Boolean(emp.pf_enrolled) && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200" title="Enrolled in Employee Provident Fund (12%)">
                             EPF
@@ -621,6 +690,7 @@ export default function HREmployees({ user }) {
                           </span>
                         )}
                       </div>
+                    </div>
                     </div>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
                       emp.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
@@ -669,8 +739,12 @@ export default function HREmployees({ user }) {
               {/* Selected Employee Identity & Action Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-white/[0.08]">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0">
-                    {(detail.full_name || '?').charAt(0).toUpperCase()}
+                  <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center text-lg font-extrabold shadow-xs shrink-0 overflow-hidden border border-gray-100 dark:border-white/10">
+                    {detail.photo_path ? (
+                      <img src={getPhotoUrl(detail.photo_path)} alt={detail.full_name} className="w-full h-full object-cover" />
+                    ) : (
+                      (detail.full_name || '?').charAt(0).toUpperCase()
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -789,10 +863,80 @@ export default function HREmployees({ user }) {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[440px] overflow-y-auto pr-1">
+                      {/* Standard Employee Photo Uploader & Webcam Capture */}
+                      <div className="sm:col-span-2">
+                        <EmployeePhotoCapture
+                          value={form.photoPreview}
+                          onChange={(file, previewUrl) => {
+                            setForm((f) => ({
+                              ...f,
+                              photo: file,
+                              photoPreview: previewUrl,
+                              photoRemoved: file === null && previewUrl === null,
+                            }));
+                          }}
+                        />
+                      </div>
+
                       <Input label="Employee Code" value={form.employee_code} onChange={(v) => setForm((f) => ({ ...f, employee_code: v }))} />
                       <Input label="Full Name" value={form.full_name} onChange={(v) => setForm((f) => ({ ...f, full_name: v }))} />
                       <Input label="Phone" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} />
                       <Input label="Qualification" value={form.qualification} onChange={(v) => setForm((f) => ({ ...f, qualification: v }))} />
+
+                      {/* Doctor Voice Profile Enrollment Card (Only when role is doctor) */}
+                      {isDoctorRole && (
+                        <div className="sm:col-span-2 p-3.5 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-blue-50/60 to-purple-50/80 space-y-2.5">
+                          <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-xs ${
+                                detail.has_voiceprint ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
+                              }`}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-xs font-bold text-slate-900">Doctor Acoustic Voice Profile</h4>
+                                  {detail.has_voiceprint ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span>Enrolled ({detail.voiceprint_duration || 15}s)</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                      <span>Not Enrolled</span>
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-wider">
+                                    Ambient AI Scribe
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 mt-0.5">
+                                  {detail.has_voiceprint
+                                    ? 'Acoustic voiceprint profile is verified. Click below to record a new 15-second voice sample if needed.'
+                                    : 'Acoustic voice sample enables Ambient Scribe to isolate doctor prescriptions from patient/family voice during consultations.'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setShowDoctorVoiceModal(true)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 shadow-xs ${
+                                detail.has_voiceprint
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                              }`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                              </svg>
+                              <span>{detail.has_voiceprint ? 'Re-enroll Voiceprint' : '🎙️ Enroll Voiceprint (15s)'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Payment Mode */}
                       <div className="sm:col-span-2 space-y-1.5">
@@ -1134,6 +1278,68 @@ export default function HREmployees({ user }) {
                       </div>
                     )}
 
+                    {/* Doctor Acoustic Voice Profile Card (Only when role is doctor) */}
+                    {isDoctorRole && (
+                      <div className="p-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-blue-50/60 to-purple-50/80 space-y-3">
+                        <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                              detail.has_voiceprint ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
+                            }`}>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-xs font-bold text-slate-900">Doctor Acoustic Voice Profile</h4>
+                                {detail.has_voiceprint ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span>Voiceprint Enrolled &amp; Active</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    <span>⚠️ Voiceprint Not Enrolled</span>
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-wider">
+                                  Ambient AI Scribe
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 mt-1">
+                                {detail.has_voiceprint
+                                  ? `Acoustic voiceprint profile is verified (${detail.voiceprint_duration || 15}s sample). Ambient Scribe uses this to acoustically isolate this doctor's prescriptions and diagnoses during room consultations.`
+                                  : 'Enrolling a 15-second speech sample enables Ambient Scribe to acoustically isolate this doctor\'s prescription orders and diagnoses from patient & attendant speech.'}
+                              </p>
+                              {detail.has_voiceprint && detail.voiceprint_updated_at && (
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  Last enrolled: {displayDate(detail.voiceprint_updated_at)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => setShowDoctorVoiceModal(true)}
+                              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 shadow-xs ${
+                                detail.has_voiceprint
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                              }`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                              </svg>
+                              <span>{detail.has_voiceprint ? 'Re-enroll Voiceprint' : '🎙️ Enroll Voiceprint (15s)'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Section 1: Employment & Compensation Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Personal & Work Info */}
@@ -1396,6 +1602,15 @@ export default function HREmployees({ user }) {
             setDetail(fresh);
             fetchEmployees();
           }}
+        />
+      )}
+
+      {showDoctorVoiceModal && detail && (
+        <DoctorVoiceEnrollModal
+          doctorId={detail.id}
+          doctorName={detail.full_name}
+          onClose={() => setShowDoctorVoiceModal(false)}
+          onEnrolled={handleVoiceprintEnrolled}
         />
       )}
     </div>

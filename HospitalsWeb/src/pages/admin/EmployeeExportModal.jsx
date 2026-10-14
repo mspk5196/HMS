@@ -1,10 +1,42 @@
 import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { apiFetch } from '../../util/api';
 import { DownloadIcon, XIcon, CheckIcon, DocumentTextIcon, FolderIcon } from '../../components/Icons';
 
+async function fetchImageAsBase64(url) {
+  if (!url) return null;
+  try {
+    const fullUrl = url.startsWith('http')
+      ? url
+      : `${(import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')}${url}`;
+    const res = await fetch(fullUrl);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const raw = reader.result;
+        if (!raw || typeof raw !== 'string') {
+          resolve(null);
+          return;
+        }
+        const parts = raw.split(',');
+        const base64 = parts[1];
+        let ext = 'jpeg';
+        if (blob.type.includes('png')) ext = 'png';
+        resolve({ base64, extension: ext });
+      };
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn('Could not fetch employee photo for export:', err);
+    return null;
+  }
+}
+
 export const ALL_EXPORT_COLUMNS = [
   // Mandatory
+  { id: 'photo', label: 'Photo', group: 'Mandatory', defaultSelected: true },
   { id: 'employee_code', label: 'Employee ID', group: 'Mandatory', required: true, defaultSelected: true },
   { id: 'full_name', label: 'Employee Name', group: 'Mandatory', required: true, defaultSelected: true },
 
@@ -72,7 +104,7 @@ const PRESETS = {
   contact: {
     name: 'Basic Directory',
     columns: [
-      'employee_code', 'full_name', 'department_name', 'designation_name',
+      'photo', 'employee_code', 'full_name', 'department_name', 'designation_name',
       'phone', 'gender', 'date_of_joining', 'status'
     ],
   },
@@ -182,122 +214,167 @@ export default function EmployeeExportModal({
         selectedColIds.includes(col.id)
       );
 
-      // Build data rows for XLSX
-      const excelRows = employeeList.map((emp) => {
-        const row = {};
+      const hasPhotoCol = activeColumns.some((c) => c.id === 'photo');
+      const photoColIdx = activeColumns.findIndex((c) => c.id === 'photo');
+
+      // Create workbook using ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Neha Hospitals Management System';
+      workbook.created = new Date();
+      const worksheet = workbook.addWorksheet('Employees Master', {
+        views: [{ showGridLines: true }],
+      });
+
+      // Set columns
+      worksheet.columns = activeColumns.map((col) => ({
+        header: col.label,
+        key: col.id,
+        width: col.id === 'photo' ? 14 : Math.max(col.label.length + 5, 16),
+      }));
+
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 28;
+      headerRow.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E40AF' }, // Dark Blue #1e40af
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Populate data rows
+      for (let i = 0; i < employeeList.length; i++) {
+        const emp = employeeList[i];
+        const rowData = {};
 
         activeColumns.forEach((col) => {
           switch (col.id) {
+            case 'photo':
+              rowData[col.id] = '';
+              break;
             case 'employee_code':
-              row[col.label] = emp.employee_code || '';
+              rowData[col.id] = emp.employee_code || '';
               break;
             case 'full_name':
-              row[col.label] = emp.full_name || '';
+              rowData[col.id] = emp.full_name || '';
               break;
             case 'department_name':
-              row[col.label] = emp.department_name || 'General';
+              rowData[col.id] = emp.department_name || 'General';
               break;
             case 'designation_name':
-              row[col.label] = emp.designation_name || emp.role_name || '';
+              rowData[col.id] = emp.designation_name || emp.role_name || '';
               break;
             case 'role_name':
-              row[col.label] = emp.role_name || emp.designation_name || 'Staff';
+              rowData[col.id] = emp.role_name || emp.designation_name || 'Staff';
               break;
             case 'status':
-              row[col.label] = (emp.status || 'active').toUpperCase();
+              rowData[col.id] = (emp.status || 'active').toUpperCase();
               break;
             case 'date_of_joining':
-              row[col.label] = formatDateVal(emp.date_of_joining);
+              rowData[col.id] = formatDateVal(emp.date_of_joining);
               break;
             case 'phone':
-              row[col.label] = emp.phone || '';
+              rowData[col.id] = emp.phone || '';
               break;
             case 'gender':
-              row[col.label] = emp.gender ? emp.gender.charAt(0).toUpperCase() + emp.gender.slice(1) : '';
+              rowData[col.id] = emp.gender ? emp.gender.charAt(0).toUpperCase() + emp.gender.slice(1) : '';
               break;
             case 'date_of_birth':
-              row[col.label] = formatDateVal(emp.date_of_birth);
+              rowData[col.id] = formatDateVal(emp.date_of_birth);
               break;
             case 'address':
-              row[col.label] = emp.address || '';
+              rowData[col.id] = emp.address || '';
               break;
             case 'qualification':
-              row[col.label] = emp.qualification || '';
+              rowData[col.id] = emp.qualification || '';
               break;
             case 'experience_description':
-              row[col.label] = emp.experience_description || '';
+              rowData[col.id] = emp.experience_description || '';
               break;
             case 'basic_salary':
-              row[col.label] = Number(emp.base_salary || emp.basic_salary || 0);
+              rowData[col.id] = Number(emp.base_salary || emp.basic_salary || 0);
               break;
             case 'payment_mode':
-              row[col.label] = emp.payment_mode ? emp.payment_mode.toUpperCase() : 'ACCOUNT';
+              rowData[col.id] = emp.payment_mode ? emp.payment_mode.toUpperCase() : 'ACCOUNT';
               break;
             case 'bank_name':
-              row[col.label] = emp.bank_name || '';
+              rowData[col.id] = emp.bank_name || '';
               break;
             case 'bank_account_no':
-              row[col.label] = emp.bank_account_no || '';
+              rowData[col.id] = emp.bank_account_no || '';
               break;
             case 'bank_ifsc':
-              row[col.label] = emp.bank_ifsc || '';
+              rowData[col.id] = emp.bank_ifsc || '';
               break;
             case 'aadhar_number':
-              row[col.label] = emp.aadhar_number || '';
+              rowData[col.id] = emp.aadhar_number || '';
               break;
             case 'pan_number':
-              row[col.label] = emp.pan_number || '';
+              rowData[col.id] = emp.pan_number || '';
               break;
             case 'uan_number':
-              row[col.label] = emp.uan_number || '';
+              rowData[col.id] = emp.uan_number || '';
               break;
             case 'pf_enrolled':
-              row[col.label] = emp.pf_enrolled ? 'Yes' : 'No';
+              rowData[col.id] = emp.pf_enrolled ? 'Yes' : 'No';
               break;
             case 'esi_number':
-              row[col.label] = emp.esi_number || '';
+              rowData[col.id] = emp.esi_number || '';
               break;
             case 'esi_enrolled':
-              row[col.label] = emp.esi_enrolled ? 'Yes' : 'No';
+              rowData[col.id] = emp.esi_enrolled ? 'Yes' : 'No';
               break;
             case 'shift_category':
-              row[col.label] = formatShiftCategory(emp.shift_category);
+              rowData[col.id] = formatShiftCategory(emp.shift_category);
               break;
             case 'shift_timings':
-              row[col.label] = emp.custom_shift_start && emp.custom_shift_end
+              rowData[col.id] = emp.custom_shift_start && emp.custom_shift_end
                 ? `${String(emp.custom_shift_start).slice(0, 5)} - ${String(emp.custom_shift_end).slice(0, 5)}`
                 : 'Standard';
               break;
             case 'casual_leave_count':
-              row[col.label] = Number(emp.casual_leave_count || 0);
+              rowData[col.id] = Number(emp.casual_leave_count || 0);
               break;
             case 'privilege_leave_count':
-              row[col.label] = Number(emp.privilege_leave_count || 0);
+              rowData[col.id] = Number(emp.privilege_leave_count || 0);
               break;
             default:
-              row[col.label] = emp[col.id] ?? '';
+              rowData[col.id] = emp[col.id] ?? '';
           }
         });
 
-        return row;
-      });
+        const newRow = worksheet.addRow(rowData);
+        const rowNumber = newRow.number;
 
-      // Create workbook and worksheet
-      const ws = XLSX.utils.json_to_sheet(excelRows);
+        newRow.alignment = { vertical: 'middle' };
 
-      // Calculate column widths automatically based on header and cell content length
-      const colWidths = activeColumns.map((col) => {
-        let maxLen = col.label.length;
-        excelRows.forEach((r) => {
-          const valStr = String(r[col.label] ?? '');
-          if (valStr.length > maxLen) maxLen = Math.min(valStr.length, 45);
-        });
-        return { wch: Math.max(maxLen + 3, 12) };
-      });
-      ws['!cols'] = colWidths;
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Employees Master');
+        if (hasPhotoCol) {
+          newRow.height = 55; // Height for thumbnail image
+          if (emp.photo_path) {
+            const imgData = await fetchImageAsBase64(emp.photo_path);
+            if (imgData) {
+              const imageId = workbook.addImage({
+                base64: imgData.base64,
+                extension: imgData.extension,
+              });
+              worksheet.addImage(imageId, {
+                tl: { col: photoColIdx + 0.15, row: rowNumber - 1 + 0.08 },
+                ext: { width: 48, height: 48 },
+                editAs: 'oneCell',
+              });
+            } else {
+              newRow.getCell(photoColIdx + 1).value = '(No Photo)';
+              newRow.getCell(photoColIdx + 1).alignment = { vertical: 'middle', horizontal: 'center' };
+            }
+          } else {
+            newRow.getCell(photoColIdx + 1).value = '(No Photo)';
+            newRow.getCell(photoColIdx + 1).alignment = { vertical: 'middle', horizontal: 'center' };
+          }
+        } else {
+          newRow.height = 22;
+        }
+      }
 
       // Generate filename with timestamp and filters
       const dateTag = new Date().toISOString().slice(0, 10);
@@ -308,7 +385,18 @@ export default function EmployeeExportModal({
       }
       const filename = `Neha_Hospital_Employees${deptTag}_${dateTag}.xlsx`;
 
-      XLSX.writeFile(wb, filename);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
 
       setIsExporting(false);
       onClose();

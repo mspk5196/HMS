@@ -85,12 +85,18 @@ const listEmployees = async ({ search, departmentId, shiftCategory, status, page
 
   const [rows] = await db.query(
     `SELECT e.*, d.name AS department_name, des.name AS designation_name, 
-            des.casual_leave_count, des.privilege_leave_count, r.name AS role_name
+            des.casual_leave_count, des.privilege_leave_count, des.is_doctor,
+            (CASE WHEN dv.id IS NOT NULL THEN 1 ELSE 0 END) AS has_voiceprint,
+            dv.audio_duration_seconds AS voiceprint_duration,
+            r.name AS role_name,
+            ep.photo_path
      FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN staff_roles des ON des.id = e.designation_id
      LEFT JOIN users u ON u.employee_id = e.id
      LEFT JOIN roles r ON r.id = u.role_id
+     LEFT JOIN doctor_voiceprints dv ON dv.doctor_id = e.id
+     LEFT JOIN employee_photos ep ON ep.employee_id = e.id
      ${where}
      ORDER BY e.full_name
      LIMIT ? OFFSET ?`,
@@ -111,12 +117,19 @@ const listEmployees = async ({ search, departmentId, shiftCategory, status, page
 const getEmployee = async (id) => {
   const [rows] = await db.execute(
     `SELECT e.*, d.name AS department_name, des.name AS designation_name, 
-            des.casual_leave_count, des.privilege_leave_count, r.name AS role_name
+            des.casual_leave_count, des.privilege_leave_count, des.is_doctor,
+            (CASE WHEN dv.id IS NOT NULL THEN 1 ELSE 0 END) AS has_voiceprint,
+            dv.audio_duration_seconds AS voiceprint_duration,
+            dv.updated_at AS voiceprint_updated_at,
+            r.name AS role_name,
+            ep.photo_path
      FROM employees e
      LEFT JOIN departments d ON d.id = e.department_id
      LEFT JOIN staff_roles des ON des.id = e.designation_id
      LEFT JOIN users u ON u.employee_id = e.id
      LEFT JOIN roles r ON r.id = u.role_id
+     LEFT JOIN doctor_voiceprints dv ON dv.doctor_id = e.id
+     LEFT JOIN employee_photos ep ON ep.employee_id = e.id
      WHERE e.id = ?`,
     [id]
   );
@@ -203,6 +216,19 @@ const createEmployee = async (data) => {
   );
   const insertId = result.insertId;
 
+  // Save photo if provided
+  if (data.photo_path) {
+    try {
+      await db.execute(
+        `INSERT INTO employee_photos (employee_id, photo_path) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE photo_path = VALUES(photo_path)`,
+        [insertId, data.photo_path]
+      );
+    } catch (err) {
+      console.error('Failed to save employee photo:', err);
+    }
+  }
+
   // Auto-link biometric enrolled user if code matches
   if (employee_code) {
     try {
@@ -279,6 +305,23 @@ const updateEmployee = async (id, data) => {
         WHERE enroll_code = ?
       `, [id, data.employee_code]);
     } catch (err) {}
+  }
+
+  // Handle employee photo update/removal
+  if (data.photo_path !== undefined) {
+    try {
+      if (data.photo_path === null || data.photo_path === '' || data.photo_path === 'null') {
+        await db.execute(`DELETE FROM employee_photos WHERE employee_id = ?`, [id]);
+      } else {
+        await db.execute(
+          `INSERT INTO employee_photos (employee_id, photo_path) VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE photo_path = VALUES(photo_path)`,
+          [id, data.photo_path]
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update employee photo:', err);
+    }
   }
 };
 
