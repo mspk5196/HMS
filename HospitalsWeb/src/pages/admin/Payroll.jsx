@@ -285,7 +285,10 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
   const [page, setPage] = useState(1);
   const [itemSearch, setItemSearch] = useState('');
   const [payslipFor, setPayslipFor] = useState(null);
+  const [payslip, setPayslip] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showBankBatchModal, setShowBankBatchModal] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState('all');
   const [showSalaryDateModal, setShowSalaryDateModal] = useState(false);
   const [targetSalaryDate, setTargetSalaryDate] = useState('');
   const [targetSalaryDateType, setTargetSalaryDateType] = useState('last_day_of_month');
@@ -486,14 +489,61 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
     return <div className="p-8 text-center text-xs text-gray-400">Loading…</div>;
   }
 
-  const filteredItems = itemSearch
-    ? items.filter(
-        (it) =>
-          (it.full_name || '').toLowerCase().includes(itemSearch.toLowerCase()) ||
-          (it.employee_code || '').toLowerCase().includes(itemSearch.toLowerCase()) ||
-          (it.department_name || '').toLowerCase().includes(itemSearch.toLowerCase())
-      )
-    : items;
+  const pendingBankItems = items.filter(
+    (it) => (it.payment_mode || 'account').toLowerCase() === 'account' && it.payment_status !== 'paid'
+  );
+  const pendingBankNetTotal = pendingBankItems.reduce((sum, it) => sum + (Number(it.net_pay) || 0), 0);
+
+  const pendingCashItems = items.filter(
+    (it) => (it.payment_mode || '').toLowerCase() === 'cash' && it.payment_status !== 'paid'
+  );
+
+  const downloadBankPayoutFile = async () => {
+    if (!run?.id) return;
+    try {
+      const res = await fetch(`${(import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')}/api/salary/payroll-runs/${run.id}/export-bank-payout`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to download corporate bank sheet');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bank_Salary_Transfer_${run.period_month}_${run.period_year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onSuccess('Corporate bank payout spreadsheet (.xlsx) downloaded successfully.');
+    } catch (err) {
+      onError(err, 'Failed to download bank transfer sheet.');
+    }
+  };
+
+  const filteredItems = items.filter((it) => {
+    if (itemSearch) {
+      const q = itemSearch.toLowerCase();
+      const matchSearch =
+        (it.full_name || '').toLowerCase().includes(q) ||
+        (it.employee_code || '').toLowerCase().includes(q) ||
+        (it.department_name || '').toLowerCase().includes(q);
+      if (!matchSearch) return false;
+    }
+
+    if (paymentFilter === 'account') {
+      if ((it.payment_mode || 'account').toLowerCase() !== 'account') return false;
+    } else if (paymentFilter === 'cash') {
+      if ((it.payment_mode || '').toLowerCase() !== 'cash') return false;
+    } else if (paymentFilter === 'pending') {
+      if (it.payment_status === 'paid') return false;
+    } else if (paymentFilter === 'paid') {
+      if (it.payment_status !== 'paid') return false;
+    }
+
+    return true;
+  });
 
   // Compute Run Summaries
   const totalGross = items.reduce((sum, it) => sum + (Number(it.gross_pay) || 0), 0);
@@ -559,6 +609,40 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
             <DownloadIcon className="w-4 h-4 text-white" />
             <span>Export Excel</span>
           </button>
+
+          {run.status === 'locked' && (
+            <>
+              <button
+                type="button"
+                onClick={downloadBankPayoutFile}
+                className="bg-white hover:bg-indigo-50/50 text-indigo-700 border border-indigo-200 text-xs font-bold px-3.5 py-2 rounded-lg shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                title="Download formatted Corporate Bank Transfer (NEFT/CMS) file"
+              >
+                <DownloadIcon className="w-4 h-4 text-indigo-600" />
+                <span>Bank Transfer Sheet</span>
+              </button>
+
+              {hasPermission(user, 'payroll.approve_payroll') && (
+                <button
+                  type="button"
+                  onClick={() => setShowBankBatchModal(true)}
+                  disabled={busy || pendingBankItems.length === 0}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  title={
+                    pendingBankItems.length === 0
+                      ? 'All bank transfer payouts are marked as paid'
+                      : 'Batch disburse all bank transfer salaries with master UTR number'
+                  }
+                >
+                  <LandmarkIcon className="w-4 h-4 text-white" />
+                  <span>
+                    Disburse Bank Payouts ({pendingBankItems.length})
+                  </span>
+                </button>
+              )}
+            </>
+          )}
+
           {hasPermission(user, 'payroll.edit') && (
             <button
               onClick={calculate}
@@ -612,10 +696,49 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
 
       {/* Main Payslips Table Card */}
       <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden space-y-0">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
-          <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-            Employee Payslips ({filteredItems.length} Records)
-          </h3>
+        <div className="px-5 py-3 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50/70">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider mr-2">
+              Employee Payslips ({filteredItems.length})
+            </h3>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setPaymentFilter('all')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${paymentFilter === 'all' ? 'bg-indigo-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                All ({items.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentFilter('account')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${paymentFilter === 'account' ? 'bg-indigo-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Bank ({items.filter((i) => (i.payment_mode || 'account') === 'account').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentFilter('cash')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${paymentFilter === 'cash' ? 'bg-amber-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Cash ({items.filter((i) => (i.payment_mode || '').toLowerCase() === 'cash').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentFilter('pending')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${paymentFilter === 'pending' ? 'bg-rose-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Pending ({items.filter((i) => i.payment_status !== 'paid').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentFilter('paid')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${paymentFilter === 'paid' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Paid ({items.filter((i) => i.payment_status === 'paid').length})
+              </button>
+            </div>
+          </div>
           <div>
             <input
               type="text"
@@ -702,15 +825,34 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
                       {money(it.net_pay)}
                     </td>
                     <td className="px-3 py-2.5 text-center space-x-1.5 whitespace-nowrap">
-                      {it.payment_status !== 'paid' && hasPermission(user, 'payroll.edit') && (
-                        <button
-                          onClick={() => setPayingItem(it)}
-                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2 py-1 rounded transition-colors cursor-pointer inline-flex items-center gap-1 border border-emerald-200"
-                          title="Record salary payment / disbursement"
+                      {it.payment_status === 'paid' ? (
+                        <span
+                          className="bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border border-emerald-200"
+                          title={`Paid on ${it.payment_date ? new Date(it.payment_date).toLocaleDateString('en-IN') : 'Disbursed'}${it.payment_reference ? ` (Ref: ${it.payment_reference})` : ''}`}
                         >
-                          <CheckIcon className="w-3 h-3 text-emerald-700" />
-                          <span>Pay</span>
-                        </button>
+                          <CheckIcon className="w-3 h-3 text-emerald-600" />
+                          <span>Paid</span>
+                        </span>
+                      ) : (
+                        hasPermission(user, 'payroll.edit') && (
+                          <button
+                            onClick={() => setPayingItem(it)}
+                            disabled={run.status !== 'locked'}
+                            className={`text-[11px] font-bold px-2 py-1 rounded transition-colors inline-flex items-center gap-1 border ${
+                              run.status === 'locked'
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 cursor-pointer shadow-2xs'
+                                : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-60'
+                            }`}
+                            title={
+                              run.status === 'locked'
+                                ? `Record payment for ${it.full_name} (${(it.payment_mode || 'account') === 'cash' ? 'Cash' : 'Bank'})`
+                                : 'Lock payroll run first to enable payment disbursement'
+                            }
+                          >
+                            <CheckIcon className="w-3 h-3 text-emerald-700" />
+                            <span>Pay</span>
+                          </button>
+                        )
                       )}
                       {run.status === 'draft' && hasPermission(user, 'payroll.edit') && (
                         <button
@@ -1037,6 +1179,21 @@ function RunDetail({ user, runId, onBack, onError, onSuccess }) {
           onError={onError}
         />
       )}
+
+      {showBankBatchModal && (
+        <BankBatchDisbursalModal
+          isOpen={showBankBatchModal}
+          run={run}
+          pendingBankItems={pendingBankItems}
+          onClose={() => setShowBankBatchModal(false)}
+          onSuccess={(msg) => {
+            onSuccess(msg);
+            setShowBankBatchModal(false);
+            loadItems();
+          }}
+          onError={onError}
+        />
+      )}
     </div>
   );
 }
@@ -1148,6 +1305,209 @@ function MarkPayrollItemPaidModal({ item, onClose, onSuccess, onError }) {
               className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
             >
               {isSaving ? 'Recording…' : 'Confirm Payment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function BankBatchDisbursalModal({
+  isOpen,
+  onClose,
+  run,
+  pendingBankItems = [],
+  onSuccess,
+  onError,
+}) {
+  const [paymentDate, setPaymentDate] = useState(() =>
+    run?.salary_date ? run.salary_date.slice(0, 10) : new Date().toISOString().slice(0, 10)
+  );
+  const [paymentReference, setPaymentReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  if (!isOpen || !run) return null;
+
+  const totalAmount = pendingBankItems.reduce((sum, it) => sum + (Number(it.net_pay) || 0), 0);
+
+  const handleDownloadSheet = async () => {
+    try {
+      setIsDownloading(true);
+      const res = await fetch(
+        `${(import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')}/api/salary/payroll-runs/${run.id}/export-bank-payout`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error('Failed to download bank transfer sheet');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bank_Salary_Transfer_${run.period_month}_${run.period_year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      onError(err, 'Failed to download bank payout file');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!paymentReference.trim()) {
+      onError(null, 'Please enter the Master Bank UTR / Transaction Reference number.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await apiFetch(`/salary/payroll-runs/${run.id}/disburse-bank`, {
+        method: 'POST',
+        body: JSON.stringify({
+          payment_reference: paymentReference.trim(),
+          payment_date: paymentDate,
+          notes: notes.trim(),
+        }),
+      });
+      onSuccess(res?.message || `Bank payouts marked as disbursed for ${res?.data?.count || pendingBankItems.length} employees.`);
+      onClose();
+    } catch (err) {
+      onError(err, 'Failed to disburse bank payouts.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-200 animate-in fade-in">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+              <LandmarkIcon className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Bulk Bank Salary Disbursal</h3>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {MONTH_NAMES[run.period_month - 1]} {run.period_year} Payroll Run
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-xl leading-none cursor-pointer p-1"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Overview Banner */}
+        <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-indigo-900/60 uppercase tracking-wider block">
+              Pending Bank Transfers
+            </span>
+            <span className="text-base font-extrabold text-indigo-950 mt-0.5 block">
+              {pendingBankItems.length} Staff Members
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-bold text-indigo-900/60 uppercase tracking-wider block">
+              Total Net Payout
+            </span>
+            <span className="text-base font-extrabold text-indigo-950 mt-0.5 block font-mono">
+              {money(totalAmount)}
+            </span>
+          </div>
+        </div>
+
+        {/* Step 1: Corporate Bank File Export */}
+        <div className="p-3.5 rounded-xl border border-dashed border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+          <div className="text-[11px] text-slate-600 leading-snug">
+            <strong>Step 1:</strong> Download the corporate banking portal upload file (contains IFSC, Account #, Net amounts).
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadSheet}
+            disabled={isDownloading}
+            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors shrink-0 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+          >
+            <DownloadIcon className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{isDownloading ? 'Downloading…' : 'Download Sheet'}</span>
+          </button>
+        </div>
+
+        {/* Step 2: Record Master UTR */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="text-[11px] text-slate-600 leading-snug font-medium">
+            <strong>Step 2:</strong> Once the transfer is completed on your bank portal, enter the master transaction UTR to mark all bank-transfer employees as paid.
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              Master UTR / Bank Reference Number *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. UTR202610139824, CMS-REF-91823"
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              Disbursal Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              Notes / Remarks
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Monthly salary payout processed via Corporate Net Banking"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || pendingBankItems.length === 0}
+              className="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50 shadow-sm flex items-center gap-1.5"
+            >
+              <CheckIcon className="w-3.5 h-3.5 text-white" />
+              <span>{isSubmitting ? 'Processing Batch…' : `Confirm Payout for ${pendingBankItems.length} Staff`}</span>
             </button>
           </div>
         </form>

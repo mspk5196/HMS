@@ -305,6 +305,14 @@ const updatePayrollItemDeduction = asyncHandler(async (req, res) => {
 /** PATCH /api/salary/payroll-items/:itemId/pay — mark individual payroll item or settlement as paid */
 const markItemPaid = asyncHandler(async (req, res) => {
   const itemId = Number(req.params.itemId);
+  const item = await q.getPayrollItemById(itemId);
+  if (!item) return res.status(404).json(fail('Payroll item not found'));
+
+  const run = await q.getPayrollRun(item.payroll_run_id);
+  if (!run || run.status !== 'locked') {
+    return res.status(400).json(fail('Payroll run must be locked before recording payments'));
+  }
+
   const { payment_mode, payment_date, payment_reference, notes } = req.body;
   await q.markPayrollItemPaid(itemId, {
     payment_mode,
@@ -313,8 +321,98 @@ const markItemPaid = asyncHandler(async (req, res) => {
     notes,
     settled_by: req.user?.id ?? null,
   });
-  const item = await q.getPayrollItemById(itemId);
-  return res.json(success(item, 'Salary payment recorded successfully'));
+  const updated = await q.getPayrollItemById(itemId);
+  return res.json(success(updated, 'Salary payment recorded successfully'));
+});
+
+/** POST /api/salary/payroll-runs/:id/disburse-bank — batch mark all bank transfer items as paid */
+const disburseBankBatch = asyncHandler(async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = await q.getPayrollRun(runId);
+  if (!run) return res.status(404).json(fail('Payroll run not found'));
+  if (run.status !== 'locked') {
+    return res.status(400).json(fail('Payroll run must be locked before recording bank payouts'));
+  }
+
+  const { payment_reference, payment_date, notes } = req.body;
+  if (!payment_reference || !payment_reference.trim()) {
+    return res.status(400).json(fail('Master UTR / Transaction Reference number is required'));
+  }
+
+  const count = await q.disburseBankBatch(runId, {
+    payment_reference: payment_reference.trim(),
+    payment_date: payment_date || new Date().toISOString().slice(0, 10),
+    notes: notes ? notes.trim() : null,
+    settled_by: req.user?.id ?? null,
+  });
+
+  return res.json(success({ count }, `Successfully marked ${count} bank transfer salary payouts as disbursed.`));
+});
+
+/**
+ * GET /api/salary/payroll-runs/:id/export-bank-payout
+ * Generates an Excel spreadsheet pre-formatted for corporate banking portal upload (NEFT / RTGS / CMS).
+ */
+const exportBankPayoutSheet = asyncHandler(async (req, res) => {
+  const runId = Number(req.params.id);
+  const run = await svc.getPayrollRun(runId);
+  if (!run) return res.status(404).json(fail('Payroll run not found'));
+
+  const { rows } = await q.getPayrollItems(runId, 1, 10000);
+  const bankRows = rows.filter((r) => (r.payment_mode || 'account').toLowerCase() === 'account');
+
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+  const monthName = MONTH_NAMES[(run.period_month || 1) - 1];
+  const periodLabel = `${monthName} ${run.period_year}`;
+
+  const XLSX = require('xlsx');
+  const wb = XLSX.utils.book_new();
+
+  const data = [
+    ['CORPORATE BANK SALARY TRANSFER SHEET (CMS / NEFT / RTGS)'],
+    [`Payroll Period: ${periodLabel} | Total Beneficiaries: ${bankRows.length} | Generated: ${new Date().toISOString().slice(0, 10)}`],
+    [],
+    [
+      'S.No', 'Beneficiary Name', 'Bank Name', 'Account Number', 'IFSC Code',
+      'Net Amount (INR)', 'Payment Mode', 'Narration / Remarks',
+      'Employee ID', 'Department', 'Designation', 'Payment Status', 'UTR / Ref'
+    ],
+  ];
+
+  bankRows.forEach((r, idx) => {
+    data.push([
+      idx + 1,
+      r.full_name || '',
+      r.bank_name || '',
+      r.bank_account_no || '',
+      r.bank_ifsc || '',
+      Number(r.net_pay || 0),
+      'NEFT',
+      `SALARY ${periodLabel.toUpperCase()} - ${r.employee_code}`,
+      r.employee_code || '',
+      r.department_name || '',
+      r.designation_name || '',
+      (r.payment_status || 'pending').toUpperCase(),
+      r.payment_reference || '',
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [
+    { wch: 6 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 14 },
+    { wch: 16 }, { wch: 14 }, { wch: 30 }, { wch: 14 }, { wch: 18 },
+    { wch: 18 }, { wch: 15 }, { wch: 22 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Bank Payouts');
+
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const filename = `Neha_Hospital_Bank_Payouts_${periodLabel.replace(/\s+/g, '_')}.xlsx`;
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(buf);
 });
 
 /* ─── FINE TYPES ─── */
@@ -753,7 +851,7 @@ module.exports = {
   getConfig, updateConfig, getSalaryPolicy, updateSalaryPolicy,
   listNightShiftRates, addNightShiftRate,
   listRuns, getRun, createRun, calculateRun, generatePayroll, updateRunSalaryDate, lockRun, getPayslip,
-  listItems, updatePayrollItemDeduction, markItemPaid, getCalculationSummary, exportPayrollRun,
+  listItems, updatePayrollItemDeduction, markItemPaid, disburseBankBatch, exportBankPayoutSheet, getCalculationSummary, exportPayrollRun,
   listFineTypes, createFineType, updateFineType,
   listFines, createFine, waiveFine, cancelFine,
   listOvertime, createOvertime,

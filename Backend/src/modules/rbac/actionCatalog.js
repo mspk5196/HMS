@@ -40,6 +40,10 @@ const MODULES = [
   { code: 'users', name: 'Users & Authentication', group: 'Administration', order: 18 },
   { code: 'approval', name: 'Approvals Inbox', group: 'Administration', order: 19 },
   { code: 'audit', name: 'Audit Logs', group: 'Administration', order: 20 },
+
+  // ─── Artificial Intelligence ───
+  { code: 'ai_voice', name: 'Clinical Voice AI & Ambient Scribe', group: 'Artificial Intelligence', order: 21 },
+  { code: 'ai_roster', name: 'AI Shift Roster Solver', group: 'Artificial Intelligence', order: 22 },
 ];
 
 // action code -> { name, special (bool) }
@@ -166,6 +170,18 @@ const MODULE_ACTIONS = {
   audit: [
     'view',
     { code: 'export', name: 'Export Audit Logs', approvable: false },
+  ],
+  ai_voice: [
+    'view',
+    { code: 'transcribe', name: 'Transcribe Voice Dictation', approvable: false },
+    { code: 'ambient_scribe', name: 'Ambient Clinical Scribe (Parse Consultation)', approvable: false },
+    { code: 'enroll_voiceprint', name: 'Enroll Doctor Voiceprint Profile', approvable: true },
+  ],
+  ai_roster: [
+    'view',
+    { code: 'generate', name: 'Generate AI Duty Roster', approvable: false },
+    { code: 'apply_roster', name: 'Apply & Publish AI Roster', approvable: true },
+    { code: 'manage_templates', name: 'Manage Roster Prompt Templates', approvable: true },
   ],
 };
 

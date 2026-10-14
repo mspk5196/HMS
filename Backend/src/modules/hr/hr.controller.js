@@ -1,6 +1,21 @@
+const fs = require('fs');
+const path = require('path');
 const svc = require('./hr.service');
 const asyncHandler = require('../../middleware/asyncHandler');
 const { success, created, paginated, fail } = require('../../utils/response');
+
+const saveBase64Photo = (base64Str) => {
+  if (!base64Str || typeof base64Str !== 'string' || !base64Str.startsWith('data:image/')) return null;
+  const matches = base64Str.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+  if (!matches) return null;
+  const ext = matches[1] === 'jpeg' ? '.jpg' : `.${matches[1]}`;
+  const buffer = Buffer.from(matches[2], 'base64');
+  const filename = `photo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+  const uploadDir = process.env.UPLOAD_DIR || path.resolve(__dirname, '../../../uploads');
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  fs.writeFileSync(path.join(uploadDir, filename), buffer);
+  return `/uploads/${filename}`;
+};
 
 const listDoctors = asyncHandler(async (req, res) => {
   return res.json(success(await svc.listDoctors()));
@@ -30,6 +45,12 @@ const createEmployee = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (req.files?.aadhar_doc?.[0]) body.aadhar_doc_path = `/uploads/${req.files.aadhar_doc[0].filename}`;
   if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
+  if (req.files?.photo?.[0]) {
+    body.photo_path = `/uploads/${req.files.photo[0].filename}`;
+  } else if (body.photo_base64) {
+    const saved = saveBase64Photo(body.photo_base64);
+    if (saved) body.photo_path = saved;
+  }
   const id = await svc.createEmployee(body);
   return res.status(201).json(created({ id }, 'Employee created'));
 });
@@ -59,6 +80,12 @@ const updateEmployee = asyncHandler(async (req, res) => {
   const body = { ...req.body };
   if (req.files?.aadhar_doc?.[0]) body.aadhar_doc_path = `/uploads/${req.files.aadhar_doc[0].filename}`;
   if (req.files?.pan_doc?.[0])    body.pan_doc_path    = `/uploads/${req.files.pan_doc[0].filename}`;
+  if (req.files?.photo?.[0]) {
+    body.photo_path = `/uploads/${req.files.photo[0].filename}`;
+  } else if (body.photo_base64) {
+    const saved = saveBase64Photo(body.photo_base64);
+    if (saved) body.photo_path = saved;
+  }
   await svc.updateEmployee(Number(req.params.id), body, req.user?.id ?? null);
   return res.json(success(null, 'Employee updated'));
 });

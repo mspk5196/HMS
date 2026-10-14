@@ -4,6 +4,8 @@ import { hasPermission } from '../../util/permissions';
 import PageHeader from '../../components/PageHeader';
 import { CheckIcon } from '../../components/Icons';
 import HospitalPrescription from '../../components/HospitalPrescription';
+import AmbientScribeWidget from '../../components/AmbientScribeWidget';
+import FieldDictationButton from '../../components/FieldDictationButton';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -186,6 +188,72 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
       : it)));
   };
 
+  const handleApplyAiData = async (data) => {
+    if (data.chief_complaints) {
+      setComplaints((prev) => prev ? `${prev}, ${data.chief_complaints}` : data.chief_complaints);
+    }
+    if (data.diagnosis) {
+      setDiagnosis((prev) => prev ? `${prev}, ${data.diagnosis}` : data.diagnosis);
+    }
+    if (data.clinical_notes || data.doctor_advice) {
+      const combined = [data.clinical_notes, data.doctor_advice].filter(Boolean).join('\n');
+      setDoctorNotes((prev) => prev ? `${prev}\n${combined}` : combined);
+    }
+    if (data.bp_systolic) setBpSystolic(String(data.bp_systolic));
+    if (data.bp_diastolic) setBpDiastolic(String(data.bp_diastolic));
+    if (data.pulse) setPulse(String(data.pulse));
+    if (data.temperature) setTemperature(String(data.temperature));
+    if (data.spo2) setSpo2(String(data.spo2));
+    if (data.weight) setWeight(String(data.weight));
+    if (data.height) setHeight(String(data.height));
+    if (data.blood_sugar) setBloodSugar(String(data.blood_sugar));
+
+    if (data.follow_up_days) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(data.follow_up_days));
+      setFollowUpDate(d.toISOString().slice(0, 10));
+    }
+
+    if (Array.isArray(data.prescriptions) && data.prescriptions.length > 0) {
+      const newItems = await Promise.all(
+        data.prescriptions.map(async (p) => {
+          let medId = '';
+          let displayName = p.medicine_name;
+          try {
+            const searchKeyword = p.medicine_name
+              .replace(/^(Tab|Cap|Syr|Inj|Tablet|Capsule|Syrup|Injection)\.?\s+/i, '')
+              .replace(/\s*\d+\s*(mg|ml|g)\b/i, '')
+              .trim();
+            const res = await apiFetch(`/pharmacy/medicines?search=${encodeURIComponent(searchKeyword || p.medicine_name)}&limit=1`, { withMeta: true });
+            const match = res?.data?.[0];
+            if (match) {
+              medId = match.id;
+              displayName = [match.name, match.generic_name ? `(${match.generic_name})` : '', [match.form, match.strength].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+            }
+          } catch {
+            // keep raw name
+          }
+
+          return {
+            medicine_id: medId,
+            medicine_name: displayName,
+            dose_morning: p.dose_morning ?? 1,
+            dose_afternoon: p.dose_afternoon ?? 0,
+            dose_night: p.dose_night ?? 1,
+            duration_days: p.duration_days ?? 5,
+            food_instruction: p.food_instruction || 'after_food',
+            notes: p.notes || ''
+          };
+        })
+      );
+
+      setItems((prev) => {
+        const nonEmpties = prev.filter((it) => it.medicine_name?.trim());
+        return [...nonEmpties, ...newItems];
+      });
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     const validItems = items.filter((it) => it.medicine_id);
@@ -328,6 +396,13 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
         <span className="text-xs font-bold text-blue-600">Token #{String(appointment.token_number).padStart(2, '0')}</span>
       </div>
 
+      {/* ── Ambient Dialogue Scribe & Voice AI ──────────────────────── */}
+      <AmbientScribeWidget
+        appointment={appointment}
+        user={user}
+        onApplyData={handleApplyAiData}
+      />
+
       {/* ── Vitals ───────────────────────────────────────────────────── */}
       <div className="space-y-3 pt-1">
         <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-2">Patient Vitals <span className="font-normal text-gray-400">(optional)</span></div>
@@ -371,7 +446,14 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
       {/* ── Clinical ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>
+            <FieldDictationButton
+              language="en"
+              prompt="medical diagnosis"
+              onTranscribed={(text) => setDiagnosis((prev) => (prev ? `${prev}, ${text}` : text))}
+            />
+          </div>
           <input
             type="text"
             value={diagnosis}
@@ -382,7 +464,14 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Chief Complaints</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Chief Complaints</label>
+            <FieldDictationButton
+              language="auto"
+              prompt="fever, headache, cough, valikudhu, kaachal"
+              onTranscribed={(text) => setComplaints((prev) => (prev ? `${prev}, ${text}` : text))}
+            />
+          </div>
           <input
             type="text"
             value={complaints}
@@ -393,7 +482,13 @@ function ConsultationPanel({ user, appointment, onSaved, onError }) {
         </div>
 
         <div className="md:col-span-2 space-y-1.5">
-          <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor Notes</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Doctor Notes</label>
+            <FieldDictationButton
+              language="auto"
+              onTranscribed={(text) => setDoctorNotes((prev) => (prev ? `${prev}\n${text}` : text))}
+            />
+          </div>
           <textarea
             rows="2"
             value={doctorNotes}

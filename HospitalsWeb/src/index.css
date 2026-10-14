@@ -26,6 +26,30 @@
     --primary-btn-bg: #059669;
     --primary-btn-hover: #10b981;
   }
+
+  html {
+    font-size: 14.5px;
+  }
+  @media (min-width: 1280px) {
+    html {
+      font-size: 15px;
+    }
+  }
+  @media (min-width: 1536px) {
+    html {
+      font-size: 16px;
+    }
+  }
+  @media (min-width: 1920px) {
+    html {
+      font-size: 17px;
+    }
+  }
+  @media (min-width: 2560px) {
+    html {
+      font-size: 18.5px;
+    }
+  }
   body {
     margin: 0;
     padding: 0;

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../../util/api';
 import PageHeader from '../../../components/PageHeader';
 import ConfigureShiftTimingModal from '../shiftroster/ConfigureShiftTimingModal';
+import DoctorVoiceEnrollModal from '../../../components/DoctorVoiceEnrollModal';
+import EmployeePhotoCapture from '../../../components/EmployeePhotoCapture';
 import {
   GearIcon,
   SunIcon,
@@ -17,21 +19,14 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
     initialDepartment ? (initialDepartment.id || initialDepartment.name) : (departments[0]?.id || departments[0]?.name || '')
   );
 
+  const [voiceAudioData, setVoiceAudioData] = useState(null); // { audioBlob, durationSeconds, sampleUrl }
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+
   const currentDept = departments.find(
     d => String(d.id) === String(selectedDeptId) || String(d.name) === String(selectedDeptId)
   ) || departments[0] || initialDepartment;
 
   const availableRoles = (currentDept?.roles || []).map(r => typeof r === 'string' ? r : r.roleName);
-
-  const getRoleSalary = (roleName, dept = currentDept) => {
-    const r = (dept?.roles || []).find(
-      x => (typeof x === 'object' ? x.roleName : x) === roleName
-    );
-    return r && typeof r === 'object' ? r.basicSalary : '';
-  };
-
-  const initialRole = availableRoles.length > 0 ? availableRoles[0] : '';
-  const initialSalary = getRoleSalary(initialRole) || '';
 
   const [formData, setFormData] = useState({
     employeeCode: '',
@@ -59,7 +54,14 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
     panNumber: '',
     aadharDoc: null,
     panDoc: null,
+    photo: null,
+    photoPreview: null,
   });
+
+  const selectedRoleObj = (currentDept?.roles || []).find(
+    r => (typeof r === 'object' ? r.roleName : r) === formData.position
+  );
+  const isDoctorRole = Boolean(selectedRoleObj && (selectedRoleObj.isDoctor || selectedRoleObj.is_doctor));
 
   const [shiftConfigs, setShiftConfigs] = useState({
     day: { start: '09:00', end: '17:00' },
@@ -299,6 +301,7 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
       perDaySalary: calculatedPerDay,
       perNightSalary: calculatedPerNight,
       payment_mode: formData.paymentMode || 'account',
+      voiceAudioBlob: isDoctorRole ? voiceAudioData?.audioBlob : null,
     };
     onSubmit(submissionData, currentDept);
   };
@@ -517,6 +520,64 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
             )}
             {errors.position && <p className="text-[11px] text-red-500">{errors.position}</p>}
           </div>
+
+          {/* Doctor Voice Profile Enrollment Card (Only available when role is doctor) */}
+          {isDoctorRole && (
+            <div className="md:col-span-2 p-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-blue-50/60 to-purple-50/80 space-y-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-slate-900">Doctor Acoustic Voice Profile</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-wider">
+                        Ambient AI Scribe
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      This role is designated as a <strong>Doctor</strong>. Enroll a 15-second speech voiceprint so Ambient Scribe can acoustically isolate doctor prescriptions and diagnoses from patients &amp; family relatives.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowVoiceModal(true)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 shadow-xs ${
+                    voiceAudioData
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15a3 3 0 01-3-3V4.5a3 3 0 116 0v7.5a3 3 0 01-3 3z" />
+                  </svg>
+                  <span>{voiceAudioData ? 'Re-record Voice Profile' : '🎙️ Enroll Voice Profile (15s)'}</span>
+                </button>
+              </div>
+
+              {voiceAudioData && (
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-semibold">
+                      ✓ Voice Sample Captured ({voiceAudioData.durationSeconds || 15}s)
+                    </span>
+                    <span className="text-[11px] text-emerald-600">
+                      — will be linked to doctor profile upon save
+                    </span>
+                  </div>
+                  {voiceAudioData.sampleUrl && (
+                    <audio src={voiceAudioData.sampleUrl} controls className="h-7 w-48" />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Date of Joining */}
           <div className="space-y-1.5 md:col-span-2">
@@ -784,8 +845,22 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
           {/* ─── Identity & Documents ─── */}
           <div className="md:col-span-2 pt-4 border-t border-gray-100 space-y-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-gray-900">Identity &amp; Documents</span>
-              <span className="text-[11px] text-gray-400">— Aadhar and PAN cards (with file upload)</span>
+              <span className="text-sm font-bold text-gray-900">Identity, Photo &amp; Documents</span>
+              <span className="text-[11px] text-gray-400">— Photo (Upload or Live Webcam), Aadhaar, PAN</span>
+            </div>
+
+            {/* Standard Employee Photo Uploader & Webcam Capture */}
+            <div className="p-3.5 bg-white border border-gray-200/90 rounded-xl shadow-2xs">
+              <EmployeePhotoCapture
+                value={formData.photoPreview}
+                onChange={(file, previewUrl) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    photo: file,
+                    photoPreview: previewUrl,
+                  }))
+                }
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -990,6 +1065,18 @@ export default function AddMemberForm({ departments, initialDepartment, onBack, 
           isOpen={showTimingModal}
           onClose={() => setShowTimingModal(false)}
           onSuccess={() => fetchShiftConfigs()}
+        />
+      )}
+
+      {showVoiceModal && (
+        <DoctorVoiceEnrollModal
+          doctorId={null}
+          doctorName={formData.name || 'New Doctor'}
+          onClose={() => setShowVoiceModal(false)}
+          onEnrolled={(data) => {
+            setVoiceAudioData(data);
+            setShowVoiceModal(false);
+          }}
         />
       )}
     </div>

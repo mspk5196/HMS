@@ -456,6 +456,24 @@ const markPayrollItemPaid = async (itemId, { payment_mode, payment_date, payment
   );
 };
 
+const disburseBankBatch = async (runId, { payment_reference, payment_date, notes, settled_by } = {}) => {
+  const [result] = await db.execute(
+    `UPDATE payroll_items
+     SET payment_status = 'paid',
+         payment_mode = 'account',
+         payment_date = COALESCE(?, CURDATE()),
+         payment_reference = COALESCE(?, payment_reference),
+         notes = COALESCE(?, notes),
+         settled_at = NOW(),
+         settled_by = COALESCE(?, settled_by)
+     WHERE payroll_run_id = ?
+       AND (payment_mode = 'account' OR payment_mode IS NULL)
+       AND payment_status != 'paid'`,
+    [payment_date || null, payment_reference || null, notes || null, settled_by || null, runId]
+  );
+  return result.affectedRows;
+};
+
 /* ─────────────────────────────────────────────
    FINES (for payroll deduction)
 ───────────────────────────────────────────── */
@@ -678,7 +696,7 @@ module.exports = {
   getNightShiftRate, addNightShiftRate, listNightShiftRates,
   listPayrollRuns, getPayrollRun, findPayrollRunByPeriod, createPayrollRun,
   updatePayrollRunSalaryDate, updatePayrollRunStatus, lockPayrollRun, clearPayrollItems,
-  getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem, markPayrollItemPaid,
+  getPayrollItems, listPayrollItems: getPayrollItems, upsertPayrollItem, markPayrollItemPaid, disburseBankBatch,
   getPayrollItemById, updatePayrollItemDeductions, syncPayrollRunTotals,
   getActiveFinesAmount, markFinesDeducted, listFines, createFine, updateFineStatus,
   listFineTypes, createFineType, updateFineType, getFineTypeByTriggerRule,

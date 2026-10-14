@@ -34,7 +34,7 @@ const fileFilter = (_req, file, cb) => {
   }
 };
 
-/** Accepts up to 2 files: aadhar_doc and pan_doc */
+/** Accepts files: aadhar_doc, pan_doc, and photo */
 const employeeDocUpload = multer({
   storage,
   fileFilter,
@@ -42,6 +42,7 @@ const employeeDocUpload = multer({
 }).fields([
   { name: 'aadhar_doc', maxCount: 1 },
   { name: 'pan_doc', maxCount: 1 },
+  { name: 'photo', maxCount: 1 },
 ]);
 
 const logoFilter = (_req, file, cb) => {

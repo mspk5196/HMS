@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.health import router as health_router
 from app.api.v1.roster import router as roster_router
+from app.api.v1.voice import router as voice_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -23,6 +24,7 @@ app.add_middleware(
 # Mount Routers
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(roster_router, prefix=settings.API_V1_STR)
+app.include_router(voice_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():

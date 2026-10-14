@@ -72,6 +72,8 @@ router.post('/payroll-runs/:id/lock', gate('payroll.approve_payroll', ctrl.lockR
 router.get('/payroll-runs/:id/items', canViewPayroll, ctrl.listItems);
 router.patch('/payroll-runs/:id/items/:itemId', gate('payroll.edit', ctrl.updatePayrollItemDeduction));
 router.patch('/payroll-items/:itemId/pay', gate('payroll.edit', ctrl.markItemPaid));
+router.post('/payroll-runs/:id/disburse-bank', gate('payroll.approve_payroll', ctrl.disburseBankBatch));
+router.get('/payroll-runs/:id/export-bank-payout', canViewPayroll, ctrl.exportBankPayoutSheet);
 router.get('/payroll-runs/:id/calculation-summary', canViewPayroll, ctrl.getCalculationSummary);
 router.get('/payroll-runs/:id/export', canViewPayroll, ctrl.exportPayrollRun);
 router.get('/payroll-runs/:id/payslip/:employeeId', canViewPayroll, ctrl.getPayslip);
