@@ -88,7 +88,7 @@ Customer-hosted organizations receive an isolated HRMS deployment and an isolate
 
 # 3. Core Concepts
 
-The system has five major concepts:
+The system has six major concepts:
 
 ```text
 Organization
@@ -100,6 +100,10 @@ Organization
   │   └── Biometric Connectors
   │       │
   │       └── Biometric Devices
+  │
+  ├── AI Service Platform
+  │   ├── Cloud Shared AI (ai.mspkapps.in)
+  │   └── Customer-Local AI Sidecar
   │
   ├── Users / Roles
   │
@@ -200,6 +204,36 @@ Erode Branch
      ├── ESSL-002
      └── ESSL-003
 ```
+
+---
+
+## 3.6 AI Service Platform
+
+The AI service is an independently deployed microservice responsible for heavy computational workloads:
+
+```text
+AI Service Platform (Python 3.11 / FastAPI)
+  │
+  ├── Clinical Ambient Scribe (Whisper STT large-v3)
+  │
+  ├── Voiceprint Identification (SpeechBrain acoustic embeddings)
+  │
+  ├── Clinical NLP & Dialogue Parsing (Ollama LLM)
+  │
+  └── Duty Roster Optimizer (Google OR-Tools)
+```
+
+The AI Service runs on a dedicated domain (e.g. `https://ai.mspkapps.in` or `https://ai.nehahospitals.in`) with isolated GPU/CPU scaling.
+
+Hospital frontends **never** connect to the AI Service directly. All AI traffic flows:
+
+```text
+Browser / Mobile App
+       ↓
+  HRMS Backend (Node.js)  ───[ X-Internal-Key + X-Tenant-ID ]───►  AI Service
+```
+
+For customer-hosted, air-gapped hospitals, the AI service can optionally be deployed locally as a Docker sidecar on the customer's server (`http://localhost:8000`).
 
 ---
 
@@ -1825,6 +1859,14 @@ Installation Manager
 # 52. Recommended Implementation Order
 
 Do not implement everything simultaneously.
+
+### Phase 0 — Standalone AI Service Platform
+
+1. Containerize AI service (`AiService/Dockerfile`).
+2. Deploy AI Service to dedicated domain (e.g. `ai.mspkapps.in`).
+3. Harden CORS to accept only backend hosts (block direct browser access).
+4. Update Backend AI client (`aiClient.js`) to target dedicated AI domain and pass `X-Internal-Key` and `X-Tenant-ID`.
+5. Support optional customer-hosted local AI sidecar in Docker compose.
 
 ### Phase 1 — Multi-tenancy
 

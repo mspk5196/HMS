@@ -139,4 +139,22 @@ db.on('connection', (connection) => {
   }
 })();
 
-module.exports = db;
+// Multi-tenant Dynamic Proxy:
+// Routes queries to the active request's tenant database pool (via AsyncLocalStorage),
+// or falls back to the default single-tenant pool when running outside an HTTP request.
+const { getTenantContext } = require('./tenantStorage');
+
+const dbProxy = new Proxy(db, {
+  get(target, prop, receiver) {
+    const ctx = getTenantContext();
+    const activePool = (ctx && ctx.pool) ? ctx.pool : db;
+    const value = Reflect.get(activePool, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(activePool);
+    }
+    return value;
+  }
+});
+
+module.exports = dbProxy;
+

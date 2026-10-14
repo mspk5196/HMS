@@ -57,6 +57,7 @@ router.post('/corrections', ctrl.createCorrection);
 router.patch('/corrections/:id/review', gate('attendance.edit', ctrl.reviewCorrection));
 
 // Biometric Devices & eSSL Live Sync
+router.post('/connector/heartbeat', ctrl.connectorHeartbeat);
 router.get('/devices', canViewBiometric, ctrl.listDevices);
 router.post('/devices', gate('biometric.manage_devices', ctrl.createDevice));
 router.post('/devices/sync-all', gate('biometric.sync_device', ctrl.syncAllDevices));

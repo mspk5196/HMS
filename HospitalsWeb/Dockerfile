@@ -9,8 +9,7 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci || npm install
 
-# Build argument for frontend API URL
-ARG VITE_API_URL="https://neha.tylo.co.in/api"
+ARG VITE_API_URL="/api"
 ENV VITE_API_URL=$VITE_API_URL
 
 # Copy project files and build

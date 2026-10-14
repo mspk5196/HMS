@@ -21,6 +21,16 @@ class Settings:
     INTERNAL_SERVICE_KEY: str = os.getenv("AI_INTERNAL_KEY", "neha-ai-internal-key-2026")
     LOG_LEVEL: str = os.getenv("AI_LOG_LEVEL", "info")
 
+    # Allowed backend origins for CORS (Server-to-Server / Reverse proxy)
+    ALLOWED_ORIGINS: list = [
+        origin.strip()
+        for origin in os.getenv(
+            "AI_ALLOWED_ORIGINS",
+            "http://localhost:7000,http://127.0.0.1:7000,http://localhost:5000,http://nehahospital-backend:5000,https://neha.tylo.co.in,https://neha.mspkapps.in"
+        ).split(",")
+        if origin.strip()
+    ]
+
     # Local Ollama LLM Configuration
     OLLAMA_API_URL: str = os.getenv("OLLAMA_API_URL", "http://127.0.0.1:11434/api/generate")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:1.5b")

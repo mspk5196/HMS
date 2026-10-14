@@ -28,22 +28,56 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 
-const defaultOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://front-hacksaw-yippee.ngrok-free.dev'];
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:8086',
+  'http://127.0.0.1:8086',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:3000',
+  'http://localhost:5006',
+  'https://front-hacksaw-yippee.ngrok-free.dev'
+];
 const envOrigins = (process.env.WEB_ORIGIN || '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
 const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
+const isLocalhostOrigin = (origin) => {
+  try {
+    const url = new URL(origin);
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname.endsWith('.localhost') ||
+      url.hostname.endsWith('.local')
+    );
+  } catch {
+    return false;
+  }
+};
+
 const corsOptions = {
   origin(origin, callback) {
     if (!origin) return callback(null, true);
+    if (allowedOrigins.includes('*')) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+    if (isLocalhostOrigin(origin)) return callback(null, true);
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-api-key',
+    'X-Connector-Key',
+    'x-tenant-code',
+    'x-tenant-id',
+    'x-branch-id'
+  ],
   optionsSuccessStatus: 204,
 };
 
@@ -71,8 +105,32 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint (always accessible for liveness & uptime probes)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Neha Hospitals HRMS Backend',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ─── Multi-Tenant Resolver Middleware ───────────────────────────────────────
+// Identifies tenant from domain/subdomain or connector key and binds AsyncLocalStorage DB pool
+const tenantResolver = require('./middleware/tenantResolver');
+app.use(tenantResolver);
+
 // ─── Module routes ──────────────────────────────────────────────────────────
+// Control Plane routes are mounted ONLY on platform server (never customer-hosted servers)
+const isControlPlaneEnabled = process.env.ENABLE_CONTROL_PLANE !== 'false';
+if (isControlPlaneEnabled) {
+  app.use('/api/control-plane', require('./modules/control_plane/control_plane.routes'));
+} else {
+  app.use('/api/control-plane', (req, res) => {
+    res.status(404).json({ success: false, message: 'Control Plane is only available on Platform infrastructure.' });
+  });
+}
 app.use('/api/auth',       require('./modules/auth/auth.routes'));
+app.use('/api/branches',   require('./modules/branch/branch.routes'));
 app.use('/api/hr',         require('./modules/hr/hr.routes'));
 app.use('/api/leave',      require('./modules/leave/leave.routes'));
 app.use('/api/patient',    require('./modules/patient/patient.routes'));

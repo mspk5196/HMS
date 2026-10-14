@@ -1,0 +1,133 @@
+# ==============================================================================
+# Neha Hospitals HRMS - Local Docker Desktop Multi-Tenant Testing Stack
+# Dedicated exclusively for local developer testing on Docker Desktop
+# Location: docker/docker-compose.local.yml
+# ==============================================================================
+
+name: nehahospitals
+
+services:
+  # ─── Local MySQL Database ───────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: neha-local-mysql
+    restart: unless-stopped
+    command: --default-time-zone=+05:30
+    env_file:
+      - .env.local
+    environment:
+      TZ: Asia/Kolkata
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: nehahospitals
+    ports:
+      - "3312:3306"
+    volumes:
+      - neha_local_mysql_data:/var/lib/mysql
+      - ../Sql/confedential/neha_hospital_schema-v11-after_AI_service.sql:/docker-entrypoint-initdb.d/01_base_schema.sql:ro
+      - ../Sql/master_multitenant_branch_migration.sql:/docker-entrypoint-initdb.d/02_master_multitenant.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - neha-local-network
+
+  # ─── Standalone AI Microservice ──────────────────────────────────────────────
+  ai-service:
+    build:
+      context: ../AiService
+      dockerfile: Dockerfile
+    container_name: neha-local-ai
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - neha_local_ai_cache:/app/models_cache
+      - ../AiService/app:/app/app:ro
+    env_file:
+      - .env.local
+    environment:
+      AI_SERVICE_HOST: "0.0.0.0"
+      AI_SERVICE_PORT: "8000"
+      AI_INTERNAL_KEY: ${AI_INTERNAL_KEY:-neha-ai-internal-key-2026}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 25s
+    networks:
+      - neha-local-network
+
+  # ─── Multi-Tenant Backend API ────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../Backend
+      dockerfile: Dockerfile
+    container_name: neha-local-backend
+    restart: unless-stopped
+    ports:
+      - "5006:5000"
+    volumes:
+      - neha_local_backend_uploads:/app/uploads
+      - ../Backend/src:/app/src:ro
+    env_file:
+      - .env.local
+    environment:
+      TZ: Asia/Kolkata
+      NODE_ENV: development
+      PORT: 5000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      DB_NAME: nehahospitals
+      CONTROL_PLANE_DB_NAME: control_plane_db
+      DB_SSL: "false"
+      ENABLE_CONTROL_PLANE: "true"
+      IS_CONTROL_PLANE_ENABLED: "true"
+      WEB_ORIGIN: "http://localhost:8086,http://localhost:5173,http://localhost:8080,http://127.0.0.1:8086,*"
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_INTERNAL_KEY: ${AI_INTERNAL_KEY:-neha-ai-internal-key-2026}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      neha-local-network:
+        aliases:
+          - nehahospital-backend
+
+  # ─── Frontend Web (Nginx Reverse Proxy) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ../HospitalsWeb
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: neha-local-frontend
+    restart: unless-stopped
+    ports:
+      - "8086:80"
+    depends_on:
+      - backend
+    networks:
+      - neha-local-network
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  neha-local-network:
+    name: neha-local-network
+    driver: bridge
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  neha_local_mysql_data:
+    name: neha_local_mysql_data
+  neha_local_ai_cache:
+    name: neha_local_ai_cache
+  neha_local_backend_uploads:
+    name: neha_local_backend_uploads

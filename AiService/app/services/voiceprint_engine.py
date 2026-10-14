@@ -4,14 +4,21 @@ Acoustic Speaker Voiceprint Extraction & Cosine Similarity Matching Engine.
 Allows one-time enrollment of Doctor Voiceprints and matches consultation speaker clusters
 to definitively identify the Doctor with 100% on-premise local execution.
 """
-
+from __future__ import annotations
 import math
 import io
 import os
 import logging
 from typing import List, Dict, Any, Tuple, Optional
-import torch
-import torchaudio
+try:
+    import torch
+    import torchaudio
+    HAS_TORCH = True
+except ImportError:
+    torch = None
+    torchaudio = None
+    HAS_TORCH = False
+
 import av
 
 logger = logging.getLogger(__name__)
@@ -22,11 +29,15 @@ class VoiceprintEngine:
     def __init__(self, sample_rate: int = 16000, n_mfcc: int = 40):
         self.sample_rate = sample_rate
         self.n_mfcc = n_mfcc
-        self.mfcc_transform = torchaudio.transforms.MFCC(
-            sample_rate=self.sample_rate,
-            n_mfcc=self.n_mfcc,
-            melkwargs={"n_fft": 512, "n_mels": 64, "hop_length": 160}
-        )
+        if HAS_TORCH and torchaudio:
+            self.mfcc_transform = torchaudio.transforms.MFCC(
+                sample_rate=self.sample_rate,
+                n_mfcc=self.n_mfcc,
+                melkwargs={"n_fft": 512, "n_mels": 64, "hop_length": 160}
+            )
+        else:
+            self.mfcc_transform = None
+            logger.warning("[VoiceprintEngine] PyTorch/torchaudio not installed. Acoustic voiceprint extraction running in stub mode.")
 
     @classmethod
     def get_instance(cls) -> "VoiceprintEngine":

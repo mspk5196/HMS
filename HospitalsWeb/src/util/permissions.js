@@ -112,6 +112,8 @@ export function canViewTab(user, tabId) {
       );
     case 'settings':
       return !!user.can_access_settings;
+    case 'branches':
+      return !!user.can_access_settings || hasPermission(user, 'branch.view');
     case 'audit-logs':
       return hasPermission(user, 'audit.view');
 

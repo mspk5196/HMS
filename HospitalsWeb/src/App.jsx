@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
 import { ThemeProvider } from './context/ThemeContext';
 import { HospitalProfileProvider } from './context/HospitalProfileContext';
 
@@ -41,7 +42,11 @@ function AppContent() {
   return (
     <main className="w-full min-h-screen bg-[#f8fafc] dark:bg-[#0b0e14] text-slate-900 dark:text-slate-100 transition-colors duration-200">
       {user ? (
-        <AdminDashboard user={user} onLogout={handleLogout} />
+        user.role === 'SUPER_ADMIN' || user.isControlPlane ? (
+          <SuperAdminDashboard user={user} onLogout={handleLogout} />
+        ) : (
+          <AdminDashboard user={user} onLogout={handleLogout} />
+        )
       ) : (
         <Login onLogin={handleLogin} />
       )}

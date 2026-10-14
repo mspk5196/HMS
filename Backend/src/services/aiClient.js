@@ -1,24 +1,55 @@
 const http = require('http');
 const https = require('https');
 const { AppError } = require('../utils/errors');
+const { getTenantContext } = require('../config/tenantStorage');
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+const DEFAULT_AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 const AI_INTERNAL_KEY = process.env.AI_INTERNAL_KEY || 'neha-ai-internal-key-2026';
+
+/**
+ * Resolves the appropriate AI Service URL for the active tenant (supports customer-local sidecars)
+ */
+const getEffectiveAiUrl = () => {
+  const ctx = getTenantContext();
+  if (ctx && ctx.tenant && ctx.tenant.ai_service_url) {
+    return ctx.tenant.ai_service_url;
+  }
+  return DEFAULT_AI_SERVICE_URL;
+};
+
+/**
+ * Builds standard security and tenant-isolation headers for server-to-server AI communication
+ */
+const getEffectiveAiHeaders = (extraHeaders = {}) => {
+  const headers = {
+    'X-Internal-Key': AI_INTERNAL_KEY,
+    ...extraHeaders
+  };
+  const ctx = getTenantContext();
+  if (ctx && ctx.tenant) {
+    headers['X-Tenant-ID'] = String(ctx.tenant.id || '');
+    headers['X-Tenant-Code'] = String(ctx.tenant.code || '');
+  }
+  if (ctx && ctx.branchId) {
+    headers['X-Branch-ID'] = String(ctx.branchId);
+  }
+  return headers;
+};
 
 /**
  * Generic JSON requester for standalone AiService
  */
 const requestAiService = async (endpoint, options = {}) => {
-  const url = new URL(`${AI_SERVICE_URL}${endpoint}`);
+  const baseUrl = getEffectiveAiUrl();
+  const url = new URL(`${baseUrl}${endpoint}`);
   const isHttps = url.protocol === 'https:';
   const transport = isHttps ? https : http;
 
   const method = options.method || 'GET';
-  const headers = {
+  const headers = getEffectiveAiHeaders({
     'Content-Type': 'application/json',
-    'X-Internal-Key': AI_INTERNAL_KEY,
     ...(options.headers || {})
-  };
+  });
 
   const body = options.body ? JSON.stringify(options.body) : null;
 
@@ -101,12 +132,11 @@ const transcribeAudio = async (fileBuffer, fileName, { language, task, prompt } 
   if (task) formData.append('task', task);
   if (prompt) formData.append('prompt', prompt);
 
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/transcribe`, {
+  const baseUrl = getEffectiveAiUrl();
+  const res = await fetch(`${baseUrl}/api/v1/voice/transcribe`, {
     method: 'POST',
     body: formData,
-    headers: {
-      'X-Internal-Key': AI_INTERNAL_KEY
-    }
+    headers: getEffectiveAiHeaders()
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -120,12 +150,11 @@ const enrollVoiceprint = async (fileBuffer, fileName) => {
   const blob = new Blob([fileBuffer], { type: 'audio/webm' });
   formData.append('file', blob, fileName || 'voice_sample.webm');
 
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/enroll-voiceprint`, {
+  const baseUrl = getEffectiveAiUrl();
+  const res = await fetch(`${baseUrl}/api/v1/voice/enroll-voiceprint`, {
     method: 'POST',
     body: formData,
-    headers: {
-      'X-Internal-Key': AI_INTERNAL_KEY
-    }
+    headers: getEffectiveAiHeaders()
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -165,12 +194,11 @@ const ambientScribe = async (
   if (patientAge !== undefined && patientAge !== null) formData.append('patient_age', String(patientAge));
   if (patientGender) formData.append('patient_gender', patientGender);
 
-  const res = await fetch(`${AI_SERVICE_URL}/api/v1/voice/ambient-scribe`, {
+  const baseUrl = getEffectiveAiUrl();
+  const res = await fetch(`${baseUrl}/api/v1/voice/ambient-scribe`, {
     method: 'POST',
     body: formData,
-    headers: {
-      'X-Internal-Key': AI_INTERNAL_KEY
-    }
+    headers: getEffectiveAiHeaders()
   });
   if (!res.ok) {
     const errText = await res.text();

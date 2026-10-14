@@ -1,3 +1,5 @@
+name: nehahospitals
+
 services:
   # ─── MySQL Database ──────────────────────────────────────────────────────────
   nehahospital-mysql:
@@ -15,7 +17,7 @@ services:
       - "3312:3306"
     volumes:
       - nehahospital_mysql_data:/var/lib/mysql
-      - ./Sql/neha_hospital_schema-v6-after-biometric.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ../Sql/neha_hospital_schema-v6-after-biometric.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
       interval: 10s
@@ -28,7 +30,7 @@ services:
   # ─── Backend API ─────────────────────────────────────────────────────────────
   nehahospital-backend:
     # build:
-    #   context: ./Backend
+    #   context: ../Backend
     #   dockerfile: Dockerfile
     image: pcdpbit/nehahospital-backend:${IMG_TAG}
     container_name: nehahospital-backend
@@ -38,7 +40,7 @@ services:
     volumes:
       - /srv/nehahospital/uploads:/app/uploads
     env_file:
-      - path: .env
+      - path: ../.env
         required: false
     environment:
       TZ: Asia/Kolkata

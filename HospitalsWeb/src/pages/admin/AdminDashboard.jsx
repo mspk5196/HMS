@@ -30,6 +30,7 @@ import Settings from './Settings';
 import UsersAuthentication from './UsersAuthentication';
 import Approvals from './Approvals';
 import AuditLogs from './AuditLogs';
+import BranchManagement from '../BranchManagement';
 import { apiFetch } from '../../util/api';
 import { canViewTab } from '../../util/permissions';
 
@@ -63,6 +64,7 @@ const ALL_TABS = [
   'users-auth',
   'approvals',
   'settings',
+  'branches',
   'audit-logs',
 ];
 
@@ -264,6 +266,8 @@ export default function AdminDashboard({ user, onLogout }) {
         return <Approvals user={user} />;
       case 'settings':
         return <Settings user={user} />;
+      case 'branches':
+        return <BranchManagement user={user} />;
       case 'audit-logs':
         return <AuditLogs user={user} />;
       default:

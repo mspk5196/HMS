@@ -524,6 +524,31 @@ const waiveLateFine = asyncHandler(async (req, res) => {
   return res.json(success(null, 'Late attendance fine waived.'));
 });
 
+const connectorHeartbeat = asyncHandler(async (req, res) => {
+  const connector = req.connector;
+  if (!connector) {
+    return res.status(401).json(fail('Unauthenticated connector'));
+  }
+
+  const { version, public_url } = req.body;
+  try {
+    const tenantPoolManager = require('../../db/tenantPoolManager');
+    await tenantPoolManager.controlPlanePool.query(
+      `UPDATE biometric_connectors 
+       SET last_heartbeat = NOW(), 
+           sync_status = 'online',
+           version = COALESCE(?, version),
+           public_url = COALESCE(?, public_url)
+       WHERE id = ?`,
+      [version || null, public_url || null, connector.id]
+    );
+  } catch (err) {
+    console.warn('[connectorHeartbeat] Warning updating heartbeat in control plane:', err.message);
+  }
+
+  return res.json(success({ status: 'online', acknowledgedAt: new Date().toISOString() }, 'Heartbeat acknowledged'));
+});
+
 module.exports = {
   listSummaries,
   getAttendanceRegister,
@@ -562,5 +587,6 @@ module.exports = {
   applyLateFines,
   cancelLateFine,
   waiveLateFine,
+  connectorHeartbeat,
 };
 

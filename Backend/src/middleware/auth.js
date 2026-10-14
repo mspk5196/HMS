@@ -9,6 +9,20 @@ const jwt = require('jsonwebtoken');
 const { fail } = require('../utils/response');
 
 const verifyToken = (req, res, next) => {
+  // Allow authenticated Biometric Connectors to proceed with administrator permissions
+  if (req.connector) {
+    req.user = {
+      id: 0,
+      username: `connector_${req.connector.name || 'edge'}`,
+      role_id: 1,
+      role_name: 'Administrator',
+      can_access_settings: true,
+      permissions: ['manage_all', 'biometric.view', 'attendance.view', 'attendance.import_punches'],
+      isConnector: true,
+    };
+    return next();
+  }
+
   const isProtectedEnabled = process.env.PROTECTED_ROUTES_ENABLED !== 'false';
   const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
   

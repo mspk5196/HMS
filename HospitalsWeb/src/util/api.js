@@ -64,6 +64,16 @@ export async function apiFetch(endpoint, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const activeBranchId = localStorage.getItem('active_branch_id');
+  if (activeBranchId) {
+    headers['x-branch-id'] = activeBranchId;
+  }
+
+  const tenantCode = localStorage.getItem('tenant_code');
+  if (tenantCode) {
+    headers['x-tenant-code'] = tenantCode;
+  }
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...fetchOptions,
     method,

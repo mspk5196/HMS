@@ -12,6 +12,7 @@ const config = require('../config');
 const { EsslDevice } = require('../drivers/essl.driver');
 
 const STORAGE_FILE = path.resolve(__dirname, '..', '..', 'devices.json');
+const OFFLINE_BUFFER_FILE = path.resolve(__dirname, '..', '..', 'offline_punches.json');
 
 /**
  * Normalizes the backend endpoint URL so both 'https://neha.tylo.co.in' and 'https://neha.tylo.co.in/api' work perfectly.
@@ -28,11 +29,24 @@ class DeviceManager {
     this.devices = new Map();
     this.deviceMetrics = new Map();
     this.loadDevices();
+
     // Auto-sync devices from central Backend on startup and every 60s
     this.syncDevicesFromBackend().catch(() => {});
     this._deviceSyncTimer = setInterval(() => {
       this.syncDevicesFromBackend().catch(() => {});
     }, 60000);
+
+    // Heartbeat reporting to Control Plane
+    this.sendHeartbeat().catch(() => {});
+    this._heartbeatTimer = setInterval(() => {
+      this.sendHeartbeat().catch(() => {});
+    }, 60000);
+
+    // Periodic flush of offline buffered punches
+    this.flushOfflineBuffer().catch(() => {});
+    this._bufferFlushTimer = setInterval(() => {
+      this.flushOfflineBuffer().catch(() => {});
+    }, 45000);
   }
 
   /**
@@ -255,7 +269,106 @@ class DeviceManager {
   }
 
   /**
+   * Loads pending offline punches from local storage file
+   */
+  loadOfflineBuffer() {
+    try {
+      if (fs.existsSync(OFFLINE_BUFFER_FILE)) {
+        const raw = fs.readFileSync(OFFLINE_BUFFER_FILE, 'utf8');
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+      }
+    } catch (err) {
+      console.warn('[OfflineBuffer] Error loading offline buffer:', err.message);
+    }
+    return [];
+  }
+
+  /**
+   * Saves punches to offline buffer file when central backend is unreachable
+   */
+  saveToOfflineBuffer(newPunches) {
+    if (!newPunches || newPunches.length === 0) return;
+    try {
+      const existing = this.loadOfflineBuffer();
+      const existingKeys = new Set(existing.map((p) => `${p.employee_code || p.employee_id}_${p.punch_time}`));
+      let added = 0;
+      for (const p of newPunches) {
+        const key = `${p.employee_code || p.employee_id}_${p.punch_time}`;
+        if (!existingKeys.has(key)) {
+          existing.push(p);
+          existingKeys.add(key);
+          added++;
+        }
+      }
+      if (added > 0) {
+        fs.writeFileSync(OFFLINE_BUFFER_FILE, JSON.stringify(existing, null, 2), 'utf8');
+        console.log(`[OfflineBuffer] Buffered ${added} punch(es) locally due to offline network. Total pending: ${existing.length}`);
+      }
+    } catch (err) {
+      console.error('[OfflineBuffer] Failed to write offline buffer:', err.message);
+    }
+  }
+
+  /**
+   * Flushes locally buffered punches to central backend once network connection is restored
+   */
+  async flushOfflineBuffer() {
+    const buffer = this.loadOfflineBuffer();
+    if (buffer.length === 0) return;
+
+    console.log(`[OfflineBuffer] Attempting to flush ${buffer.length} buffered punch(es) to central backend...`);
+    const targetUrl = getBackendApiUrl('/attendance/punches/import');
+    if (!targetUrl) return;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (config.mainBackendApiKey) {
+      headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+      headers['x-api-key'] = config.mainBackendApiKey;
+    }
+
+    try {
+      const resp = await axios.post(targetUrl, { punches: buffer }, { headers, timeout: 20000 });
+      console.log(`[OfflineBuffer] Successfully flushed ${buffer.length} buffered punch(es) to backend!`);
+      fs.writeFileSync(OFFLINE_BUFFER_FILE, JSON.stringify([], null, 2), 'utf8');
+      return resp.data;
+    } catch (err) {
+      console.warn(`[OfflineBuffer] Backend still unreachable (${err.message}). Retrying in next cycle.`);
+    }
+  }
+
+  /**
+   * Periodic outbound heartbeat reporting connector health to the Control Plane
+   */
+  async sendHeartbeat() {
+    const targetUrl = getBackendApiUrl('/attendance/connector/heartbeat');
+    if (!targetUrl) return;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (config.mainBackendApiKey) {
+      headers['Authorization'] = `Bearer ${config.mainBackendApiKey}`;
+      headers['x-api-key'] = config.mainBackendApiKey;
+    }
+
+    const payload = {
+      connector_key: config.mainBackendApiKey,
+      public_url: config.publicUrl,
+      version: '1.0.0',
+      devices_total: this.devices.size,
+      buffered_punches: this.loadOfflineBuffer().length,
+      uptime_seconds: Math.floor(process.uptime()),
+    };
+
+    try {
+      await axios.post(targetUrl, payload, { headers, timeout: 5000 });
+    } catch (err) {
+      // Non-fatal if backend is rebooting
+    }
+  }
+
+  /**
    * Forwards a list of punches to the central Neha Hospital backend.
+   * Seamlessly falls back to local offline buffering if internet/network fails.
    */
   async forwardPunchesToBackend(punches) {
     if (!punches || punches.length === 0) return { inserted: 0, message: 'No punches to forward' };
@@ -274,11 +387,14 @@ class DeviceManager {
 
     try {
       const resp = await axios.post(targetUrl, { punches }, { headers, timeout: 15000 });
+      // On success, try flushing any previously buffered punches as connectivity is confirmed healthy
+      this.flushOfflineBuffer().catch(() => {});
       return resp.data;
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message;
-      console.error(`[DeviceManager] Failed to forward punches to backend: ${errMsg}`);
-      throw new Error(`Failed to forward punches to main backend (${targetUrl}): ${errMsg}`);
+      console.warn(`[DeviceManager] Failed to forward punches to backend (${errMsg}). Buffering offline...`);
+      this.saveToOfflineBuffer(punches);
+      return { inserted: 0, buffered: punches.length, offline: true, message: `Punches buffered offline: ${errMsg}` };
     }
   }
 
