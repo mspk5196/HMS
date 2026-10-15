@@ -209,6 +209,27 @@ export default function UsersAuthentication() {
     }
   };
 
+  const toggleLockAuthMethods = async (user) => {
+    try {
+      const isCurrentlyLocked = Boolean(user.auth_methods_locked);
+      const nextLocked = !isCurrentlyLocked;
+      await apiFetch(`/users/${user.id}/auth-methods`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          auth_methods_locked: nextLocked,
+        }),
+      });
+      flash(
+        nextLocked
+          ? `🔒 Authentication methods for ${user.username} are now LOCKED. Employee cannot change login methods in profile.`
+          : `🔓 Authentication methods for ${user.username} are now UNLOCKED.`
+      );
+      await load();
+    } catch (err) {
+      fail(err, 'Failed to update authentication lock status.');
+    }
+  };
+
   // Distinct departments for filter
   const departments = useMemo(() => {
     const set = new Set();
@@ -541,6 +562,24 @@ export default function UsersAuthentication() {
                                 <span className={`text-[9px] px-1 rounded ${googleActive ? 'bg-teal-200/80 text-teal-900' : 'bg-slate-200 text-slate-600'}`}>
                                   {googleActive ? 'ON' : 'OFF'}
                                 </span>
+                              </button>
+
+                              {/* Admin Policy Lock Toggle Button */}
+                              <button
+                                type="button"
+                                onClick={() => toggleLockAuthMethods(u)}
+                                title={
+                                  u.auth_methods_locked
+                                    ? "Methods are LOCKED. Employee cannot change login methods in their profile. Click to unlock."
+                                    : "Methods are UNLOCKED. Employee can change login methods in their profile. Click to lock."
+                                }
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                  u.auth_methods_locked
+                                    ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800 hover:bg-amber-100 shadow-2xs'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                <span>{u.auth_methods_locked ? '🔒 Locked' : '🔓 Unlocked'}</span>
                               </button>
                             </div>
                             {u.google_email && (
@@ -1109,6 +1148,9 @@ function EditUserModal({ user, roles = [], onClose, onSuccess, onError }) {
   const [email, setEmail] = useState(user.email || '');
   const [phone, setPhone] = useState(user.phone || '');
   const [isActive, setIsActive] = useState(user.is_active);
+  const [passwordEnabled, setPasswordEnabled] = useState(user.password_login_enabled !== 0);
+  const [googleEnabled, setGoogleEnabled] = useState(user.google_login_enabled !== 0);
+  const [authLocked, setAuthLocked] = useState(Boolean(user.auth_methods_locked));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -1116,6 +1158,10 @@ function EditUserModal({ user, roles = [], onClose, onSuccess, onError }) {
     const cleanUser = sanitizeUsername(username);
     if (!cleanUser || cleanUser.length < 3) {
       onError({ message: 'Username must be at least 3 characters.' });
+      return;
+    }
+    if (!passwordEnabled && !googleEnabled) {
+      onError({ message: 'At least one authentication method (Password or Google SSO) must remain enabled.' });
       return;
     }
     try {
@@ -1128,6 +1174,9 @@ function EditUserModal({ user, roles = [], onClose, onSuccess, onError }) {
           email: email.trim() || null,
           phone: phone.trim() || null,
           is_active: isActive,
+          password_login_enabled: passwordEnabled,
+          google_login_enabled: googleEnabled,
+          auth_methods_locked: authLocked,
         }),
       });
       onSuccess(`Account updated for ${cleanUser}.`);
@@ -1209,6 +1258,65 @@ function EditUserModal({ user, roles = [], onClose, onSuccess, onError }) {
               placeholder="e.g. 9876543210"
               className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             />
+          </div>
+
+          {/* Authentication Security & Lock Policy */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Authentication Policy
+              </span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                authLocked
+                  ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              }`}>
+                {authLocked ? '🔒 Locked' : '🔓 Unlocked'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={passwordEnabled}
+                  onChange={(e) => setPasswordEnabled(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="font-semibold text-slate-800 dark:text-slate-200">🔑 Password</span>
+              </label>
+
+              <label className="flex items-center gap-2 p-2 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={googleEnabled}
+                  onChange={(e) => setGoogleEnabled(e.target.checked)}
+                  className="rounded text-teal-600 focus:ring-teal-500"
+                />
+                <span className="font-semibold text-slate-800 dark:text-slate-200">🌐 Google SSO</span>
+              </label>
+            </div>
+
+            {/* Lock Toggle */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+              <div>
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                  <span>🔒 Lock Methods for Employee</span>
+                </div>
+                <div className="text-[10px] text-slate-500 leading-tight">
+                  Employee cannot modify their auth methods in their personal profile
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={authLocked}
+                  onChange={(e) => setAuthLocked(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+              </label>
+            </div>
           </div>
 
           {/* Active Status */}

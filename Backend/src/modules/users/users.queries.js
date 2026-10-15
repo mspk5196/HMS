@@ -6,6 +6,7 @@ const listUsers = async () => {
             COALESCE(u.must_change_password, 0) AS must_change_password,
             COALESCE(u.google_login_enabled, 1) AS google_login_enabled,
             COALESCE(u.password_login_enabled, 1) AS password_login_enabled,
+            COALESCE(u.auth_methods_locked, 0) AS auth_methods_locked,
             u.google_email, u.google_id,
             COALESCE(r.name, 'Staff') AS role_name,
             e.id AS employee_id, e.full_name AS employee_name, e.employee_code,
@@ -132,7 +133,7 @@ const createUser = async ({ employee_id, username, password_hash, role_id, email
 };
 
 const updateUser = async (id, data) => {
-  const allowed = ['username', 'role_id', 'email', 'phone', 'is_active', 'google_login_enabled', 'password_login_enabled'];
+  const allowed = ['username', 'role_id', 'email', 'phone', 'is_active', 'google_login_enabled', 'password_login_enabled', 'auth_methods_locked'];
   const fields = [];
   const vals = [];
   for (const key of allowed) {
@@ -153,7 +154,7 @@ const setPasswordHash = async (id, passwordHash) => {
   );
 };
 
-const updateAuthMethods = async (id, { google_login_enabled, password_login_enabled }) => {
+const updateAuthMethods = async (id, { google_login_enabled, password_login_enabled, auth_methods_locked }) => {
   const fields = [];
   const vals = [];
   if (google_login_enabled !== undefined) {
@@ -163,6 +164,10 @@ const updateAuthMethods = async (id, { google_login_enabled, password_login_enab
   if (password_login_enabled !== undefined) {
     fields.push('password_login_enabled = ?');
     vals.push(password_login_enabled ? 1 : 0);
+  }
+  if (auth_methods_locked !== undefined) {
+    fields.push('auth_methods_locked = ?');
+    vals.push(auth_methods_locked ? 1 : 0);
   }
   if (!fields.length) return;
   vals.push(id);

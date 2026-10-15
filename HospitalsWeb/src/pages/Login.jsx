@@ -47,18 +47,6 @@ export default function Login({ onLogin }) {
           client_id: googleClientId,
           callback: handleGoogleCredentialResponse,
         });
-
-        const btnDiv = document.getElementById('googleNativeBtn');
-        if (btnDiv) {
-          window.google.accounts.id.renderButton(btnDiv, {
-            theme: 'outline',
-            size: 'large',
-            width: 380,
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'left',
-          });
-        }
       } catch (e) {
         console.warn('[GIS Init] Notice:', e.message);
       }
@@ -469,9 +457,6 @@ export default function Login({ onLogin }) {
 
             {/* ── Official Google OAuth2 Button Section ── */}
             <div>
-              {/* Optional container for Google Native GIS Button */}
-              <div id="googleNativeBtn" className="flex justify-center mb-2 empty:hidden"></div>
-
               {/* High-Performance Google OAuth Action Button */}
               <button
                 type="button"

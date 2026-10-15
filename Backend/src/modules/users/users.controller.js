@@ -26,8 +26,9 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const updateAuthMethods = asyncHandler(async (req, res) => {
-  const targetId = req.params.id === 'me' ? req.user.id : Number(req.params.id);
-  const result = await svc.updateAuthMethods(targetId, req.body);
+  const isSelf = req.params.id === 'me';
+  const targetId = isSelf ? req.user.id : Number(req.params.id);
+  const result = await svc.updateAuthMethods(targetId, req.body, { isSelf });
   res.json(success(result, 'Authentication methods updated'));
 });
 

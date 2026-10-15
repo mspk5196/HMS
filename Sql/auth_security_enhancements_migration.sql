@@ -64,6 +64,23 @@ PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
+-- auth_methods_locked
+SET @columnname = "auth_methods_locked";
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (TABLE_SCHEMA = @dbname)
+      AND (TABLE_NAME = @tablename)
+      AND (COLUMN_NAME = @columnname)
+  ) > 0,
+  "SELECT 1",
+  "ALTER TABLE users ADD COLUMN auth_methods_locked TINYINT(1) NOT NULL DEFAULT 0 AFTER password_login_enabled;"
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
 -- google_id
 SET @columnname = "google_id";
 SET @preparedStatement = (SELECT IF(

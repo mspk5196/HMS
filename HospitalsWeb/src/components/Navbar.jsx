@@ -759,6 +759,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
  * Modal allowing the logged-in employee to manage their Google vs Password login settings
  */
 function ProfileSecurityModal({ user, onClose }) {
+  const isLocked = Boolean(user?.auth_methods_locked);
   const [passwordEnabled, setPasswordEnabled] = useState(user?.password_login_enabled !== 0);
   const [googleEnabled, setGoogleEnabled] = useState(user?.google_login_enabled !== 0);
   const [isSaving, setIsSaving] = useState(false);
@@ -767,6 +768,10 @@ function ProfileSecurityModal({ user, onClose }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isLocked) {
+      setError('Authentication methods are locked by an administrator and cannot be modified.');
+      return;
+    }
     if (!passwordEnabled && !googleEnabled) {
       setError('At least one login method (Password or Google SSO) must remain enabled.');
       return;
@@ -826,6 +831,19 @@ function ProfileSecurityModal({ user, onClose }) {
           </button>
         </div>
 
+        {/* Locked Banner if admin locked methods */}
+        {isLocked && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5 shadow-2xs">
+            <span className="text-base shrink-0">🔒</span>
+            <div>
+              <div className="font-bold">Authentication Methods Locked by Administrator</div>
+              <div className="text-[11px] text-amber-700/90 dark:text-amber-400 mt-0.5 leading-relaxed">
+                Hospital administration has locked your login methods. You cannot enable or disable sign-in methods on this account.
+              </div>
+            </div>
+          </div>
+        )}
+
         {message && (
           <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
             ✓ {message}
@@ -851,75 +869,122 @@ function ProfileSecurityModal({ user, onClose }) {
                 {user?.google_email || 'Not yet linked (links on first Google login)'}
               </span>
             </div>
+            <div className="flex justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px]">
+              <span className="text-slate-500">Policy Status:</span>
+              <span className={`font-semibold ${isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {isLocked ? '🔒 Managed & Locked by Admin' : '🔓 Unlocked (Self-Service)'}
+              </span>
+            </div>
           </div>
 
           {/* Authentication Toggles */}
           <div className="space-y-3">
-            <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Enabled Authentication Methods
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Enabled Authentication Methods
+              </h4>
+              {isLocked && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                  🔒 Locked
+                </span>
+              )}
+            </div>
 
             {/* Password Toggle */}
-            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700">
+            <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+              isLocked 
+                ? 'bg-slate-100/60 dark:bg-slate-800/20 border-slate-200/60 dark:border-slate-800 opacity-80'
+                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-700'
+            }`}>
               <div className="flex items-center gap-2.5">
                 <span className="text-base">🔑</span>
                 <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Password Login</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>Password Login</span>
+                    {isLocked && <span className="text-[10px] text-amber-600 font-normal">(locked)</span>}
+                  </div>
                   <div className="text-[10px] text-slate-500">Log in with hospital username and private password</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className={`relative inline-flex items-center ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
+                  disabled={isLocked}
                   checked={passwordEnabled}
-                  onChange={(e) => setPasswordEnabled(e.target.checked)}
-                  className="sr-only peer"
+                  onChange={(e) => !isLocked && setPasswordEnabled(e.target.checked)}
+                  className="sr-only peer disabled:cursor-not-allowed"
                 />
-                <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                <div className={`w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${
+                  isLocked ? 'peer-checked:bg-slate-500' : 'peer-checked:bg-emerald-600'
+                }`}></div>
               </label>
             </div>
 
             {/* Google SSO Toggle */}
-            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700">
+            <div className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+              isLocked 
+                ? 'bg-slate-100/60 dark:bg-slate-800/20 border-slate-200/60 dark:border-slate-800 opacity-80'
+                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-700'
+            }`}>
               <div className="flex items-center gap-2.5">
                 <span className="text-base">🌐</span>
                 <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Google Single Sign-On</div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>Google Single Sign-On</span>
+                    {isLocked && <span className="text-[10px] text-amber-600 font-normal">(locked)</span>}
+                  </div>
                   <div className="text-[10px] text-slate-500">Log in with one click using your Google credentials</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className={`relative inline-flex items-center ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
+                  disabled={isLocked}
                   checked={googleEnabled}
-                  onChange={(e) => setGoogleEnabled(e.target.checked)}
-                  className="sr-only peer"
+                  onChange={(e) => !isLocked && setGoogleEnabled(e.target.checked)}
+                  className="sr-only peer disabled:cursor-not-allowed"
                 />
-                <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                <div className={`w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${
+                  isLocked ? 'peer-checked:bg-slate-500' : 'peer-checked:bg-emerald-600'
+                }`}></div>
               </label>
             </div>
           </div>
 
           <div className="text-[11px] text-slate-400 p-2.5 bg-slate-50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
-            ℹ️ Changes apply immediately to your next login session. Administrators can also view and configure login methods in Users &amp; Roles.
+            {isLocked
+              ? '🔒 To request changes to your allowed login methods, contact a hospital system administrator.'
+              : 'ℹ️ Changes apply immediately to your next login session. Administrators can also view and configure login methods in Users & Roles.'}
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {isSaving ? 'Saving…' : 'Save Preferences'}
-            </button>
+            {isLocked ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isSaving ? 'Saving…' : 'Save Preferences'}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

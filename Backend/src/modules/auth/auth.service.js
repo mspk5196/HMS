@@ -16,6 +16,7 @@ const signToken = async (user, isTemporary = false) => {
     must_change_password: !!user.must_change_password,
     google_login_enabled: user.google_login_enabled !== undefined ? !!user.google_login_enabled : true,
     password_login_enabled: user.password_login_enabled !== undefined ? !!user.password_login_enabled : true,
+    auth_methods_locked: !!user.auth_methods_locked,
     permissions,
   };
   const token = jwt.sign(payload, process.env.JWT_SECRET || 'supersecret', {
