@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600;1,700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400;1,500&display=swap');
+
 /* Clean base reset for Tailwind CSS with modern theme tokens */
 @layer base {
   :root {
@@ -29,6 +31,7 @@
 
   html {
     font-size: 14.5px;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
   }
   @media (min-width: 1280px) {
     html {
@@ -53,11 +56,31 @@
   body {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
     background-color: var(--body-bg);
     color: var(--text-primary);
     transition: background-color 0.2s ease, color 0.2s ease;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.015em;
+  }
+}
+
+.font-heading, .font-nunito {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+.font-body, .font-roboto {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* Ensure tabular data in clinical tables and metrics aligns precisely */
+table, .tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 #root {
@@ -214,26 +237,26 @@ html.dark div:not([class*="bg-"]):not([class*="dark:"]) {
 }
 
 /* Cards, Panes & Surfaces */
-html.dark .bg-white,
-html.dark [class*="bg-white/"]:not([class*="dark:bg-"]):not([class*="hover:"]) {
+html.dark .bg-white:not(aside *),
+html.dark [class*="bg-white/"]:not([class*="dark:bg-"]):not([class*="hover:"]):not(aside *) {
   background-color: #111726 !important;
   border-color: #1e293b !important;
   color: #f1f5f9 !important;
 }
 
-html.dark .bg-gray-50,
-html.dark [class*="bg-gray-50/"]:not([class*="dark:bg-"]),
-html.dark .bg-slate-50,
-html.dark [class*="bg-slate-50/"]:not([class*="dark:bg-"]) {
+html.dark .bg-gray-50:not(aside *),
+html.dark [class*="bg-gray-50/"]:not([class*="dark:bg-"]):not([class*="hover:"]):not(aside *),
+html.dark .bg-slate-50:not(aside *),
+html.dark [class*="bg-slate-50/"]:not([class*="dark:bg-"]):not([class*="hover:"]):not(aside *) {
   background-color: #0c121e !important;
   border-color: #1a2436 !important;
   color: #e2e8f0 !important;
 }
 
-html.dark .bg-gray-100,
-html.dark [class*="bg-gray-100/"]:not([class*="dark:bg-"]),
-html.dark .bg-slate-100,
-html.dark [class*="bg-slate-100/"]:not([class*="dark:bg-"]) {
+html.dark .bg-gray-100:not(aside *),
+html.dark [class*="bg-gray-100/"]:not([class*="dark:bg-"]):not([class*="hover:"]):not(aside *),
+html.dark .bg-slate-100:not(aside *),
+html.dark [class*="bg-slate-100/"]:not([class*="dark:bg-"]):not([class*="hover:"]):not(aside *) {
   background-color: #151e30 !important;
   border-color: #1e293b !important;
   color: #e2e8f0 !important;
@@ -283,18 +306,18 @@ html.dark .text-slate-400:not([class*="dark:text-"]) {
 }
 
 /* Borders and Dividers in Dark Mode */
-html.dark .border-gray-100,
-html.dark [class*="border-gray-100/"]:not([class*="dark:border-"]),
-html.dark .border-gray-200,
-html.dark [class*="border-gray-200/"]:not([class*="dark:border-"]),
-html.dark .border-gray-300,
-html.dark [class*="border-gray-300/"]:not([class*="dark:border-"]),
-html.dark .border-slate-100,
-html.dark [class*="border-slate-100/"]:not([class*="dark:border-"]),
-html.dark .border-slate-200,
-html.dark [class*="border-slate-200/"]:not([class*="dark:border-"]),
-html.dark .border-slate-300,
-html.dark [class*="border-slate-300/"]:not([class*="dark:border-"]),
+html.dark .border-gray-100:not(aside *),
+html.dark [class*="border-gray-100/"]:not([class*="dark:border-"]):not(aside *),
+html.dark .border-gray-200:not(aside *),
+html.dark [class*="border-gray-200/"]:not([class*="dark:border-"]):not(aside *),
+html.dark .border-gray-300:not(aside *),
+html.dark [class*="border-gray-300/"]:not([class*="dark:border-"]):not(aside *),
+html.dark .border-slate-100:not(aside *),
+html.dark [class*="border-slate-100/"]:not([class*="dark:border-"]):not(aside *),
+html.dark .border-slate-200:not(aside *),
+html.dark [class*="border-slate-200/"]:not([class*="dark:border-"]):not(aside *),
+html.dark .border-slate-300:not(aside *),
+html.dark [class*="border-slate-300/"]:not([class*="dark:border-"]):not(aside *),
 html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),

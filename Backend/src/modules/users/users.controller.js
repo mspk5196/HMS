@@ -25,4 +25,24 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json(success(null, 'Password reset'));
 });
 
-module.exports = { listUsers, listEmployeesWithoutLogin, createLogin, updateUser, resetPassword };
+const updateAuthMethods = asyncHandler(async (req, res) => {
+  const targetId = req.params.id === 'me' ? req.user.id : Number(req.params.id);
+  const result = await svc.updateAuthMethods(targetId, req.body);
+  res.json(success(result, 'Authentication methods updated'));
+});
+
+const listLoginHistory = asyncHandler(async (req, res) => {
+  const { search, method, status, limit, offset } = req.query;
+  const history = await svc.listLoginHistory({ search, method, status, limit, offset });
+  res.json(success(history, 'Login audit history retrieved'));
+});
+
+module.exports = {
+  listUsers,
+  listEmployeesWithoutLogin,
+  createLogin,
+  updateUser,
+  resetPassword,
+  updateAuthMethods,
+  listLoginHistory,
+};

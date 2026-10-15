@@ -7,8 +7,11 @@ router.use(verifyToken);
 const canView = requirePermissions(['users.view']);
 
 router.get('/', canView, ctrl.listUsers);
+router.get('/login-history', canView, ctrl.listLoginHistory);
 router.get('/employees-without-login', canView, ctrl.listEmployeesWithoutLogin);
 router.post('/', gate('users.create', ctrl.createLogin));
+router.patch('/me/auth-methods', ctrl.updateAuthMethods);
+router.patch('/:id/auth-methods', gate('users.edit', ctrl.updateAuthMethods));
 router.patch('/:id', gate('users.edit', ctrl.updateUser));
 router.post('/:id/reset-password', gate('users.reset_password', ctrl.resetPassword));
 

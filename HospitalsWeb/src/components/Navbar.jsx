@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { canViewTab } from '../util/permissions';
 import { useHospitalProfile } from '../context/HospitalProfileContext';
+import { apiFetch } from '../util/api';
 import ThemeToggle from './ThemeToggle';
 
 export default function Navbar({ activeTab, setActiveTab, onLogout, user, isCollapsed: externalCollapsed, setIsCollapsed: externalSetIsCollapsed }) {
@@ -18,6 +19,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
   const setIsCollapsed = externalSetIsCollapsed || setInternalCollapsed;
 
   const [collapsedSections, setCollapsedSections] = useState({});
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
   const searchInputRef = useRef(null);
 
   // Sync collapsed state to localStorage
@@ -391,34 +393,32 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
   return (
     <aside
       className={`relative z-30 flex flex-col flex-shrink-0 min-h-screen select-none transition-all duration-300 ease-in-out border-r ${
-        isCollapsed ? 'w-[72px]' : 'w-64'
-      } bg-[#fbfcfd] dark:bg-[#0c0f17] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-slate-800/80 shadow-xs`}
+        isCollapsed ? 'w-[68px]' : 'w-[268px]'
+      } bg-white dark:bg-[#0b101b] text-slate-700 dark:text-slate-200 border-slate-200/80 dark:border-slate-800/80 shadow-xs`}
     >
       {/* ── Brand Header ── */}
       {isCollapsed ? (
-        <div className="py-3.5 px-2 border-b border-slate-200/80 dark:border-white/[0.08] flex flex-col items-center justify-center gap-2">
-          {/* Medical Emblem / Custom Logo (Clickable to Expand) */}
+        <div className="py-3.5 px-2 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col items-center justify-center gap-2">
+          {/* Medical Emblem / Custom Logo */}
           <button
             onClick={() => setIsCollapsed(false)}
             title={`Expand Sidebar • ${hospitalName}`}
-            className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-400 p-[1.5px] shadow-sm cursor-pointer hover:scale-105 transition-transform"
+            className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/50 p-1 flex items-center justify-center shadow-2xs hover:scale-105 transition-transform cursor-pointer"
           >
-            <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center overflow-hidden p-0.5">
-              {hospitalLogo ? (
-                <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain" />
-              ) : (
-                <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
-                </svg>
-              )}
-            </div>
+            {hospitalLogo ? (
+              <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain rounded-lg" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-lg flex items-center justify-center font-bold text-white text-xs">
+                NH
+              </div>
+            )}
           </button>
 
           {/* Quick Expand Chevron Button */}
           <button
             onClick={() => setIsCollapsed(false)}
             title="Expand Sidebar"
-            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-lg transition-all cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg transition-all cursor-pointer"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
@@ -426,31 +426,27 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
           </button>
         </div>
       ) : (
-        <div className="p-3.5 border-b border-slate-200/80 dark:border-white/[0.08] flex items-center justify-between">
+        <div className="p-3.5 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3 overflow-hidden">
             {/* Medical Emblem / Custom Logo */}
-            <div className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-sky-400 p-[1.5px] shadow-sm">
-              <div className="w-full h-full bg-white dark:bg-[#0c0f17] rounded-[10px] flex items-center justify-center relative overflow-hidden p-0.5">
-                {hospitalLogo ? (
-                  <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain" />
-                ) : (
-                  <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M10.5 4.5a1.5 1.5 0 013 0v4.5H18a1.5 1.5 0 010 3h-4.5V18a1.5 1.5 0 01-3 0v-6H6a1.5 1.5 0 010-3h4.5V4.5z" />
-                  </svg>
-                )}
-              </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/50 p-1 flex items-center justify-center shrink-0 shadow-2xs">
+              {hospitalLogo ? (
+                <img src={hospitalLogo} alt={hospitalName} className="w-full h-full object-contain rounded-lg" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-lg flex items-center justify-center font-bold text-white text-xs">
+                  NH
+                </div>
+              )}
             </div>
 
-            <div className="truncate animate-fade-in">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white leading-tight truncate" title={hospitalName}>
-                  {hospitalName}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold tracking-wider uppercase truncate max-w-[140px]" title={hospitalSubtitle || 'Enterprise Care'}>
-                  {hospitalSubtitle || 'Enterprise Care'}
+            <div className="truncate animate-fade-in min-w-0">
+              <span className="font-heading font-extrabold text-[14.5px] tracking-tight text-slate-900 dark:text-white leading-tight truncate block" title={hospitalName}>
+                {hospitalName}
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider truncate max-w-[145px]" title={hospitalSubtitle || 'Speciality Hospital'}>
+                  {hospitalSubtitle || 'Speciality Hospital'}
                 </span>
               </div>
             </div>
@@ -460,7 +456,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
           <button
             onClick={() => setIsCollapsed(true)}
             title="Collapse Sidebar"
-            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-lg transition-all cursor-pointer shrink-0"
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg transition-all cursor-pointer shrink-0"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
@@ -472,29 +468,29 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
       {/* ── Quick Search Filter Bar ── */}
       {!isCollapsed ? (
         <div className="px-3 pt-3 pb-1">
-          <div className="relative">
-            <svg className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <div className="relative flex items-center">
+            <svg className="w-3.5 h-3.5 absolute left-3 text-slate-400 dark:text-slate-500 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
             </svg>
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search tabs… (/)"
+              placeholder="Search tabs... (/)"
               value={navSearch}
               onChange={(e) => setNavSearch(e.target.value)}
-              className="w-full pl-8 pr-12 py-1.5 text-xs bg-slate-100/90 dark:bg-white/[0.05] hover:bg-slate-100 dark:hover:bg-white/[0.08] focus:bg-white dark:focus:bg-white/[0.1] border border-slate-200/90 dark:border-white/[0.08] focus:border-emerald-500/80 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all shadow-xs"
+              className="w-full pl-8 pr-8 py-1.5 text-xs bg-slate-100/70 dark:bg-slate-850/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-850 border border-slate-200/70 dark:border-slate-800 focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-all shadow-2xs"
             />
             {navSearch ? (
               <button
                 onClick={() => setNavSearch('')}
-                className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white text-xs px-1 rounded cursor-pointer"
+                className="absolute right-2 text-slate-400 hover:text-slate-700 dark:hover:text-white text-sm px-1 rounded cursor-pointer"
               >
                 ×
               </button>
             ) : (
-              <span className="absolute right-2.5 top-2 text-[10px] text-slate-400 dark:text-slate-500 font-mono border border-slate-200 dark:border-white/10 rounded px-1">
+              <kbd className="absolute right-2.5 text-[9px] font-mono text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1 shadow-2xs pointer-events-none">
                 /
-              </span>
+              </kbd>
             )}
           </div>
           {navSearch && (
@@ -512,7 +508,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
               setTimeout(() => searchInputRef.current?.focus(), 50);
             }}
             title="Search Navigation (/)"
-            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-xl transition-all cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -522,7 +518,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
       )}
 
       {/* ── Scrollable Navigation Sections ── */}
-      <div className={`flex-1 overflow-y-auto py-2 ${isCollapsed ? 'px-2 space-y-3' : 'px-2.5 space-y-4'} [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300`}>
+      <div className={`flex-1 overflow-y-auto py-2.5 ${isCollapsed ? 'px-2 space-y-3' : 'px-2.5 space-y-4'} [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-800 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300`}>
         {filteredSections.length === 0 ? (
           <div className="py-8 text-center text-xs text-slate-400 italic">
             No tabs match "{navSearch}"
@@ -536,19 +532,19 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                 {!isCollapsed ? (
                   <button
                     onClick={() => toggleSection(section.key)}
-                    className="w-full text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white uppercase tracking-wider px-2 py-1 flex items-center justify-between group transition-colors rounded-lg cursor-pointer"
+                    className="w-full text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 py-1.5 flex items-center justify-between group transition-colors rounded-lg cursor-pointer hover:text-slate-700 dark:hover:text-slate-300"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className="shrink-0">{section.icon}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">{section.icon}</span>
                       <span className="tracking-wider">{section.title}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-medium border ${section.badgeClass}`}>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 tabular-nums min-w-[18px] text-center">
                         {section.items.length}
                       </span>
                       <svg
-                        className={`w-3 h-3 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-white transition-transform duration-200 ${
+                        className={`w-3 h-3 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-200 ${
                           isSectionCollapsed ? '-rotate-90' : 'rotate-0'
                         }`}
                         fill="none"
@@ -561,12 +557,12 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                     </div>
                   </button>
                 ) : (
-                  <div className="w-8 mx-auto my-2 border-t border-slate-200/80 dark:border-white/[0.08]" />
+                  <div className="w-8 mx-auto my-2 border-t border-slate-200/80 dark:border-slate-800/80" />
                 )}
 
                 {/* Section Items */}
                 {(!isSectionCollapsed || isCollapsed) && (
-                  <div className={isCollapsed ? "space-y-1.5 flex flex-col items-center" : "space-y-0.5"}>
+                  <div className={isCollapsed ? "space-y-1 flex flex-col items-center" : "space-y-0.5"}>
                     {section.items.map((item) => {
                       const isActive = activeTab === item.id;
                       
@@ -577,13 +573,18 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                               onClick={() => setActiveTab(item.id)}
                               className={`w-10 h-10 relative flex items-center justify-center rounded-xl text-xs transition-all duration-150 cursor-pointer ${
                                 isActive
-                                  ? 'bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 dark:border-emerald-500/40 ring-1 ring-emerald-500/25 shadow-2xs font-semibold'
-                                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white border border-transparent'
+                                  ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold shadow-2xs'
+                                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white bg-transparent'
                               }`}
                             >
-                              <span className={`transition-all duration-150 shrink-0 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`}>
+                              <span className={`transition-all duration-150 shrink-0 ${isActive ? 'scale-110 text-emerald-600 dark:text-emerald-400' : 'group-hover:scale-105'}`}>
                                 {item.icon}
                               </span>
+
+                              {/* Active indicator bar */}
+                              {isActive && (
+                                <span className="absolute left-0 top-2 bottom-2 w-[3px] bg-emerald-600 dark:bg-emerald-400 rounded-r-full"></span>
+                              )}
 
                               {/* Notification badge */}
                               {item.hasNotification && (
@@ -594,7 +595,7 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                             {/* Floating Tooltip in Collapsed Rail Mode */}
                             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-[#182030] text-white text-xs font-semibold rounded-lg shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50 flex items-center gap-2 border border-slate-700/60 dark:border-white/10 backdrop-blur-xs">
                               <span>{item.label}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${section.badgeClass}`}>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-slate-800 text-slate-300 border border-slate-700">
                                 {section.title}
                               </span>
                             </div>
@@ -606,22 +607,22 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                         <div key={item.id} className="relative group">
                           <button
                             onClick={() => setActiveTab(item.id)}
-                            className={`w-full relative flex items-center gap-3 px-3 py-2 text-xs rounded-xl transition-all duration-150 cursor-pointer ${
+                            className={`w-full relative flex items-center gap-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 cursor-pointer text-left ${
                               isActive
-                                ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 dark:border-emerald-500/35 text-emerald-950 dark:text-emerald-200 font-bold shadow-2xs'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/90 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white border border-transparent'
+                                ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-300 font-semibold shadow-2xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white bg-transparent'
                             }`}
                           >
-                            {/* Active Left Accent Bar */}
+                            {/* Active Left Indicator Bar */}
                             {isActive && (
-                              <span className="absolute left-1 top-2 bottom-2 w-1 bg-emerald-600 dark:bg-emerald-400 rounded-full shadow-xs"></span>
+                              <span className="absolute left-0 top-1.5 bottom-1.5 w-[3.5px] bg-emerald-600 dark:bg-emerald-400 rounded-r-full shadow-xs"></span>
                             )}
 
                             {/* Tab Icon */}
                             <span
                               className={`transition-all duration-150 shrink-0 ${
                                 isActive
-                                  ? 'text-emerald-700 dark:text-emerald-400 scale-105'
+                                  ? 'text-emerald-600 dark:text-emerald-400 scale-105'
                                   : 'text-slate-400 dark:text-slate-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                               }`}
                             >
@@ -629,18 +630,18 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
                             </span>
 
                             {/* Tab Label */}
-                            <span className="truncate flex-1 text-left">
+                            <span className="truncate flex-1 font-medium">
                               {item.label}
                             </span>
 
-                            {/* Micro Indicator for Active Tab */}
+                            {/* Indicator for Active Tab */}
                             {isActive && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0"></span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 shrink-0 ml-auto shadow-2xs"></span>
                             )}
 
                             {/* Notification Pill */}
                             {!isActive && item.hasNotification && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 ring-2 ring-amber-400/20 shrink-0 animate-pulse"></span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 ring-2 ring-amber-400/20 shrink-0 ml-auto animate-pulse"></span>
                             )}
                           </button>
                         </div>
@@ -655,65 +656,273 @@ export default function Navbar({ activeTab, setActiveTab, onLogout, user, isColl
       </div>
 
       {/* ── Theme Switcher Segmented Control ── */}
-      <div className={isCollapsed ? "p-2 flex justify-center border-t border-slate-200/80 dark:border-white/[0.08]" : "px-3 pt-2 pb-1 border-t border-slate-200/80 dark:border-white/[0.08]"}>
+      <div className={isCollapsed ? "p-2 flex justify-center border-t border-slate-200/80 dark:border-slate-800/80" : "px-3 py-2 border-t border-slate-200/80 dark:border-slate-800/80"}>
         <ThemeToggle compact={isCollapsed} />
       </div>
 
       {/* ── User Profile & Sign Out Footer ── */}
       {isCollapsed ? (
-        <div className="p-2.5 bg-slate-50/80 dark:bg-[#070b14]/90 border-t border-slate-200/80 dark:border-white/[0.08] flex items-center justify-center">
-          <div className="relative group cursor-pointer">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-xs shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all">
+        <div className="p-2.5 bg-slate-50/70 dark:bg-[#070b13]/80 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-center">
+          <div className="relative group">
+            <button
+              onClick={() => setShowSecurityModal(true)}
+              title="Manage Profile & Login Security"
+              className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-xs shadow-xs hover:ring-2 hover:ring-emerald-500/50 transition-all cursor-pointer relative"
+            >
               {user?.username?.charAt(0).toUpperCase() || 'A'}
-            </div>
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0c0f17]"></span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#070b13]"></span>
+            </button>
             
             {/* Tooltip on hover in collapsed mode */}
-            <div className="absolute left-full bottom-1 ml-3 p-3 bg-slate-900/95 dark:bg-[#182030] text-white text-xs rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50 border border-slate-700/60 dark:border-white/10 backdrop-blur-xs min-w-[150px]">
+            <div className="absolute left-full bottom-1 ml-3 p-3 bg-slate-900/95 dark:bg-[#182030] text-white text-xs rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50 border border-slate-700/60 dark:border-white/10 backdrop-blur-xs min-w-[170px]">
               <div className="font-bold text-slate-100">{user?.username || 'Administrator'}</div>
               <div className="text-[10px] text-emerald-400 font-medium mt-0.5">{user?.role_name || user?.role || 'Staff'}</div>
-              <button
-                onClick={onLogout}
-                className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-1 px-2 text-[10px] font-semibold text-rose-300 hover:text-white bg-rose-500/20 hover:bg-rose-600 rounded-md transition-colors cursor-pointer"
-              >
-                <span>Sign Out</span>
-              </button>
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowSecurityModal(true)}
+                  className="flex-1 py-1 px-2 text-[10px] font-semibold text-emerald-300 hover:text-white bg-emerald-500/20 hover:bg-emerald-600 rounded-md transition-colors cursor-pointer text-center"
+                >
+                  Security
+                </button>
+                <button
+                  onClick={onLogout}
+                  className="py-1 px-2 text-[10px] font-semibold text-rose-300 hover:text-white bg-rose-500/20 hover:bg-rose-600 rounded-md transition-colors cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="p-3 bg-slate-50/80 dark:bg-[#070b14]/90 border-t border-slate-200/80 dark:border-white/[0.08] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 overflow-hidden flex-1">
+        <div className="p-2.5 bg-slate-50/70 dark:bg-[#070b13]/80 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-1.5">
+          <button
+            onClick={() => setShowSecurityModal(true)}
+            title="Click to manage Login Security & Authentication Methods"
+            className="flex items-center gap-2.5 overflow-hidden flex-1 text-left p-1 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+          >
             <div className="relative shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-xs shadow-2xs group-hover:scale-105 transition-transform">
                 {user?.username?.charAt(0).toUpperCase() || 'A'}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0c0f17]"></span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#070b13]"></span>
             </div>
 
-            <div className="truncate flex-1">
-              <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">
+            <div className="truncate flex-1 min-w-0">
+              <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
                 {user?.username || 'Administrator'}
               </div>
               <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate font-medium flex items-center gap-1 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span>{user?.role_name || user?.role || 'Staff Member'}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span className="truncate">{user?.role_name || user?.role || 'Staff Member'}</span>
               </div>
+            </div>
+          </button>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={() => setShowSecurityModal(true)}
+              title="Profile & Login Security Settings"
+              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-all cursor-pointer shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+            </button>
+
+            <button
+              onClick={onLogout}
+              title="Sign Out of Portal"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H2.25" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Employee Profile & Login Security Modal ── */}
+      {showSecurityModal && (
+        <ProfileSecurityModal
+          user={user}
+          onClose={() => setShowSecurityModal(false)}
+        />
+      )}
+    </aside>
+  );
+}
+
+/**
+ * Modal allowing the logged-in employee to manage their Google vs Password login settings
+ */
+function ProfileSecurityModal({ user, onClose }) {
+  const [passwordEnabled, setPasswordEnabled] = useState(user?.password_login_enabled !== 0);
+  const [googleEnabled, setGoogleEnabled] = useState(user?.google_login_enabled !== 0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!passwordEnabled && !googleEnabled) {
+      setError('At least one login method (Password or Google SSO) must remain enabled.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      await apiFetch('/users/me/auth-methods', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          password_login_enabled: passwordEnabled,
+          google_login_enabled: googleEnabled,
+        }),
+      });
+
+      // Update cached user in localStorage
+      try {
+        const saved = JSON.parse(localStorage.getItem('user') || '{}');
+        saved.password_login_enabled = passwordEnabled ? 1 : 0;
+        saved.google_login_enabled = googleEnabled ? 1 : 0;
+        localStorage.setItem('user', JSON.stringify(saved));
+      } catch (err) {}
+
+      setMessage('Login security preferences saved successfully!');
+      setTimeout(() => {
+        onClose();
+      }, 1400);
+    } catch (err) {
+      setError(err.message || 'Failed to update authentication preferences.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#0f172a] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 animate-scale-up">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              {user?.username?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Profile &amp; Login Security</h3>
+              <p className="text-[11px] text-slate-500">{user?.employee_name || user?.username} · {user?.role_name || 'Staff'}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            ✕
+          </button>
+        </div>
+
+        {message && (
+          <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            ✓ {message}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs font-semibold text-rose-700 dark:text-rose-300">
+            ✕ {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSave} className="space-y-4">
+          {/* Identity details */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Username:</span>
+              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{user?.username}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Linked Google Account:</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                {user?.google_email || 'Not yet linked (links on first Google login)'}
+              </span>
             </div>
           </div>
 
-          {/* Logout Button */}
-          <button
-            onClick={onLogout}
-            title="Sign Out of Portal"
-            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all cursor-pointer shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H2.25" />
-            </svg>
-          </button>
-        </div>
-      )}
-    </aside>
+          {/* Authentication Toggles */}
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Enabled Authentication Methods
+            </h4>
+
+            {/* Password Toggle */}
+            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700">
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">🔑</span>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Password Login</div>
+                  <div className="text-[10px] text-slate-500">Log in with hospital username and private password</div>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={passwordEnabled}
+                  onChange={(e) => setPasswordEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+
+            {/* Google SSO Toggle */}
+            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700">
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">🌐</span>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">Google Single Sign-On</div>
+                  <div className="text-[10px] text-slate-500">Log in with one click using your Google credentials</div>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={googleEnabled}
+                  onChange={(e) => setGoogleEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-400 p-2.5 bg-slate-50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800">
+            ℹ️ Changes apply immediately to your next login session. Administrators can also view and configure login methods in Users &amp; Roles.
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-5 py-2 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {isSaving ? 'Saving…' : 'Save Preferences'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

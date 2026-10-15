@@ -29,14 +29,14 @@ export default function ThemeToggle({ compact = false }) {
   }
 
   return (
-    <div className="flex items-center justify-between p-1.5 bg-slate-100 dark:bg-white/[0.05] border border-slate-200/80 dark:border-white/10 rounded-xl">
+    <div className="flex items-center p-1 bg-slate-100/90 dark:bg-slate-900/80 rounded-xl border border-slate-200/70 dark:border-slate-800/80 transition-all">
       <button
         type="button"
         onClick={() => isDark && toggleTheme()}
-        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
           !isDark
-            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60 font-semibold'
-            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            ? 'bg-white text-slate-800 shadow-2xs'
+            : 'text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
         }`}
       >
         <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -48,13 +48,13 @@ export default function ThemeToggle({ compact = false }) {
       <button
         type="button"
         onClick={() => !isDark && toggleTheme()}
-        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
           isDark
-            ? 'bg-[#182030] text-white shadow-xs border border-white/10 font-semibold'
+            ? 'bg-slate-800 text-emerald-400 shadow-2xs border border-slate-700/60'
             : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
         }`}
       >
-        <svg className="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
         </svg>
         <span>Dark</span>

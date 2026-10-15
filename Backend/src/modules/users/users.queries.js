@@ -3,6 +3,10 @@ const db = require('../../config/db');
 const listUsers = async () => {
   const [rows] = await db.execute(
     `SELECT u.id, u.username, u.email, u.phone, u.role_id, u.is_active, u.last_login_at, u.created_at,
+            COALESCE(u.must_change_password, 0) AS must_change_password,
+            COALESCE(u.google_login_enabled, 1) AS google_login_enabled,
+            COALESCE(u.password_login_enabled, 1) AS password_login_enabled,
+            u.google_email, u.google_id,
             COALESCE(r.name, 'Staff') AS role_name,
             e.id AS employee_id, e.full_name AS employee_name, e.employee_code,
             d.name AS department_name, sr.name AS designation_name
@@ -120,21 +124,21 @@ const getUser = async (id) => {
 
 const createUser = async ({ employee_id, username, password_hash, role_id, email, phone }) => {
   const [result] = await db.execute(
-    `INSERT INTO users (employee_id, username, email, phone, password_hash, role_id, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, 1)`,
+    `INSERT INTO users (employee_id, username, email, phone, password_hash, role_id, is_active, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
     [employee_id ?? null, username, email ?? null, phone ?? null, password_hash, role_id]
   );
   return result.insertId;
 };
 
 const updateUser = async (id, data) => {
-  const allowed = ['username', 'role_id', 'email', 'phone', 'is_active'];
+  const allowed = ['username', 'role_id', 'email', 'phone', 'is_active', 'google_login_enabled', 'password_login_enabled'];
   const fields = [];
   const vals = [];
   for (const key of allowed) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      vals.push(key === 'is_active' ? (data[key] ? 1 : 0) : data[key]);
+      vals.push(typeof data[key] === 'boolean' ? (data[key] ? 1 : 0) : data[key]);
     }
   }
   if (!fields.length) return;
@@ -143,10 +147,73 @@ const updateUser = async (id, data) => {
 };
 
 const setPasswordHash = async (id, passwordHash) => {
-  await db.execute(`UPDATE users SET password_hash = ? WHERE id = ?`, [passwordHash, id]);
+  await db.execute(
+    `UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = NOW() WHERE id = ?`,
+    [passwordHash, id]
+  );
+};
+
+const updateAuthMethods = async (id, { google_login_enabled, password_login_enabled }) => {
+  const fields = [];
+  const vals = [];
+  if (google_login_enabled !== undefined) {
+    fields.push('google_login_enabled = ?');
+    vals.push(google_login_enabled ? 1 : 0);
+  }
+  if (password_login_enabled !== undefined) {
+    fields.push('password_login_enabled = ?');
+    vals.push(password_login_enabled ? 1 : 0);
+  }
+  if (!fields.length) return;
+  vals.push(id);
+  await db.execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, vals);
+};
+
+const listLoginHistory = async ({ search, method, status, limit = 50, offset = 0 } = {}) => {
+  try {
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (search) {
+      where += ' AND (LOWER(username) LIKE ? OR LOWER(COALESCE(employee_name, "")) LIKE ?)';
+      const t = `%${search.toLowerCase().trim()}%`;
+      params.push(t, t);
+    }
+    if (method && method !== 'ALL') {
+      where += ' AND login_method = ?';
+      params.push(method);
+    }
+    if (status && status !== 'ALL') {
+      where += ' AND status = ?';
+      params.push(status);
+    }
+    params.push(Number(limit) || 50, Number(offset) || 0);
+
+    const [rows] = await db.query(
+      `SELECT id, user_id, username, employee_name, login_method, ip_address, user_agent, status, failure_reason, created_at
+       FROM user_login_history
+       ${where}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      params
+    );
+    return rows;
+  } catch (err) {
+    console.warn('[listLoginHistory] Warning:', err.message);
+    return [];
+  }
 };
 
 module.exports = {
-  listUsers, listEmployeesWithoutLogin, getUserByUsername, getUser,
-  createUser, updateUser, setPasswordHash, getEmployeePhone, getStaffRoleRoleId, getRoleIdForEmployee,
+  listUsers,
+  listEmployeesWithoutLogin,
+  getUserByUsername,
+  getUser,
+  createUser,
+  updateUser,
+  setPasswordHash,
+  updateAuthMethods,
+  listLoginHistory,
+  getEmployeePhone,
+  getStaffRoleRoleId,
+  getRoleIdForEmployee,
 };

@@ -42,28 +42,15 @@ export default function PageHeader({
   const actionContent = actions || children;
 
   return (
-    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${className}`}>
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2 flex-wrap">
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="mr-1 p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-white/[0.08] border border-slate-200/80 dark:border-white/10 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold"
-              title="Go back"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              {backLabel && <span>{backLabel}</span>}
-            </button>
-          )}
-
+    <div className={`pb-4 mb-5 border-b border-slate-200/80 dark:border-slate-800/80 ${className}`}>
+      {/* ── Line 1: Segmented Breadcrumb Trail ── */}
+      {(category || parent) && (
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 mb-2 flex-wrap">
           {category && (
-            <span className="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600 text-white shadow-2xs tracking-wide">
               {categoryIcon && (
-                <span className="p-1 rounded-md bg-white dark:bg-[#141923] border border-slate-200/80 dark:border-white/10 shadow-2xs inline-flex items-center justify-center">
-                  {categoryIcon}
+                <span className="inline-flex items-center justify-center text-white">
+                  {React.cloneElement(categoryIcon, { className: 'w-3 h-3 text-white' })}
                 </span>
               )}
               <span>{category}</span>
@@ -71,41 +58,68 @@ export default function PageHeader({
           )}
 
           {category && (
-            <svg className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           )}
 
           {parent && (
             <>
-              <span className="text-slate-600 dark:text-slate-400 font-semibold">{parent}</span>
-              <svg className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{parent}</span>
+              <svg className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </>
           )}
 
-          <span className="text-slate-900 dark:text-white font-extrabold tracking-tight">{title}</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate max-w-[200px] sm:max-w-none">
+            {title}
+          </span>
+        </nav>
+      )}
 
-          {badge && (
-            <span className="ml-1.5 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-500/20 shadow-2xs">
-              {badge}
-            </span>
+      {/* ── Line 2: Dedicated Title Bar & Actions ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/60 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold shrink-0"
+                title="Go back"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                {backLabel && <span>{backLabel}</span>}
+              </button>
+            )}
+
+            <h1 className="font-heading text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-tight">
+              {title}
+            </h1>
+
+            {badge && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/50 shadow-2xs">
+                {badge}
+              </span>
+            )}
+          </div>
+
+          {subtitle && (
+            <p className="font-body text-xs sm:text-[13px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed max-w-3xl">
+              {subtitle}
+            </p>
           )}
-        </h1>
+        </div>
 
-        {subtitle && (
-          <p className="text-xs sm:text-[13px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-            {subtitle}
-          </p>
+        {actionContent && (
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
+            {actionContent}
+          </div>
         )}
       </div>
-
-      {actionContent && (
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          {actionContent}
-        </div>
-      )}
     </div>
   );
 }

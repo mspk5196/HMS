@@ -64,4 +64,32 @@ const resetPassword = async (id, password) => {
   await q.setPasswordHash(id, password_hash);
 };
 
-module.exports = { listUsers, listEmployeesWithoutLogin, createLogin, updateUser, resetPassword };
+const updateAuthMethods = async (id, body = {}) => {
+  const user = await q.getUser(id);
+  if (!user) throw new AppError('User not found', 404);
+
+  const googleInput = body.google_login_enabled !== undefined ? body.google_login_enabled : body.googleLoginEnabled;
+  const passwordInput = body.password_login_enabled !== undefined ? body.password_login_enabled : body.passwordLoginEnabled;
+
+  const nextGoogle = googleInput !== undefined ? (googleInput === true || googleInput === 1 || googleInput === '1') : (user.google_login_enabled !== 0);
+  const nextPassword = passwordInput !== undefined ? (passwordInput === true || passwordInput === 1 || passwordInput === '1') : (user.password_login_enabled !== 0);
+
+  if (!nextGoogle && !nextPassword) {
+    throw new AppError('At least one login method (Password or Google) must remain enabled', 400);
+  }
+
+  await q.updateAuthMethods(id, { google_login_enabled: nextGoogle, password_login_enabled: nextPassword });
+  return { id, google_login_enabled: nextGoogle ? 1 : 0, password_login_enabled: nextPassword ? 1 : 0 };
+};
+
+const listLoginHistory = (filters) => q.listLoginHistory(filters);
+
+module.exports = {
+  listUsers,
+  listEmployeesWithoutLogin,
+  createLogin,
+  updateUser,
+  resetPassword,
+  updateAuthMethods,
+  listLoginHistory,
+};
